@@ -35,14 +35,14 @@ class ModelV3(nn.Module):
         super(ModelV3, self).__init__()
         self.input_dim = input_dim
         self.conv1 = nn.Conv1d(in_channels=1, 
-                               out_channels=16, 
+                               out_channels=32, 
                                kernel_size=2, 
                                padding='same' )
-        self.conv2 = nn.Conv1d(in_channels=16, 
-                               out_channels=8, 
+        self.conv2 = nn.Conv1d(in_channels=32, 
+                               out_channels=16, 
                                kernel_size=2, 
                                padding='same')
-        self.fc1 = nn.Linear(in_features=8 * input_dim, 
+        self.fc1 = nn.Linear(in_features=16 * input_dim, 
                              out_features=input_dim)
         self.fc2 = nn.Linear(in_features=input_dim, 
                              out_features=1)
@@ -51,7 +51,7 @@ class ModelV3(nn.Module):
         x = x.unsqueeze(1) 
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = x.view(-1, 8 * self.input_dim)
+        x = x.view(-1, 16 * self.input_dim)
         x = F.relu(self.fc1(x))
         x = torch.sigmoid(self.fc2(x))
         return x
