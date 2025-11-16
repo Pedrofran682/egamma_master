@@ -8,7 +8,8 @@ from datetime import datetime
 import os
 from src.utils import create_folder
 from src.core.EgammaNpzDataset import EgammaNpzDataset
-import re
+from src.utils import verify_results, get_results_file_name, get_et_eta, get_best_sp_model
+from src.core.plots import plot_saliency_comparison_normalized
 import torch.nn as nn
 import pandas as pd
 from sklearn.model_selection import ParameterGrid
@@ -42,9 +43,11 @@ class Trainer:
         self.model_tag = model_tag
         self.et_range = et_range
         self.eta_range = eta_range
-        self.drive_path = '/eos/user/j/jlieberm/photonRinger/datasets/notIso'
+        self.drive_path = 'data/'
         self.all_y_preds_list = []
         self.all_y_true_list = []
+        self.et = None
+        self.eta = None
 
         self.debug = debug
         if self.debug:
@@ -86,6 +89,7 @@ class Trainer:
     def main(self, index: int, path: str):
         data, target, path = self.full_dataset[index]
         self.all_training_results = []
+        best_sp_value = -1
         for fold_idx, (train_index, val_index) in enumerate(self.kfold.split(data, target)):
             log.info(f"Executando fold {fold_idx + 1}")
             self.model = self.initModel()
@@ -139,6 +143,17 @@ class Trainer:
                     'best_weights': best_weights_for_this_run,
                     'history': fold_history 
                 })
+            
+            if best_sp_for_this_run > best_sp_value:
+                best_sp_value = best_sp_for_this_run
+                best_model, _ = get_best_sp_model(pd.DataFrame(self.all_training_results),
+                                  self.model_tag, 
+                                  self.input_dim)
+                plot_saliency_comparison_normalized(best_model,
+                                                    data[val_index],
+                                                    target[val_index],
+                                                    self.folder_path,
+                                                    self.et, self.eta)
         return path
 
     def doTraining(self, epoch_ndx: int, train_dl: DataLoader):
@@ -215,26 +230,13 @@ class Trainer:
             
         return loss, corrects_batch
 
-    def _get_results_file_name(self, et: int, eta: int) -> str:
-         return "iet{iet}.ieta{ieta}.pkl".format(ieta = eta,
-                                                 iet = et)
-        
-    
+
     def save_results(self, folder_path: str, et: int, eta: int) -> None:
-        all_training_results_template = self._get_results_file_name(et, eta)
+        all_training_results_template = get_results_file_name(et, eta)
         pd.DataFrame(self.all_training_results).to_pickle(
             os.path.join(folder_path, 
                          all_training_results_template))
-
     
-    def verify_results(self, folder_path: str, et: int, eta: int) -> bool:
-        file2verify = os.path.join(folder_path, self._get_results_file_name(et, eta))
-        log.info(f"Verifying {file2verify}")
-        if os.path.exists(file2verify):
-            log.info(f"{file2verify} already processed")
-            return False
-        return True
-
     def run(self) -> None:
         if self.folder_path == None: 
             folderTemplateName = "model{model_tag}.dim{input_dim}.folds{folds}_id{id}".format(
@@ -243,26 +245,20 @@ class Trainer:
                 folds=self.n_splits, 
                 id=datetime.now().strftime("%Y%m%d%H%M%S"))
             self.folder_path = str(create_folder(folderTemplateName))
+            
         eta_et_region = list(ParameterGrid({'eta': self.eta_range, 'et': self.et_range}))
-        data_folder = [os.path.join(self.drive_path, file) for file in os.listdir(self.drive_path) if (file.endswith(".npz") and file.startswith("mc23_13TeV")) ]
+        data_folder = [os.path.join(self.drive_path, file) for file in os.listdir(self.drive_path)
+                        if (file.endswith(".npz") and 
+                            file.startswith("mc23_13TeV"))
+                            ]
         self.full_dataset = EgammaNpzDataset(data_folder, 
                                              percentage=self.percentage)
         self.input_dim = self.full_dataset.get_model_dim()
         for index, file in enumerate(data_folder):
-            et, eta = self.get_et_eta(file)
-            if {'eta': int(eta), 'et':int(et)} in eta_et_region:
-                if self.verify_results(self.folder_path, et, eta):
+            self.et, self.eta = get_et_eta(file)
+            if {'eta': int(self.eta), 'et':int(self.et)} in eta_et_region:
+                if verify_results(self.folder_path, self.et, self.eta):
                     path = self.main(index, file)
-                    self.save_results(self.folder_path,et, eta)
+                    self.save_results(self.folder_path,self.et, self.eta)
                 if self.debug:
                     break
-
-        
-    def get_et_eta(self, file_path):
-        regex_pattern = r"et(\d+).*?eta(\d+)"
-        match = re.search(regex_pattern, file_path)
-        
-        if match:
-            et = match.group(1)
-            eta = match.group(2)
-            return et, eta
