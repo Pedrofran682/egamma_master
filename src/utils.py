@@ -7,15 +7,16 @@ from sklearn.metrics import roc_curve, roc_auc_score
 import os
 from typing import Union, Callable, Tuple 
 from typing import Union, Callable, Tuple 
-
+import logging
+log = logging.getLogger()
 
 def create_folder(new_folder_name: str , base_path: str = "results") -> str:
     folder_path = Path(base_path) / new_folder_name 
     try:
         folder_path.mkdir(parents=True, exist_ok=True)
-        print(f"Folder '{folder_path}' created or already exists (using pathlib).")
+        log.info(f"Folder '{folder_path}' created or already exists (using pathlib).")
     except OSError as error:
-        print(f"Error creating directory '{folder_path}': {error}")
+        log.error(f"Error creating directory '{folder_path}': {error}")
     return str(folder_path)
 
 
@@ -299,68 +300,68 @@ def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]]) -
         # print("\nCurvas de aprendizagem (Loss, Accuracy, SP, TPR, FPR) geradas com sucesso para o melhor modelo SP!")
 
 
-def plot_model_acc(best_overall_sp_model: tf.keras.Sequential, 
-                   test_set: Tuple[np.ndarray,np.ndarray],
-                  folder_path=None, ns = "", iet="", ieta="") -> float:
-    X_test_final, y_test_final = test_set
-    if best_overall_sp_model is None:
-        print("Erro: O modelo com o melhor SP não foi encontrado. Certifique-se de que 'get_best_sp_model' foi executada corretamente.")
-    else:
-        # --- 2. Previsões da Rede ---
-        print("\nFazendo previsões no conjunto de teste com o modelo de melhor SP...")
-        y_pred_proba = best_overall_sp_model.predict(X_test_final).ravel()
+# def plot_model_acc(best_overall_sp_model: tf.keras.Sequential, 
+#                    test_set: Tuple[np.ndarray,np.ndarray],
+#                   folder_path=None, ns = "", iet="", ieta="") -> float:
+#     X_test_final, y_test_final = test_set
+#     if best_overall_sp_model is None:
+#         print("Erro: O modelo com o melhor SP não foi encontrado. Certifique-se de que 'get_best_sp_model' foi executada corretamente.")
+#     else:
+#         # --- 2. Previsões da Rede ---
+#         print("\nFazendo previsões no conjunto de teste com o modelo de melhor SP...")
+#         y_pred_proba = best_overall_sp_model.predict(X_test_final).ravel()
     
-        # --- 3. Curva ROC ---
-        print("Gerando Curva ROC...")
-        fpr, tpr, thresholds = roc_curve(y_test_final, y_pred_proba)
-        auc_score = roc_auc_score(y_test_final, y_pred_proba)
+#         # --- 3. Curva ROC ---
+#         print("Gerando Curva ROC...")
+#         fpr, tpr, thresholds = roc_curve(y_test_final, y_pred_proba)
+#         auc_score = roc_auc_score(y_test_final, y_pred_proba)
     
-        plt.figure(figsize=(8, 6), clear=True, num=1)
-        plt.plot(fpr, tpr, color='blue', lw=2, label=f'Curva ROC (AUC = {auc_score:.4f})')
-        plt.plot([0, 1], [0, 1], color='gray', linestyle='--', lw=1)
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('Taxa de Falsos Positivos (FPR)')
-        plt.ylabel('Taxa de Verdadeiros Positivos (TPR)')
-        plt.title('Curva ROC do Modelo'+ \
-             f"\n({iet},{ieta})")
-        plt.legend(loc="lower right")
-        plt.grid(True)
-        roc_file_template = "ns{ns}.iet{iet}.ieta{ieta}_ROC.pdf".format(
-            ns = ns,
-            ieta = ieta, 
-            iet=iet)
-        plt.savefig(os.path.join(folder_path, roc_file_template))
-        # plt.show()
-        # plt.close()
-        # --- 4. Histograma de Saída da Rede (Sinal vs. Background) ---
-        print("Gerando Histograma de Saída da Rede...")
+#         plt.figure(figsize=(8, 6), clear=True, num=1)
+#         plt.plot(fpr, tpr, color='blue', lw=2, label=f'Curva ROC (AUC = {auc_score:.4f})')
+#         plt.plot([0, 1], [0, 1], color='gray', linestyle='--', lw=1)
+#         plt.xlim([0.0, 1.0])
+#         plt.ylim([0.0, 1.05])
+#         plt.xlabel('Taxa de Falsos Positivos (FPR)')
+#         plt.ylabel('Taxa de Verdadeiros Positivos (TPR)')
+#         plt.title('Curva ROC do Modelo'+ \
+#              f"\n({iet},{ieta})")
+#         plt.legend(loc="lower right")
+#         plt.grid(True)
+#         roc_file_template = "ns{ns}.iet{iet}.ieta{ieta}_ROC.pdf".format(
+#             ns = ns,
+#             ieta = ieta, 
+#             iet=iet)
+#         plt.savefig(os.path.join(folder_path, roc_file_template))
+#         # plt.show()
+#         # plt.close()
+#         # --- 4. Histograma de Saída da Rede (Sinal vs. Background) ---
+#         print("Gerando Histograma de Saída da Rede...")
     
-        # Separar as previsões para sinal e background
-        # Assumindo que 1 é sinal e 0 é background em y_test_final
-        predictions_signal = y_pred_proba[y_test_final == 1]
-        predictions_background = y_pred_proba[y_test_final == 0]
+#         # Separar as previsões para sinal e background
+#         # Assumindo que 1 é sinal e 0 é background em y_test_final
+#         predictions_signal = y_pred_proba[y_test_final == 1]
+#         predictions_background = y_pred_proba[y_test_final == 0]
     
-        plt.figure(figsize=(10, 6), clear=True, num=1)
-        plt.hist(predictions_background, bins=50, alpha=0.7, label='Background', color='red', density=True)
-        plt.hist(predictions_signal, bins=50, alpha=0.7, label='Sinal', color='green', density=True)
-        plt.xlabel('Saída da Rede (Probabilidade)')
-        plt.ylabel('Densidade')
-        plt.yscale('log')
-        plt.title('Histograma de Saída da Rede para Sinal e Background'+ \
-             f"\n({iet},{ieta})")
-        plt.legend(loc='upper right')
-        plt.grid(True)
-        model_output_file_template = "ns{ns}.iet{iet}.ieta{ieta}_modelOutput.pdf".format(
-            ns = ns,
-            ieta = ieta, 
-            iet=iet)
-        plt.savefig(os.path.join(folder_path, model_output_file_template))
-        # plt.show()
-        # plt.close()
+#         plt.figure(figsize=(10, 6), clear=True, num=1)
+#         plt.hist(predictions_background, bins=50, alpha=0.7, label='Background', color='red', density=True)
+#         plt.hist(predictions_signal, bins=50, alpha=0.7, label='Sinal', color='green', density=True)
+#         plt.xlabel('Saída da Rede (Probabilidade)')
+#         plt.ylabel('Densidade')
+#         plt.yscale('log')
+#         plt.title('Histograma de Saída da Rede para Sinal e Background'+ \
+#              f"\n({iet},{ieta})")
+#         plt.legend(loc='upper right')
+#         plt.grid(True)
+#         model_output_file_template = "ns{ns}.iet{iet}.ieta{ieta}_modelOutput.pdf".format(
+#             ns = ns,
+#             ieta = ieta, 
+#             iet=iet)
+#         plt.savefig(os.path.join(folder_path, model_output_file_template))
+#         # plt.show()
+#         # plt.close()
     
-        print("\nVisualizações geradas com sucesso!")
-        return auc_score
+#         print("\nVisualizações geradas com sucesso!")
+#         return auc_score
 
 
 # def compute_saliency_map(x: np.ndarray, model: tf.keras.Sequential) -> np.ndarray:

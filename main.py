@@ -37,3 +37,4 @@ trainer = Trainer(percentage = 1.0,
                   model_tag= "V1",
                   debug=True)
 trainer.run()
+logger.info("Fim da execução")

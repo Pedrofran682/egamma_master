@@ -11,7 +11,7 @@ from src.core.EgammaNpzDataset import EgammaNpzDataset
 import re
 import torch.nn as nn
 import pandas as pd
-
+from sklearn.model_selection import ParameterGrid
 import logging
 log = logging.getLogger()
 
@@ -42,8 +42,7 @@ class Trainer:
         self.model_tag = model_tag
         self.et_range = et_range
         self.eta_range = eta_range
-        # self.drive_path = '/eos/user/j/jlieberm/photonRinger/datasets/notIso'
-        self.drive_path = './data'
+        self.drive_path = '/eos/user/j/jlieberm/photonRinger/datasets/notIso'
         self.all_y_preds_list = []
         self.all_y_true_list = []
 
@@ -88,7 +87,7 @@ class Trainer:
         data, target, path = self.full_dataset[index]
         self.all_training_results = []
         for fold_idx, (train_index, val_index) in enumerate(self.kfold.split(data, target)):
-            
+            log.info(f"Executando fold {fold_idx + 1}")
             self.model = self.initModel()
             self.optimizer = self.initOptimizer()
             self.loss = self.initLossFunction()
@@ -121,7 +120,7 @@ class Trainer:
                 fold_history['val_acc'].append(avg_val_acc)
 
                 if stop_training:
-                    print(f"Fold {fold_idx}: Early stopping acionado na época {epoch_ndx}.")
+                    log.info(f"Fold {fold_idx}: Early stopping acionado na época {epoch_ndx}.")
                     break
 
             fold_history['callbackMetrics'] = callbackMetrics
@@ -140,8 +139,6 @@ class Trainer:
                     'best_weights': best_weights_for_this_run,
                     'history': fold_history 
                 })
-            # if self.debug:
-            #     break
         return path
 
     def doTraining(self, epoch_ndx: int, train_dl: DataLoader):
@@ -246,18 +243,19 @@ class Trainer:
                 folds=self.n_splits, 
                 id=datetime.now().strftime("%Y%m%d%H%M%S"))
             self.folder_path = str(create_folder(folderTemplateName))
-
-        data_folder = [os.path.join(self.drive_path, file) for file in os.listdir(self.drive_path) if file.endswith(".npz")]
+        eta_et_region = list(ParameterGrid({'eta': self.eta_range, 'et': self.et_range}))
+        data_folder = [os.path.join(self.drive_path, file) for file in os.listdir(self.drive_path) if (file.endswith(".npz") and file.startswith("mc23_13TeV")) ]
         self.full_dataset = EgammaNpzDataset(data_folder, 
                                              percentage=self.percentage)
         self.input_dim = self.full_dataset.get_model_dim()
         for index, file in enumerate(data_folder):
             et, eta = self.get_et_eta(file)
-            if self.verify_results(self.folder_path, et, eta):
-                path = self.main(index, file)
-                self.save_results(self.folder_path,et, eta)
-            if self.debug:
-                break
+            if {'eta': int(eta), 'et':int(et)} in eta_et_region:
+                if self.verify_results(self.folder_path, et, eta):
+                    path = self.main(index, file)
+                    self.save_results(self.folder_path,et, eta)
+                if self.debug:
+                    break
 
         
     def get_et_eta(self, file_path):
