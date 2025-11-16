@@ -3,10 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-from sklearn.metrics import roc_curve, roc_auc_score
+from typing import Union
 import os
-from typing import Union, Callable, Tuple 
-from typing import Union, Callable, Tuple 
 import logging
 log = logging.getLogger()
 
@@ -26,84 +24,79 @@ def norm1(data: np.ndarray) -> np.ndarray:
       return data / norms[:, None]
 
 
-# def plot_profile_mean_energy_rings(signal_data:  np.ndarray, bg_data:  np.ndarray,
-#                                    folder_path: str, iet: int, ieta: int,
-#                                   percentage: float=1.) -> None:
-#     signal = norm1(signal_data)
-#     background = norm1(bg_data)
-
-#     x_axis = np.arange(len(signal[0]))
-#     number_of_rings = len(signal[0,:])
-#     mean_ringsSignal = np.mean(signal, axis=0)
-#     std_ringsSignal = np.std(signal, axis=0)
-
-#     mean_ringBKG = np.mean(background, axis=0)
-#     std_ringBKG = np.std(background, axis=0)
+def plot_profile_mean_energy_rings(data:  np.ndarray,
+                                   target:  np.ndarray,
+                                   ring_index: np.ndarray,
+                                   folder_path: str,
+                                   iet: int = 0, 
+                                   ieta: int = 0) -> None:
     
-#     yAxis_max = np.max(mean_ringBKG) if np.max(mean_ringBKG) > np.max(mean_ringsSignal) else np.max(mean_ringsSignal)
-#     # Subdetectores e cores
-#     subdet_names = ['PreSampler', 'EM1', 'EM2', 'EM3', 'TileCal']
-#     indexes = np.array(get_rings_index(percentage))
-#     subdet_x = [0, 
-#                 np.where(indexes == 8)[0][0],
-#                 np.where(indexes == 72)[0][0],
-#                 np.where(indexes == 80)[0][0],
-#                 np.where(indexes == 88)[0][0]]
-#     subdet_colors = ['#1b9e77', '#d95f09', '#7570b3', '#e7298a', '#66a61e']
+    signal_data = data[np.where(target == 1)]
+    bg_data = data[np.where(target == 0)]
+    ring_index = np.array(ring_index)
+    x_axis = np.arange(len(signal_data[0]))
+    number_of_rings = len(signal_data[0,:])
+    mean_ringsSignal = np.mean(signal_data, axis=0)
+    std_ringsSignal = np.std(signal_data, axis=0)
+    mean_ringBKG = np.mean(bg_data, axis=0)
+    std_ringBKG = np.std(bg_data, axis=0)
+    
+    yAxis_max = np.max(mean_ringBKG) if np.max(mean_ringBKG) > np.max(mean_ringsSignal) else np.max(mean_ringsSignal)
+    # Subdetectores e cores
+    subdet_names = ['PreSampler', 'EM1', 'EM2', 'EM3', 'TileCal']
+    subdet_x = [0, 
+                np.where(ring_index == 8)[0][0],
+                np.where(ring_index == 72)[0][0],
+                np.where(ring_index == 80)[0][0],
+                np.where(ring_index == 88)[0][0]]
+    subdet_colors = ['#1b9e77', '#d95f09', '#7570b3', '#e7298a', '#66a61e']
 
-#     plt.figure(figsize=(10, 5), clear=True, num=1)
-#     # --- Curva Fóton ---
-#     plt.errorbar(x_axis, mean_ringsSignal, std_ringsSignal,
-#                  marker='o', mfc='navy', mec='navy', ms=3,
-#                  mew=0.5, elinewidth=0.8, capsize=2,
-#                  ecolor='navy', color='navy',
-#                  label='Fóton')
-#     # --- Curva Jatos Hadrônicos ---
-#     plt.errorbar(x_axis, mean_ringBKG, std_ringBKG,
-#                  marker='s', mfc='darkorange', mec='darkorange', ms=3,
-#                  mew=0.5, elinewidth=0.8, capsize=2,
-#                  ecolor='darkorange', color='darkorange',
-#                  label='Jatos Hadrônicos')
-#     # --- Linhas verticais e rótulos mais baixos (y=0.66) ---
-#     for x, name, color in zip(subdet_x, subdet_names, subdet_colors):
-#         plt.axvline(x=x, color=color, linestyle='--', linewidth=1)
-#         plt.text(x+1.2, yAxis_max * 1.2, name, rotation=90,
-#                  va='bottom', ha='center', fontsize=9, color=color)
-#     # --- Estilo dos eixos ---
-#     plt.xlabel('Anéis', fontsize=13)
-#     plt.ylabel('Energia Normalizada', fontsize=13)
-#     plt.xticks(ticks=np.linspace(0, number_of_rings, 10, dtype=int),
-#                labels=[str(i+1) for i in np.linspace(0, number_of_rings, 10, dtype=int)],
-#                fontsize=11)
-#     plt.yticks(fontsize=11)
-#     # plt.xlim(-1, number_of_rings)
-#     plt.ylim(-0.05, yAxis_max * 1.5)
-#     plt.grid(True, linestyle='--', alpha=0.6)
-#     # --- Legenda sinal/fundo ---
-#     plt.legend(fontsize=10, loc='upper right')
-#     plt.title('Perfil Médio de Energia nos Anéis - NeuralRinger', fontsize=14)
-#     # --- Salvar com bounding box que inclui textos externos ---
-#     plt.tight_layout()
-#     try:
-#         plt.savefig(os.path.join(folder_path,
-#                                  f"et{iet}.eta{ieta}.RingsMeanProfiles_Ylim_OK_Rotulos_OK_NeuralRinger.pdf"),
-#                     format='pdf',
-#                     dpi=300,
-#                     transparent=True, 
-#                     bbox_inches='tight')
-#         # plt.show()
-#         # https://stackoverflow.com/questions/28757348/how-to-clear-memory-completely-of-all-matplotlib-plots
-#         # plt.close()
-#     except Exception as e:
-#         # plt.close()
-#         raise
-        
-#     df = pd.DataFrame({
-#         'signal_data': signal_data,
-#         'bg_data': bg_data,
-#     })
-#     df.to_pickle(os.path.join(folder_path, 'plot_profile_mean_energy_rings.pkl'))
-
+    plt.figure(figsize=(10, 5), clear=True, num=1)
+    # --- Curva Fóton ---
+    plt.errorbar(x_axis, mean_ringsSignal, std_ringsSignal,
+                 marker='o', mfc='navy', mec='navy', ms=3,
+                 mew=0.5, elinewidth=0.8, capsize=2,
+                 ecolor='navy', color='navy',
+                 label='Fóton')
+    # --- Curva Jatos Hadrônicos ---
+    plt.errorbar(x_axis, mean_ringBKG, std_ringBKG,
+                 marker='s', mfc='darkorange', mec='darkorange', ms=3,
+                 mew=0.5, elinewidth=0.8, capsize=2,
+                 ecolor='darkorange', color='darkorange',
+                 label='Jatos Hadrônicos')
+    # --- Linhas verticais e rótulos mais baixos (y=0.66) ---
+    for x, name, color in zip(subdet_x, subdet_names, subdet_colors):
+        plt.axvline(x=x, color=color, linestyle='--', linewidth=1)
+        plt.text(x+1.2, yAxis_max * 1.2, name, rotation=90,
+                 va='bottom', ha='center', fontsize=9, color=color)
+    # --- Estilo dos eixos ---
+    plt.xlabel('Anéis', fontsize=13)
+    plt.ylabel('Energia Normalizada', fontsize=13)
+    plt.xticks(ticks=np.linspace(0, number_of_rings, 10, dtype=int),
+               labels=[str(i+1) for i in np.linspace(0, number_of_rings, 10, dtype=int)],
+               fontsize=11)
+    plt.yticks(fontsize=11)
+    # plt.xlim(-1, number_of_rings)
+    plt.ylim(-0.05, yAxis_max * 1.5)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    # --- Legenda sinal/fundo ---
+    plt.legend(fontsize=10, loc='upper right')
+    plt.title('Perfil Médio de Energia nos Anéis - NeuralRinger', fontsize=14)
+    # --- Salvar com bounding box que inclui textos externos ---
+    plt.tight_layout()
+    try:
+        path = create_folder("RingsMeanProfiles", folder_path )
+        plt.savefig(os.path.join(path, f"et{iet}.eta{ieta}.RingsMeanProfiles_NeuralRinger.pdf"),
+                    format='pdf',
+                    dpi=300,
+                    transparent=True, 
+                    bbox_inches='tight')
+        # plt.show()
+        # https://stackoverflow.com/questions/28757348/how-to-clear-memory-completely-of-all-matplotlib-plots
+        # plt.close()
+    except Exception as e:
+        # plt.close()
+        raise
 
 def plot_boxplot_SP(data_type: str,
                     all_training_results:  dict[str, Union[str, int, object]],
@@ -162,62 +155,29 @@ def plot_boxplot_SP(data_type: str,
         df_results.to_pickle(
             os.path.join(folder_path, f'iet{iet}.ieta{ieta}.{data_type}_plot_boxplot_SP.pkl'))
 
-# def get_best_sp_model(training_results_list: list[dict],
-#                       model_builder_tag: str,
-#                       input_dimensions: int) ->  Tuple[tf.keras.Sequential, 
-#                                                 dict[str, Union[str, int, object]]]:
-#     """
-#     Identifica e retorna o modelo Keras com o maior índice SP de uma lista de resultados de treinamento.
+def get_best_sp_model(training_results_list: pd.DataFrame,
+                      model_builder_tag: str,
+                      input_dimensions: int) :
+    if not (training_results_list.shape[0] > 0):
+        print("A lista de resultados de treinamento está vazia.")
+        return None, None
 
-#     Args:
-#         training_results_list (list): Uma lista de dicionários, onde cada dicionário
-#                                       contém 'fold', 'repeat', 'best_sp_value',
-#                                       'best_weights' e 'keras_history'.
-#         model_builder_fn (function): Uma função que reconstrói a arquitetura do modelo
-#                                      (ex: build_model(input_dim)).
-#         input_dimensions (int): A dimensão de entrada necessária para construir o modelo.
+    highest_sp_model_info = training_results_list.iloc[np.argmax(training_results_list["best_sp_value"])]
 
-#     Returns:
-#         tf.keras.Model: O modelo Keras com os pesos correspondentes ao maior SP.
-#         dict: As informações completas da rodada que produziu o melhor modelo.
-#               Retorna (None, None) se a lista estiver vazia ou nenhum modelo foi salvo.
-#     """
-#     if not training_results_list:
-#         print("A lista de resultados de treinamento está vazia.")
-#         return None, None
+    try:
+        # print(f"\n--- Modelo com o mais alto índice SP encontrado ---")
+        # print(f"  Fold: {highest_sp_model_info['fold']+1}")
+        # print(f"  Inicialização: {highest_sp_model_info['repeat']+1}")
+        # print(f"  Melhor Índice SP: {highest_sp_model_info['best_sp_value']:.4f}")
 
-#     highest_sp_model_info = None
-#     max_sp_index_global = -float('inf')
+        best_overall_sp_model = get_model(model_builder_tag, input_dimensions)
+        best_overall_sp_model.load_state_dict(highest_sp_model_info["best_weights"])
 
-#     for run_info in training_results_list:
-#         current_sp = run_info.get('best_sp_value', -float('inf'))
-
-#         # Ignora entradas onde best_weights não foi salvo (ex: devido a um SP inicial de 0)
-#         if run_info.get('best_weights') is None:
-#             continue
-
-#         if current_sp > max_sp_index_global:
-#             max_sp_index_global = current_sp
-#             highest_sp_model_info = run_info
-
-#     if highest_sp_model_info:
-#         # print(f"\n--- Modelo com o mais alto índice SP encontrado ---")
-#         # print(f"  Fold: {highest_sp_model_info['fold']+1}")
-#         # print(f"  Inicialização: {highest_sp_model_info['repeat']+1}")
-#         # print(f"  Melhor Índice SP: {highest_sp_model_info['best_sp_value']:.4f}")
-
-#         # Recriar a arquitetura do modelo
-#         best_overall_sp_model = build_model(input_dimensions, model_builder_tag)
-
-#         # Carregar os melhores pesos
-#         best_overall_sp_model.set_weights(highest_sp_model_info['best_weights'])
-
-#         # print("Modelo recuperado com sucesso e pronto para uso!")
-#         return best_overall_sp_model, highest_sp_model_info
-#     else:
-#         print("Nenhum modelo com pesos salvos foi encontrado na lista fornecida.")
-#         return None, None
-
+        # print("Modelo recuperado com sucesso e pronto para uso!")
+        return best_overall_sp_model, highest_sp_model_info
+    except Exception as e:
+        print(f"Não foi possível carregar o modelo com os pesos fornecidos. Motivo: {e}")
+        raise e
 
 def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]]) -> None:
     if best_model_details is None:
@@ -235,7 +195,7 @@ def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]]) -
         val_accuracy = history_data['val_acc']
     
         # Valores de SP, FPR e TPR do callback SP
-        callbackMetrics = history_data["callbackMetrics"][0]
+        callbackMetrics = history_data["callbackMetrics"]
         val_sp = callbackMetrics.get('max_sp_val') # .get() para evitar KeyError se a chave não existir
         val_fa = callbackMetrics.get('max_sp_fa_val') # FPR
         val_pd = callbackMetrics.get('max_sp_pd_val') # TPR
@@ -299,69 +259,33 @@ def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]]) -
     
         # print("\nCurvas de aprendizagem (Loss, Accuracy, SP, TPR, FPR) geradas com sucesso para o melhor modelo SP!")
 
-
-# def plot_model_acc(best_overall_sp_model: tf.keras.Sequential, 
-#                    test_set: Tuple[np.ndarray,np.ndarray],
-#                   folder_path=None, ns = "", iet="", ieta="") -> float:
-#     X_test_final, y_test_final = test_set
-#     if best_overall_sp_model is None:
-#         print("Erro: O modelo com o melhor SP não foi encontrado. Certifique-se de que 'get_best_sp_model' foi executada corretamente.")
-#     else:
-#         # --- 2. Previsões da Rede ---
-#         print("\nFazendo previsões no conjunto de teste com o modelo de melhor SP...")
-#         y_pred_proba = best_overall_sp_model.predict(X_test_final).ravel()
+def plot_model_acc(best_model_details,
+                   folder_path=None,iet=0, ieta=0) -> float:
+        print("Gerando Curva ROC...")
+        tpr, fpr  = best_model_details["pd"], best_model_details["fa"]
+        auc_score = best_model_details["auc_score"]
     
-#         # --- 3. Curva ROC ---
-#         print("Gerando Curva ROC...")
-#         fpr, tpr, thresholds = roc_curve(y_test_final, y_pred_proba)
-#         auc_score = roc_auc_score(y_test_final, y_pred_proba)
-    
-#         plt.figure(figsize=(8, 6), clear=True, num=1)
-#         plt.plot(fpr, tpr, color='blue', lw=2, label=f'Curva ROC (AUC = {auc_score:.4f})')
-#         plt.plot([0, 1], [0, 1], color='gray', linestyle='--', lw=1)
-#         plt.xlim([0.0, 1.0])
-#         plt.ylim([0.0, 1.05])
-#         plt.xlabel('Taxa de Falsos Positivos (FPR)')
-#         plt.ylabel('Taxa de Verdadeiros Positivos (TPR)')
-#         plt.title('Curva ROC do Modelo'+ \
-#              f"\n({iet},{ieta})")
-#         plt.legend(loc="lower right")
-#         plt.grid(True)
-#         roc_file_template = "ns{ns}.iet{iet}.ieta{ieta}_ROC.pdf".format(
-#             ns = ns,
-#             ieta = ieta, 
-#             iet=iet)
-#         plt.savefig(os.path.join(folder_path, roc_file_template))
-#         # plt.show()
-#         # plt.close()
-#         # --- 4. Histograma de Saída da Rede (Sinal vs. Background) ---
-#         print("Gerando Histograma de Saída da Rede...")
-    
-#         # Separar as previsões para sinal e background
-#         # Assumindo que 1 é sinal e 0 é background em y_test_final
-#         predictions_signal = y_pred_proba[y_test_final == 1]
-#         predictions_background = y_pred_proba[y_test_final == 0]
-    
-#         plt.figure(figsize=(10, 6), clear=True, num=1)
-#         plt.hist(predictions_background, bins=50, alpha=0.7, label='Background', color='red', density=True)
-#         plt.hist(predictions_signal, bins=50, alpha=0.7, label='Sinal', color='green', density=True)
-#         plt.xlabel('Saída da Rede (Probabilidade)')
-#         plt.ylabel('Densidade')
-#         plt.yscale('log')
-#         plt.title('Histograma de Saída da Rede para Sinal e Background'+ \
-#              f"\n({iet},{ieta})")
-#         plt.legend(loc='upper right')
-#         plt.grid(True)
-#         model_output_file_template = "ns{ns}.iet{iet}.ieta{ieta}_modelOutput.pdf".format(
-#             ns = ns,
-#             ieta = ieta, 
-#             iet=iet)
-#         plt.savefig(os.path.join(folder_path, model_output_file_template))
-#         # plt.show()
-#         # plt.close()
-    
-#         print("\nVisualizações geradas com sucesso!")
-#         return auc_score
+        plt.figure(figsize=(8, 6), clear=True, num=1)
+        plt.plot(fpr, tpr, color='blue', lw=2, label=f'Curva ROC (AUC = {auc_score:.4f})')
+        plt.plot([0, 1], [0, 1], color='gray', linestyle='--', lw=1)
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('Taxa de Falsos Positivos (FPR)')
+        plt.ylabel('Taxa de Verdadeiros Positivos (TPR)')
+        plt.title('Curva ROC do Modelo'+ \
+             f"\n({iet},{ieta})")
+        plt.legend(loc="lower right")
+        plt.grid(True)
+        # roc_file_template = "ns{ns}.iet{iet}.ieta{ieta}_ROC.pdf".format(
+        #     ns = ns,
+        #     ieta = ieta, 
+        #     iet=iet)
+        # plt.savefig(os.path.join(folder_path, roc_file_template))
+        plt.show()
+        # plt.close()
+        # --- 4. Histograma de Saída da Rede (Sinal vs. Background) ---
+        print("Gerando Histograma de Saída da Rede...")
+        return auc_score
 
 
 # def compute_saliency_map(x: np.ndarray, model: tf.keras.Sequential) -> np.ndarray:
