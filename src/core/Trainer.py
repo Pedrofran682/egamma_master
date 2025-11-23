@@ -43,7 +43,7 @@ class Trainer:
         self.model_tag = model_tag
         self.et_range = et_range
         self.eta_range = eta_range
-        self.drive_path = 'data/'
+        self.drive_path = '/eos/user/j/jlieberm/photonRinger/datasets/notIso'
         self.all_y_preds_list = []
         self.all_y_true_list = []
         self.et = None

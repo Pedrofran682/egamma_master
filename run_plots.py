@@ -23,22 +23,24 @@ log = logging.getLogger(__name__)
 parser = argparse.ArgumentParser(prog='plotter')
 parser.add_argument('results_path',  type=str)
 parser.add_argument('--drive_path',  default="data/", type=str,required=False)
-parser.add_argument('--plot_ringer', default=False, type=bool, required=False)
+parser.add_argument('--percentage',  default=None, type=float,required=False)
+parser.add_argument('--plot_ringer', action='store_true')
 parser.add_argument('--debug', action='store_true')
 
 
 def run_ringer_plots(drive_path: str, folder_path: str,
-                     et: int, eta: int) -> None:
+                     percentage: float) -> None:
     data_folder = [os.path.join(drive_path, file) for file in os.listdir(drive_path)
                     if (file.endswith(".npz") and 
                         file.startswith("mc23_13TeV"))
                         ]
     egammaDataset = EgammaNpzDataset(data_folder, 
-                                    percentage=1.0)
-    data, target, file_name = egammaDataset[0]
-    et, eta = get_et_eta(file_name)
-    plot_profile_mean_energy_rings(data, target, egammaDataset.indexes,
-                                folder_path=folder_path, iet=et, ieta=eta)
+                                    percentage=percentage)
+    for index, file_name in enumerate(data_folder):
+        data, target, file_name = egammaDataset[index]
+        et, eta = get_et_eta(file_name)
+        plot_profile_mean_energy_rings(data, target, egammaDataset.indexes,
+                                    folder_path=folder_path, iet=et, ieta=eta)
     
 
 def run_plots(results_data: str, folder_path: str,
@@ -59,10 +61,14 @@ if __name__ == "__main__":
                 if (file.endswith(".pkl") and file.startswith("ie"))
                 ]
     for file_path in data_folder:
-        log.info(f"Plotando resultado de {file_path}")
         folder_path = os.path.dirname(file_path)
         et, eta = get_et_eta(file_path)
-        run_plots(file_path, folder_path, et, eta)
-    if args.plot_ringer:
-        log.info(f"Executando plots do perfil dos anéis")
-        run_ringer_plots(drive_path, folder_path, et, eta)
+        if args.plot_ringer:
+            if args.percentage == None:
+                raise Exception("YOu must provide percentage of rings. Ex: --percentage 0.5")
+            log.info(f"Plotando resultado de {file_path}")
+            log.info(f"Executando plots do perfil dos anéis")
+            run_ringer_plots(drive_path, folder_path, args.percentage)
+            break
+        else:
+            run_plots(file_path, folder_path, et, eta)

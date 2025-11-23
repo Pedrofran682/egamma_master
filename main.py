@@ -34,7 +34,7 @@ def main(args: argparse.Namespace):
     else:
         trainer = Trainer(percentage = float(args.percentage),
                                 et_range = np.arange(0,8),
-                                eta_range = np.arange(0,9), 
+                                eta_range = np.arange(0,1), 
                                 model_tag= str(args.model_tag),
                                 folder_path= args.folder_path)
         trainer.run()

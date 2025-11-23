@@ -77,7 +77,6 @@ class SPCallbackPyTorch:
             fa, pd, _ = roc_curve(y_true, y_pred)
             auc_score = roc_auc_score(y_true, y_pred)
             sp_values = np.sqrt(np.sqrt(pd * (1 - fa)) * (0.5 * (pd + (1 - fa))))
-            log.debug(f"{sp_values.shape = }")
         except ValueError as e:
             log.warning(f"Error calculating roc_curve in epoch {epoch}: {e}. Skipping knee calculation.")
             sp_values = np.array([])
