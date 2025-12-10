@@ -74,9 +74,9 @@ class SPCallbackPyTorch:
         stop_training = False
         
         try:
-            fa, pd, _ = roc_curve(y_true, y_pred)
+            false_positive_rate, true_positive_rates, _ = roc_curve(y_true, y_pred)
             auc_score = roc_auc_score(y_true, y_pred)
-            sp_values = np.sqrt(np.sqrt(pd * (1 - fa)) * (0.5 * (pd + (1 - fa))))
+            sp_values = np.sqrt(np.sqrt(true_positive_rates * (1 - false_positive_rate)) * (0.5 * (true_positive_rates + (1 - false_positive_rate))))
         except ValueError as e:
             log.warning(f"Error calculating roc_curve in epoch {epoch}: {e}. Skipping knee calculation.")
             sp_values = np.array([])
@@ -96,20 +96,20 @@ class SPCallbackPyTorch:
 
         knee = np.argmax(sp_values)
         current_sp = sp_values[knee]
-        current_fa_at_knee = fa[knee]
-        current_pd_at_knee = pd[knee]
-        partial_fa = self.__get_partial_derivative_fa(current_fa_at_knee, current_pd_at_knee)
-        partial_pd = self.__get_partial_derivative_pd(current_fa_at_knee, current_pd_at_knee)
+        false_positive_rate_knee = false_positive_rate[knee]
+        true_positive_rates_knee = true_positive_rates[knee]
+        partial_fa = self.__get_partial_derivative_fa(false_positive_rate_knee, true_positive_rates_knee)
+        partial_pd = self.__get_partial_derivative_pd(false_positive_rate_knee, true_positive_rates_knee)
 
         self.callbackMetrics["max_sp_val"].append(current_sp)
-        self.callbackMetrics["max_sp_fa_val"].append(current_fa_at_knee)
-        self.callbackMetrics["max_sp_pd_val"].append(current_pd_at_knee)
+        self.callbackMetrics["max_sp_fa_val"].append(false_positive_rate_knee)
+        self.callbackMetrics["max_sp_pd_val"].append(true_positive_rates_knee)
         self.callbackMetrics["max_sp_partial_derivative_fa_val"].append(partial_fa)
         self.callbackMetrics["max_sp_partial_derivative_pd_val"].append(partial_pd)
 
         if self.__verbose:
             log_message = (
-                f"Epoch {epoch}: - val_sp: {current_sp:.4f} (fa:{current_fa_at_knee:.4f}, pd:{current_pd_at_knee:.4f}), "
+                f"Epoch {epoch}: - val_sp: {current_sp:.4f} (fa:{false_positive_rate_knee:.4f}, pd:{true_positive_rates_knee:.4f}), "
                 f"patience: {self.__ipatience}/{self.__patience}, dSP/dFA: {partial_fa:.4f}, dSP/dPD: {partial_pd:.4f}"
             )
             log.info(log_message)
@@ -117,15 +117,15 @@ class SPCallbackPyTorch:
         if current_sp > self.__best_sp:
             self.__best_sp = current_sp
             self.__ipatience = 0
-            self.callbackMetrics["fa"] = fa
-            self.callbackMetrics["pd"] = pd
+            self.callbackMetrics["fa"] = false_positive_rate
+            self.callbackMetrics["pd"] = true_positive_rates
             self.callbackMetrics["auc_score"] = auc_score
 
             if self.__save_the_best:
                 self.__best_weights = self.model.state_dict()
                 self.__best_epoch = epoch
-                self.__best_fa_at_knee = current_fa_at_knee
-                self.__best_pd_at_knee = current_pd_at_knee
+                self.__best_fa_at_knee = false_positive_rate_knee
+                self.__best_pd_at_knee = true_positive_rates_knee
                 if self.__verbose:
                     log.info(f"Epoch {epoch}: val_sp improved to {current_sp:.4f}. Saving model.")
         else:
