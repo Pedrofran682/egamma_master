@@ -14,7 +14,7 @@ def get_best_sp_model(training_results_list: pd.DataFrame,
                       model_builder_tag: str,
                       input_dimensions: int) :
     if not (training_results_list.shape[0] > 0):
-        print("A lista de resultados de treinamento está vazia.")
+        log.error("A lista de resultados de treinamento está vazia.")
         return None, None
 
     highest_sp_model_info = training_results_list.iloc[np.argmax(training_results_list["best_sp_value"])]
@@ -24,7 +24,7 @@ def get_best_sp_model(training_results_list: pd.DataFrame,
         best_overall_sp_model.load_state_dict(highest_sp_model_info["best_weights"])
         return best_overall_sp_model, highest_sp_model_info
     except Exception as e:
-        print(f"Não foi possível carregar o modelo com os pesos fornecidos. Motivo: {e}")
+        log.info(f"Não foi possível carregar o modelo com os pesos fornecidos. Motivo: {e}")
         raise e
 
 def create_folder(new_folder_name: str , base_path: str = "results") -> str:

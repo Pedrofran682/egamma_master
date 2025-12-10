@@ -135,5 +135,7 @@ def get_model(tag: str, input_dim: int) -> nn.Module:
         return ModelV2(input_dim)
     if tag == "V3":
         return ModelV3(input_dim)
+    if tag == "V4":
+        return ModelV4(input_dim)
     if tag == "V5":
         return ModelV5(input_dim)

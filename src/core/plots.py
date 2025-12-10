@@ -43,21 +43,21 @@ def plot_profile_mean_energy_rings(data:  np.ndarray,
                  marker='o', mfc='navy', mec='navy', ms=3,
                  mew=0.5, elinewidth=0.8, capsize=2,
                  ecolor='navy', color='navy',
-                 label='Fóton')
+                 label='Photons')
     # --- Curva Jatos Hadrônicos ---
     plt.errorbar(x_axis, mean_ringBKG, std_ringBKG,
                  marker='s', mfc='darkorange', mec='darkorange', ms=3,
                  mew=0.5, elinewidth=0.8, capsize=2,
                  ecolor='darkorange', color='darkorange',
-                 label='Jatos Hadrônicos')
+                 label='Hadronic Jets')
     # --- Linhas verticais e rótulos mais baixos (y=0.66) ---
     for x, name, color in zip(subdet_x, subdet_names, subdet_colors):
         plt.axvline(x=x, color=color, linestyle='--', linewidth=1)
         plt.text(x+1.2, yAxis_max * 1.2, name, rotation=90,
                  va='bottom', ha='center', fontsize=9, color=color)
     # --- Estilo dos eixos ---
-    plt.xlabel('Anéis', fontsize=13)
-    plt.ylabel('Energia Normalizada', fontsize=13)
+    plt.xlabel('rings', fontsize=13)
+    plt.ylabel('Normalized Energy', fontsize=13)
     plt.xticks(ticks=np.linspace(0, number_of_rings, 10, dtype=int),
                labels=[str(i+1) for i in np.linspace(0, number_of_rings, 10, dtype=int)],
                fontsize=11)
@@ -67,7 +67,7 @@ def plot_profile_mean_energy_rings(data:  np.ndarray,
     plt.grid(True, linestyle='--', alpha=0.6)
     # --- Legenda sinal/fundo ---
     plt.legend(fontsize=10, loc='upper right')
-    plt.title('Perfil Médio de Energia nos Anéis - NeuralRinger', fontsize=14)
+    plt.title('Average Energy Profile in the Rings - NeuralRinger', fontsize=14)
     # --- Salvar com bounding box que inclui textos externos ---
     plt.tight_layout()
     try:
@@ -172,43 +172,41 @@ def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]],
         # --- 2. Plotar as Curvas de Aprendizagem (Loss, Accuracy, e SP/FPR/TPR) ---
         plt.figure(figsize=(18, 6), clear=True, num=1) # Aumenta a figura para 3 subplots
     
-        # Plot Loss
-        plt.subplot(1, 3, 1) # 1 linha, 3 colunas, 1º plot
-        plt.plot(epochs, train_loss, 'o-', label='Perda no Treinamento')
-        plt.plot(epochs, val_loss, 'o-', label='Perda na Validação')
-        plt.title('Curvas de Perda (Loss)')
-        plt.xlabel('Época')
-        plt.ylabel('Perda')
+        plt.subplot(1, 3, 1) 
+        plt.plot(epochs, train_loss, 'o-', label='Training Loss')
+        plt.plot(epochs, val_loss, 'o-', label='Validation Loss')
+        plt.title('Loss Curves')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
         plt.grid(True)
         plt.legend()
-    
-        # Plot Accuracy
-        plt.subplot(1, 3, 2) # 1 linha, 3 colunas, 2º plot
-        plt.plot(epochs, train_accuracy, 'o-', label='Acurácia no Treinamento')
-        plt.plot(epochs, val_accuracy, 'o-', label='Acurácia na Validação')
-        plt.title('Curvas de Acurácia')
-        plt.xlabel('Época')
-        plt.ylabel('Acurácia')
+        
+        plt.subplot(1, 3, 2) 
+        plt.plot(epochs, train_accuracy, 'o-', label='Training Accuracy')
+        plt.plot(epochs, val_accuracy, 'o-', label='Validation Accuracy')
+        plt.title('Accuracy Curves')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
         plt.grid(True)
         plt.legend()
     
         # Plot SP, TPR e FPR (se disponíveis)
         plt.subplot(1, 3, 3) # 1 linha, 3 colunas, 3º plot
         if val_sp is not None:
-            plt.plot(epochs, val_sp, 'o-', label='Índice SP', color='purple')
+            plt.plot(epochs, val_sp, 'o-', label='SP metric', color='purple')
         if val_pd is not None:
-            plt.plot(epochs, val_pd, 'o-', label='TPR (Verdadeiros Positivos)', color='darkgreen')
+            plt.plot(epochs, val_pd, 'o-', label='TPR (True Positives),', color='darkgreen')
         if val_fa is not None:
-            plt.plot(epochs, val_fa, 'o-', label='FPR (Falsos Positivos)', color='darkred')
+            plt.plot(epochs, val_fa, 'o-', label='FPR (False Positives)', color='darkred')
     
         if val_sp is not None:
             # Linha vertical para o melhor SP
             best_sp_epoch_idx = np.argmax(val_sp)
             plt.axvline(x=epochs[best_sp_epoch_idx], color='blue', linestyle='--', label=f'Melhor SP (Época {epochs[best_sp_epoch_idx]})')
     
-        plt.title('Métricas de Desempenho (SP, TPR, FPR)')
-        plt.xlabel('Época')
-        plt.ylabel('Valor da Métrica')
+        plt.title('Performance Metrics (SP, TPR, FPR)')
+        plt.xlabel('Epoch')
+        plt.ylabel('Metric value')
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
@@ -227,7 +225,7 @@ def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]],
 
 def plot_model_acc(best_model_details,
                    folder_path: str, iet: int, ieta: int) -> None:
-          log.info("Gerando Curva ROC...")
+          log.info("Generating ROC Curve...")
           tpr, fpr  = best_model_details["pd"], best_model_details["fa"]
           auc_score = best_model_details["auc_score"]
 
@@ -236,13 +234,13 @@ def plot_model_acc(best_model_details,
           plt.plot([0, 1], [0, 1], color='gray', linestyle='--', lw=1)
           plt.xlim([0.0, 1.0])
           plt.ylim([0.0, 1.05])
-          plt.xlabel('Taxa de Falsos Positivos (FPR)')
-          plt.ylabel('Taxa de Verdadeiros Positivos (TPR)')
-          plt.title('Curva ROC do Modelo'+ \
+          plt.xlabel('False Positive Rate (FPR)')
+          plt.ylabel('True Positive Rate (TPR)')
+          plt.title('Model ROC Curve'+ \
                f"\n({iet},{ieta})")
           plt.legend(loc="lower right")
           plt.grid(True)
-          log.info("Gerando Histograma de Saída da Rede...")
+          log.info("Generating Network Output Histogram")
           try:
                path = create_folder("ROC", folder_path )
                plt.savefig(os.path.join(path, f"iet{iet}.ieta{ieta}_model_ROC.pdf"),
@@ -278,20 +276,20 @@ def plot_saliency_comparison_normalized(model: torch.nn.Module,
     plt.figure(figsize=(12, 6), clear=True, num=1)
     x_range = np.arange(len(mean_sinal))
 
-    plt.plot(mean_sinal, label='Sinal (Média)', color='blue')
+    plt.plot(mean_sinal, label='Signal (mean)', color='blue')
     plt.fill_between(x_range, 
                      mean_sinal - std_sinal,
                      mean_sinal + std_sinal,
                      color='blue', alpha=0.3, label='Sinal ±1σ')
-    plt.plot(mean_backg, label='Background (Média)', color='red')
+    plt.plot(mean_backg, label='Background (mean)', color='red')
     plt.fill_between(x_range, 
                      mean_backg - std_backg, 
                      mean_backg + std_backg,
                      color='red', alpha=0.3, label='Background ±1σ')
     plt.title(f'Comparação do Perfil Médio de Saliency Normalizado\n({n_samples} amostras por classe)' + \
              f"\n({iet},{ieta})")
-    plt.xlabel('Posição da Entrada - Indice de Anéis')
-    plt.ylabel('Importância Normalizada (Saliency)')
+    plt.xlabel('Input Position - Ring Index')
+    plt.ylabel('Normalized Importance (Saliency)')
     plt.legend()
     plt.grid(True, linestyle='--')
     plt.tight_layout()
