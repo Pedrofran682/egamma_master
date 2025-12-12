@@ -1,3 +1,4 @@
+from functools import cache
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -273,9 +274,63 @@ def plot_saliency_comparison_normalized(model: torch.nn.Module,
         raise e
 
 
+@cache
+def get_et_axis():
+    return ["0: 25->30", "1: 30->35", "2: 35->40", 
+           "3: 40->45", "4: 45->50", "5: 50->60", 
+           "6: 60->80", "7: 80->100"]
+
+@cache
+def get_eta_axis():
+    return["0: 0.00->0.60",
+    "1: 0.60->0.80",
+    "2: 0.80->1.15",
+    "3: 1.15->1.37",
+    "4: 1.37->1.52",
+    "5: 1.52->1.81",
+    "6: 1.81->2.01",
+    "7: 2.01->2.37",
+    "8: 2.37->2.47"]
 
 
+def plot_metrics_grid(df: pd.DataFrame, model_name: str, folder_path: str):
+    fig, ax = plt.subplots(figsize=(10, 2))
+    unique_et = df['et'].unique()
+    unique_eta = df['eta'].unique()
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
 
+    for _, row in df.iterrows():
+        label = f"AUC: {row['auc']:.3f}\nSP: {row['best_sp_value']:.3f}"
+        
+        ax.text(row['et'], row['eta'], label, 
+                ha='center', va='center', 
+                bbox=props, fontsize=10)
+    ax.text(row['et']+2, row['eta']+2, "")
+
+    ax.set_xlabel("$\eta$ (eta)")
+    ax.set_ylabel("$E_T$ (et)")
+    ax.set_title(f"[{model_name}] Metrics by pair ($E_T$, $\eta$)")
+    
+    margin_x = 0.5
+    margin_y = 1.0
+    ax.set_xlim(min(unique_eta) - margin_x, max(unique_eta) + margin_x + 7)
+    ax.set_ylim(min(unique_et) - margin_y, max(unique_et) + margin_y)
+    
+    ax.set_yticks(sorted(unique_eta), get_eta_axis()[:len(unique_eta)])
+    ax.set_xticks(sorted(unique_et), get_et_axis()[:len(unique_et)])
+    
+    ax.grid(True, linestyle='--', alpha=0.3)
+    
+    try:
+        path = create_folder("plot_metrics_grid", folder_path )
+        plt.savefig(os.path.join(path, f"{model_name}_plot_metrics_grid.pdf"),
+                    format='pdf',
+                    dpi=300,
+                    transparent=True, 
+                    bbox_inches='tight')
+        plt.close()
+    except Exception as e:
+        raise e
 
 
 

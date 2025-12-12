@@ -79,3 +79,68 @@ def get_et_eta(file_path):
         et = match.group(1)
         eta = match.group(2)
         return et, eta
+
+def get_results( folder_path: str ):
+    listed_files = [file for file in os.listdir(folder_path)
+                            if (file.endswith(".pkl") and 
+                                not file.startswith(".sys.v#."))
+                                ]
+    all_metrics = []
+    for file in listed_files:
+        data = pd.DataFrame(pd.read_pickle(os.path.join(folder_path, file)))
+        data = data[["file_path", "fold", "best_sp_value", "best_fa_value", "best_pd_value", "history"]]
+        metrics = {"source_file": None,
+                    "mean_sp": 0,
+                    "std_sp": 0,
+                    "mean_fa": 0,
+                    "std_fa": 0,
+                    "mean_pd": 0,
+                    "std_pd": 0,
+               }
+        
+        metrics["mean_sp"], metrics["std_sp"] = get_metrics(data, "best_sp_value")
+        metrics["mean_fa"], metrics["std_fa"] = get_metrics(data, "best_fa_value")
+        metrics["mean_pd"], metrics["std_pd"] = get_metrics(data, "best_pd_value")
+        metrics["source_file"] = file
+    
+        metrics["folder_path"] = folder_path
+        max_score_index = data['best_sp_value'].idxmax()
+        row_of_max_value = data.loc[max_score_index]
+        metrics["auc"] = row_of_max_value['history']['callbackMetrics']['auc_score']
+        metrics["best_sp_value"] = row_of_max_value['best_sp_value']
+        metrics["best_fa_value"] = row_of_max_value['best_fa_value']
+        metrics["best_pd_value"] = row_of_max_value['best_pd_value']
+        
+        all_metrics.append(metrics)
+    return all_metrics
+        
+
+def get_metrics(df: pd.DataFrame, column: str):
+    mean_value = df[column].mean()
+    std_value = df[column].std()
+    return mean_value, std_value
+
+def extract_percentage(row) -> str:
+    match = re.search(r"dim(\d+\.\d+)", row['folder_path'])
+    if match:
+        return match.group(1)
+    return None # Retorna None se o padrão não for encontrado
+
+def extract_model_name(row) -> str:
+    match = re.search(r"(modelV\d+)", row['folder_path'])
+    if match:
+        return match.group(1)
+    return None
+
+def extract_et(row) -> str:
+    match = re.search(r"iet(\d+)\.ieta(\d+)", row['source_file'])
+    if match:
+        return int(match.group(1))
+    return None
+
+def extract_eta(row) -> str:
+    match = re.search(r"iet(\d+)\.ieta(\d+)", row['source_file'])
+    if match:
+        # Note: Aqui usamos o grupo 2 da mesma expressão regular
+        return int(match.group(2))
+    return None
