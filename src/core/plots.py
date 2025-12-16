@@ -307,8 +307,8 @@ def plot_metrics_grid(df: pd.DataFrame, model_name: str, folder_path: str):
                 bbox=props, fontsize=10)
     ax.text(row['et']+2, row['eta']+2, "")
 
-    ax.set_xlabel("$\eta$ (eta)")
-    ax.set_ylabel("$E_T$ (et)")
+    ax.set_ylabel("$\eta$ (eta)")
+    ax.set_xlabel("$E_T$ (et)")
     ax.set_title(f"[{model_name}] Metrics by pair ($E_T$, $\eta$)")
     
     margin_x = 0.5
@@ -323,10 +323,10 @@ def plot_metrics_grid(df: pd.DataFrame, model_name: str, folder_path: str):
     
     try:
         path = create_folder("plot_metrics_grid", folder_path )
-        plt.savefig(os.path.join(path, f"{model_name}_plot_metrics_grid.pdf"),
-                    format='pdf',
+        plt.savefig(os.path.join(path, f"{model_name}_plot_metrics_grid.png"),
+                    format='png',
                     dpi=300,
-                    transparent=True, 
+                    transparent=False, 
                     bbox_inches='tight')
         plt.close()
     except Exception as e:

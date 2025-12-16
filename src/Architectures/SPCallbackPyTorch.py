@@ -56,6 +56,7 @@ class SPCallbackPyTorch:
             'max_sp_partial_derivative_pd_val': [],
             'fa': [],
             'pd': [],
+            'thresholds':[],
             'auc_score': []
         }
 
@@ -74,7 +75,7 @@ class SPCallbackPyTorch:
         stop_training = False
         
         try:
-            false_positive_rate, true_positive_rates, _ = roc_curve(y_true, y_pred)
+            false_positive_rate, true_positive_rates, thresholds = roc_curve(y_true, y_pred)
             auc_score = roc_auc_score(y_true, y_pred)
             sp_values = np.sqrt(np.sqrt(true_positive_rates * (1 - false_positive_rate)) * (0.5 * (true_positive_rates + (1 - false_positive_rate))))
         except ValueError as e:
@@ -91,6 +92,7 @@ class SPCallbackPyTorch:
             self.callbackMetrics["max_sp_partial_derivative_pd_val"] = 0.0
             self.callbackMetrics["fa"] = []
             self.callbackMetrics["pd"] = []
+            self.callbackMetrics["thresholds"] = []
             self.callbackMetrics["auc_score"] = 0.0
             return stop_training, self.callbackMetrics
 
@@ -120,7 +122,8 @@ class SPCallbackPyTorch:
             self.callbackMetrics["fa"] = false_positive_rate
             self.callbackMetrics["pd"] = true_positive_rates
             self.callbackMetrics["auc_score"] = auc_score
-
+            self.callbackMetrics["thresholds"] = thresholds
+            
             if self.__save_the_best:
                 self.__best_weights = self.model.state_dict()
                 self.__best_epoch = epoch

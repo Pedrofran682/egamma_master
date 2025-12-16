@@ -19,16 +19,16 @@ log = logging.getLogger(__name__)
 
 
 parser = argparse.ArgumentParser(prog='run_roc_plots')
-parser.add_argument('results_path',  type=str, required=True)
+parser.add_argument('--results_path',  type=str, required=True)
 
 
 def run_ringer_plots(results_path: str):
     all_metrics = []
     folders_to_use = [
-        "../results/modelV5.dim0.5.folds10_id20251126183757",
-        "../results/modelV4.dim0.5.folds10_id20251125151554",
-        "../results/modelV3.dim0.5.folds10_id20251117001936",
-        "../results/modelV2.dim0.5.folds10_id20251120131323",
+        "results/modelV5.dim0.5.folds10_id20251126183757",
+        "results/modelV4.dim0.5.folds10_id20251125151554",
+        "results/modelV3.dim0.5.folds10_id20251117001936",
+        "results/modelV2.dim0.5.folds10_id20251120131323",
     ]
     for folder_path in folders_to_use:
         current_results = get_results(folder_path)
