@@ -8,11 +8,11 @@ class ModelV1(nn.Module):
         super(ModelV1, self).__init__()
         self.input_dim = input_dim
         self.conv1 = nn.Conv1d(in_channels=1, 
-                               out_channels=4, 
+                               out_channels=8, 
                                kernel_size=2, 
                                padding='same') 
         self.conv2 = nn.Conv1d(in_channels=4, 
-                               out_channels=8, 
+                               out_channels=4, 
                                kernel_size=2, 
                                padding='same')
         self.fc1_in_features = 8 * input_dim
@@ -89,7 +89,7 @@ class ModelV4(nn.Module):
         self.input_dim = input_dim
         self.conv1 = nn.Conv1d(in_channels=1, 
                                out_channels=32, 
-                               kernel_size=3, 
+                               kernel_size=4, 
                                padding='same' )
         self.conv2 = nn.Conv1d(in_channels=32, 
                                out_channels=16, 
