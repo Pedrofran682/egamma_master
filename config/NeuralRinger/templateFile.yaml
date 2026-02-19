@@ -1,0 +1,41 @@
+results_folder_path: "./results/2023_05_20_run"
+base_data_path: "/data/datasets/electron_rings"
+
+batch_size: 64
+epochs: 100
+n_initializations: 3
+num_workers: 8
+debug: false
+
+et_range_idx: [0,1,2,3,4,5,6,7,8,9]
+eta_range_idx: [0,1,2,3,4,5,6,7,8,9]
+
+loss_function:
+  module: "torch.nn"
+  object_name: "CrossEntropyLoss"
+  parameters:
+    reduction: "mean"
+    label_smoothing: 0.1
+
+optimizer_function:
+  module: "torch.optim"
+  object_name: "Adam"
+  parameters:
+    lr: 0.001
+    weight_decay: 0.0001
+    betas: [0.9, 0.999]
+
+model:
+  module: "src.Models.egamma.ModelV1"
+  object_name: "ModelV1"
+  parameters:
+    input_dim: 50
+
+dataset:
+  module: "src.Core.Datasets.EgammaNpzDataset"
+  object_name: "EgammaNpzDataset"
+  parameters:
+    drive_path: "/eos/user/j/jlieberm/photonRinger/datasets/notIso"
+    startswith: "mc23_13TeV"
+    endswith: ".npz"
+    percentage: 0.5
