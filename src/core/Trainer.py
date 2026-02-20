@@ -15,6 +15,7 @@ import pandas as pd
 from sklearn.model_selection import ParameterGrid
 import logging
 log = logging.getLogger()
+from torch.utils.data import Dataset
 
 
 class Trainer:
@@ -27,15 +28,15 @@ class Trainer:
                  model_tag="V0",
                  et_range = np.arange(0, 2), 
                  eta_range = np.arange(0, 1),
-                 debug=False):
+                 debug=False,
+                 n_repeats=1):
         
         self.num_workers = 4
         self.use_cuda = torch.cuda.is_available()
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.n_splits = n_splits
-        self.kfold = StratifiedKFold(n_splits=self.n_splits, 
-                           shuffle=True, 
-                           random_state=42)
+        self.kfold = StratifiedKFold(n_splits=self.n_splits, random_state=42,
+                                    shuffle=True)
         self.folder_path = folder_path
         self.batch_size = batch_size
         self.epochs = epochs
@@ -48,6 +49,8 @@ class Trainer:
         self.all_y_true_list = []
         self.et = None
         self.eta = None
+        self.n_repeats = n_repeats
+        self.full_dataset: Dataset
 
         self.debug = debug
         if self.debug:
@@ -68,7 +71,8 @@ class Trainer:
         return torch.optim.Adam(self.model.parameters(), lr=0.001)
     
     def initLossFunction(self):
-        return nn.BCELoss() 
+        # return nn.BCELoss()
+        return nn.MSELoss()
 
     def initDataLoader(self, data, labels):
         features_tensor = torch.from_numpy(data).float()
@@ -86,74 +90,65 @@ class Trainer:
                                 shuffle=True)
         return dataloader
 
-    def main(self, index: int, path: str):
+    def main(self, index: int):
         data, target, path = self.full_dataset[index]
+        test_data, train_cross_validation = self.generate_folds_with_holdout(data, target)
         self.all_training_results = []
-        best_sp_value = -1
-        for fold_idx, (train_index, val_index) in enumerate(self.kfold.split(data, target)):
-            log.info(f"Executando fold {fold_idx + 1}")
-            self.model = self.initModel()
-            self.optimizer = self.initOptimizer()
-            self.loss = self.initLossFunction()
+        for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
             train_dl = self.initDataLoader(data[train_index],
                                            target[train_index])
             val_dl = self.initDataLoader(data[val_index],
                                          target[val_index])
-            sp_tracker = SPCallbackPyTorch(patience=10, verbose=True)
-            fold_history = {
-                'train_loss': [], 
-                'train_acc': [],
-                'val_loss': [], 
-                'val_acc': [],
-                'callbackMetrics': []
-            }
-            
-            for epoch_ndx in range(1, self.epochs + 1):
-                avg_train_loss, avg_train_acc = self.doTraining(epoch_ndx, train_dl)
+            for repeat in range(self.n_repeats):
+                log.info(f'Executing fold: {fold_idx+1}. Repeat: {repeat+1}')
+                self.model = self.initModel()
+                self.optimizer = self.initOptimizer()
+                self.loss = self.initLossFunction()
+                sp_tracker = SPCallbackPyTorch(patience=25, verbose=True)
+                fold_history = {
+                    'train_loss': [], 
+                    'train_acc': [],
+                    'val_loss': [], 
+                    'val_acc': [],
+                    'callbackMetrics': [],
+                    'reapet': []
+                }
+                for epoch_ndx in range(1, self.epochs + 1):
+                    avg_train_loss, avg_train_acc = self.doTraining(epoch_ndx, train_dl)
 
-                self.all_y_preds_list = [] 
-                self.all_y_true_list = []
-                avg_val_loss, avg_val_acc = self.doValidation(epoch_ndx, val_dl)
-                stop_training, callbackMetrics = sp_tracker.on_epoch_end(self.model,
-                                                                         epoch_ndx,
-                                                                         self.all_y_true_list, 
-                                                                         self.all_y_preds_list)
-                fold_history['train_loss'].append(avg_train_loss)
-                fold_history['train_acc'].append(avg_train_acc)
-                fold_history['val_loss'].append(avg_val_loss)
-                fold_history['val_acc'].append(avg_val_acc)
+                    self.all_y_preds_list = [] 
+                    self.all_y_true_list = []
+                    avg_val_loss, avg_val_acc = self.doValidation(epoch_ndx, val_dl)
+                    stop_training, callbackMetrics = sp_tracker.on_epoch_end(self.model,
+                                                                            epoch_ndx,
+                                                                            self.all_y_true_list, 
+                                                                            self.all_y_preds_list)
+                    fold_history['train_loss'].append(avg_train_loss)
+                    fold_history['train_acc'].append(avg_train_acc)
+                    fold_history['val_loss'].append(avg_val_loss)
+                    fold_history['val_acc'].append(avg_val_acc)
 
-                if stop_training:
-                    log.info(f"Fold {fold_idx}: Early stopping acionado na época {epoch_ndx}.")
-                    break
+                    if stop_training:
+                        log.info(f"Fold {fold_idx}: Early stopping acionado na época {epoch_ndx}.")
+                        break
 
-            fold_history['callbackMetrics'] = callbackMetrics
-            best_weights_for_this_run = sp_tracker.get_best_model_weights()
-            best_sp_for_this_run = sp_tracker.get_best_sp_value()
-            best_fa_for_this_run = sp_tracker.get_best_fa_at_knee()
-            best_pd_for_this_run = sp_tracker.get_best_pd_at_knee()
+                fold_history['callbackMetrics'] = callbackMetrics
+                fold_history['reapet'] = repeat+1
+                best_weights_for_this_run = sp_tracker.get_best_model_weights()
+                best_sp_for_this_run = sp_tracker.get_best_sp_value()
+                best_fa_for_this_run = sp_tracker.get_best_fa_at_knee()
+                best_pd_for_this_run = sp_tracker.get_best_pd_at_knee()
 
-            if best_weights_for_this_run is not None:
-                self.all_training_results.append({
-                    'file_path': path, 
-                    'fold': fold_idx,
-                    'best_sp_value': best_sp_for_this_run,
-                    'best_fa_value': best_fa_for_this_run,
-                    'best_pd_value': best_pd_for_this_run,
-                    'best_weights': best_weights_for_this_run,
-                    'history': fold_history 
-                })
-            
-            if best_sp_for_this_run > best_sp_value:
-                best_sp_value = best_sp_for_this_run
-                best_model, _ = get_best_sp_model(pd.DataFrame(self.all_training_results),
-                                  self.model_tag, 
-                                  self.input_dim)
-                plot_saliency_comparison_normalized(best_model,
-                                                    data[val_index],
-                                                    target[val_index],
-                                                    self.folder_path,
-                                                    self.et, self.eta)
+                if best_weights_for_this_run is not None:
+                    self.all_training_results.append({
+                        'file_path': path, 
+                        'fold': fold_idx,
+                        'best_sp_value': best_sp_for_this_run,
+                        'best_fa_value': best_fa_for_this_run,
+                        'best_pd_value': best_pd_for_this_run,
+                        'best_weights': best_weights_for_this_run,
+                        'history': fold_history 
+                    })
         return path
 
     def doTraining(self, epoch_ndx: int, train_dl: DataLoader):
@@ -258,7 +253,30 @@ class Trainer:
             self.et, self.eta = get_et_eta(file)
             if {'eta': int(self.eta), 'et':int(self.et)} in eta_et_region:
                 if verify_results(self.folder_path, self.et, self.eta):
-                    path = self.main(index, file)
+                    self.main(index)
                     self.save_results(self.folder_path,self.et, self.eta)
                 if self.debug:
                     break
+
+    def generate_folds_with_holdout(self, features, labels, test_fold_idx=0):
+        all_folds = [test_idx for _, test_idx in self.kfold.split(features, labels)]
+        log.info(f"{len(all_folds)} folds were generated.")
+        if not (0 <= test_fold_idx < self.n_splits):
+            raise ValueError(f"test_fold_idx must be between 0 and {self.n_splits - 1}")
+
+        log.info(f"Using fold {test_fold_idx + 1} as test set")
+        holdout_indices = all_folds[test_fold_idx]
+
+        remaining_folds = [
+            fold for index, fold in enumerate(all_folds) if index != test_fold_idx
+        ]
+        cv_iterable = []
+        for index in range(len(remaining_folds)):
+            val_indices = remaining_folds[index]
+
+            train_folds = [fold for j, fold in enumerate(remaining_folds) if j != index]
+            train_indices = np.concatenate(train_folds)
+
+            cv_iterable.append((train_indices, val_indices))
+
+        return holdout_indices, cv_iterable

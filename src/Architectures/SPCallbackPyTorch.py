@@ -4,6 +4,7 @@ import torch
 from typing import Tuple, Dict, Any
 import logging
 from logging.config import fileConfig
+import copy
 log = logging.getLogger()
 
 
@@ -125,7 +126,7 @@ class SPCallbackPyTorch:
             self.callbackMetrics["thresholds"] = thresholds
             
             if self.__save_the_best:
-                self.__best_weights = self.model.state_dict()
+                self.__best_weights = copy.deepcopy(self.model.state_dict())
                 self.__best_epoch = epoch
                 self.__best_fa_at_knee = false_positive_rate_knee
                 self.__best_pd_at_knee = true_positive_rates_knee

@@ -27,13 +27,13 @@ def main(args: argparse.Namespace):
     if bool(args.debug):
         trainer = Trainer(percentage = 1.0,
                         et_range = np.arange(0,1),
-                        eta_range = np.arange(0,1), 
+                        eta_range = np.arange(2,3), 
                         model_tag= "V1",
                         debug=args.debug)
         trainer.run()
     else:
         trainer = Trainer(percentage = float(args.percentage),
-                                et_range = np.arange(0,8),
+                                et_range = np.arange(1,2),
                                 eta_range = np.arange(0,1), 
                                 model_tag= str(args.model_tag),
                                 folder_path= args.folder_path)
