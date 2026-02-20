@@ -7,63 +7,43 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from sklearn.model_selection import ParameterGrid, StratifiedKFold
-from torch.utils.data import DataLoader, Dataset, TensorDataset
+from sklearn.model_selection import ParameterGrid, StratifiedGroupKFold
+from torch.utils.data import DataLoader, TensorDataset
 
 from src.core.Callbacks.SPCallbackPyTorch import SPCallbackPyTorch
 from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
-from src.Models.Models import get_model
-from src.utils import create_folder, get_et_eta, get_results_file_name, verify_results
+from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
+from src.utils import (
+    create_folder,
+    get_et_eta,
+    get_instance,
+    get_results_file_name,
+    verify_results,
+)
 
 log = logging.getLogger()
 
 
-class Trainer:
-    def __init__(
-        self,
-        n_splits=10,
-        folder_path=None,
-        batch_size=256,
-        epochs=50,
-        percentage=1.0,
-        model_tag="V0",
-        et_range=np.arange(0, 2),
-        eta_range=np.arange(0, 1),
-        debug=False,
-        n_repeats=5,
-    ):
-
-        self.num_workers = 4
+class NeuralRingerTrainer:
+    def __init__(self, config: NeuralRingerTrainerConfiguration):
+        self.config: NeuralRingerTrainerConfiguration = config
         self.use_cuda = torch.cuda.is_available()
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
-        self.n_splits = n_splits
-        self.kfold = StratifiedKFold(
-            n_splits=self.n_splits, shuffle=True, random_state=42
-        )
-        self.folder_path = folder_path
-        self.batch_size = batch_size
-        self.epochs = epochs
-        self.percentage = percentage
-        self.model_tag = model_tag
-        self.et_range = et_range
-        self.eta_range = eta_range
-        self.drive_path = "/eos/user/j/jlieberm/photonRinger/datasets/notIso"
+        self.kfold = self.initCrossValidation()
         self.all_y_preds_list = []
         self.all_y_true_list = []
-        self.et = None
-        self.eta = None
-        self.n_repeats = n_repeats
-        self.full_dataset: Dataset
+        self.et = -1
+        self.eta = -1
+        self.full_dataset: EgammaNpzDataset = get_instance(self.config.dataset)
 
-        self.debug = debug
-        if self.debug:
+        if self.config.debug:
             log.warning("#### EXECUTING ON DEBUG MODE. ####")
-            self.epochs = 2
-            self.n_repeats = 1
+            self.config.epochs = 2
+            self.config.n_initializations = 1
 
     def initModel(self):
         log.info("Initializing model")
-        model = get_model(self.model_tag, self.input_dim)
+        model = get_instance(self.config.model)
         if self.use_cuda:
             log.info(f"Using CUDA; {torch.cuda.device_count()} devices")
             if torch.cuda.device_count() > 1:
@@ -72,31 +52,38 @@ class Trainer:
         return model
 
     def initOptimizer(self):
-        return torch.optim.Adam(self.model.parameters(), lr=0.001)
+        log.info(f"Initializing optimizer {self.config.optimizer_function.object_name}")
+        self.config.optimizer_function.parameters["params"] = self.model.parameters()
+        return get_instance(self.config.optimizer_function)
 
     def initLossFunction(self):
-        return nn.BCELoss()
+        log.info(f"Initializing loss function: {self.config.loss_function.object_name}")
+        return get_instance(self.config.loss_function)
+
+    def initCrossValidation(self) -> StratifiedGroupKFold:
+        log.info(f"Initializing cross validation: {self.config.kFold.object_name}")
+        return get_instance(self.config.kFold)
 
     def initDataLoader(self, data, labels):
         features_tensor = torch.from_numpy(data).float()
         labels_tensor = torch.from_numpy(labels).float().view(-1, 1)
 
         dataset = TensorDataset(features_tensor, labels_tensor)
-        batch_size = self.batch_size
+        batch_size = self.config.batch_size
         if self.use_cuda:
             batch_size *= torch.cuda.device_count()
 
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
-            num_workers=self.num_workers,
+            num_workers=self.config.num_workers,
             pin_memory=self.use_cuda,
             shuffle=True,
         )
         return dataloader
 
     def main(self, index: int):
-        data, target, _, _, path = self.full_dataset[index]
+        data, target, path = self.full_dataset[index]
         test_data, train_cross_validation = self.generate_folds_with_holdout(
             data, target
         )
@@ -104,7 +91,7 @@ class Trainer:
         for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
             train_dl = self.initDataLoader(data[train_index], target[train_index])
             val_dl = self.initDataLoader(data[val_index], target[val_index])
-            for repeat in range(self.n_repeats):
+            for repeat in range(self.config.n_initializations):
                 log.info(f"Executing fold: {fold_idx + 1}. Repeat: {repeat + 1}")
                 self.model = self.initModel()
                 self.optimizer = self.initOptimizer()
@@ -118,7 +105,7 @@ class Trainer:
                     "callbackMetrics": [],
                     "reapet": [],
                 }
-                for epoch_ndx in range(1, self.epochs + 1):
+                for epoch_ndx in range(1, self.config.epochs + 1):
                     avg_train_loss, avg_train_acc = self.doTraining(epoch_ndx, train_dl)
 
                     avg_val_loss, avg_val_acc = self.doValidation(epoch_ndx, val_dl)
@@ -241,39 +228,45 @@ class Trainer:
         )
 
     def run(self) -> None:
-        if self.folder_path is None:
+        if self.config.results_folder_path is None:
             folderTemplateName = (
-                "model{model_tag}.dim{input_dim}.folds{folds}_id{id}".format(
-                    input_dim=self.percentage,
+                "model{model_tag}.config_name{config_name}_id{id}".format(
+                    config_name=self.config.config_name,
                     model_tag=self.model.__class__.__name__,
-                    folds=self.n_splits,
                     id=datetime.now().strftime("%Y%m%d%H%M%S"),
                 )
             )
-            self.folder_path = str(create_folder(folderTemplateName))
+            self.config.results_folder_path = str(create_folder(folderTemplateName))
 
         eta_et_region = list(
-            ParameterGrid({"eta": list(self.eta_range), "et": list(self.et_range)})
+            ParameterGrid(
+                {
+                    "eta": list(self.config.eta_range_idx),
+                    "et": list(self.config.et_range_idx),
+                }
+            )
         )
-
-        self.full_dataset = EgammaNpzDataset(
-            "file_paths", "", "", percentage=self.percentage
-        )
-        self.input_dim = self.full_dataset.get_model_dim()
-        for index, file in enumerate(self.full_dataset.file_paths):
-            self.et, self.eta = get_et_eta(file)
-            if {"eta": int(self.eta), "et": int(self.et)} in eta_et_region:
-                if verify_results(self.folder_path, self.et, self.eta):
+        for index in range(len(self.full_dataset)):
+            self.et, self.eta = get_et_eta(self.full_dataset[index])
+            if {
+                "eta": int(self.eta),
+                "et": int(self.et),
+            } in eta_et_region and self.config.results_folder_path:
+                if verify_results(self.config.results_folder_path, self.et, self.eta):
                     self.main(index)
-                    self.save_results(self.folder_path, self.et, self.eta)
-                if self.debug:
+                    self.save_results(
+                        self.config.results_folder_path, self.et, self.eta
+                    )
+                if self.config.debug:
                     break
 
     def generate_folds_with_holdout(self, features, labels, test_fold_idx=0):
         all_folds = [test_idx for _, test_idx in self.kfold.split(features, labels)]
         log.info(f"{len(all_folds)} folds were generated.")
-        if not (0 <= test_fold_idx < self.n_splits):
-            raise ValueError(f"test_fold_idx must be between 0 and {self.n_splits - 1}")
+        if not (0 <= test_fold_idx < self.kfold.get_n_splits()):
+            raise ValueError(
+                f"test_fold_idx must be between 0 and {self.kfold.get_n_splits() - 1}"
+            )
 
         log.info(f"Using fold {test_fold_idx + 1} as test set")
         holdout_indices = all_folds[test_fold_idx]

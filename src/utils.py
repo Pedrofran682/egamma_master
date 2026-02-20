@@ -1,3 +1,4 @@
+import importlib
 import logging
 import os
 import re
@@ -9,6 +10,7 @@ import pandas as pd
 import torch
 
 from src.Models.Models import get_model
+from src.Parser.DynamicConfiguration import DynamicConfiguration
 
 log = logging.getLogger()
 
@@ -149,26 +151,40 @@ def extract_percentage(row) -> str:
     match = re.search(r"dim(\d+\.\d+)", row["folder_path"])
     if match:
         return match.group(1)
-    return None  # Retorna None se o padrão não for encontrado
+    return "extract_percentage function failed"
 
 
 def extract_model_name(row) -> str:
     match = re.search(r"(modelV\d+)", row["folder_path"])
     if match:
         return match.group(1)
-    return None
+    return "extract_model_name function failed"
 
 
 def extract_et(row) -> str:
     match = re.search(r"iet(\d+)\.ieta(\d+)", row["source_file"])
     if match:
-        return int(match.group(1))
-    return None
+        return match.group(1)
+    return "extract_et function failed"
 
 
 def extract_eta(row) -> str:
     match = re.search(r"iet(\d+)\.ieta(\d+)", row["source_file"])
     if match:
-        # Note: Aqui usamos o grupo 2 da mesma expressão regular
-        return int(match.group(2))
-    return None
+        return match.group(2)
+    return "extract_eta function failed"
+
+
+def get_instance(configuration: DynamicConfiguration):
+    try:
+        module = importlib.import_module(configuration.module)
+        target_class = getattr(module, configuration.object_name)
+        return target_class(**configuration.parameters)
+    except ImportError:
+        raise ValueError(f"Could not import module '{configuration.module}'")
+    except AttributeError:
+        raise ValueError(
+            f"Could not find '{configuration.object_name}' in '{configuration.module}'"
+        )
+    except Exception as e:
+        raise ValueError(f"Error initializing {configuration.object_name}: {e}")

@@ -1,10 +1,10 @@
 # results_folder_path: "./results/2023_05_20_run"
 
-config_name: "Test_123"
+config_name: "ModelV1_BCELoss_Adam"
 batch_size: 64
 epochs: 100
-n_initializations: 3
-num_workers: 8
+n_initializations: 5
+num_workers: 4
 debug: false
 
 et_range_idx: [0]
@@ -12,18 +12,13 @@ eta_range_idx: [1]
 
 loss_function:
   module: "torch.nn"
-  object_name: "CrossEntropyLoss"
-  parameters:
-    reduction: "mean"
-    label_smoothing: 0.1
+  object_name: "BCELoss"
 
 optimizer_function:
   module: "torch.optim"
   object_name: "Adam"
   parameters:
     lr: 0.001
-    weight_decay: 0.0001
-    betas: [0.9, 0.999]
 
 kFold:
   module: "sklearn.model_selection"
