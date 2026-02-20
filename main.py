@@ -22,7 +22,7 @@ parser.add_argument("--config", required=True, type=str)
 
 def main(args: argparse.Namespace):
 
-    with open("config/NeuralRinger/templateFile.yaml", "r") as file:
+    with open(args.config, "r") as file:
         yaml_data = yaml.safe_load(file)
         config_instance = NeuralRingerTrainerConfiguration.model_validate(yaml_data)
     if bool(args.debug):
