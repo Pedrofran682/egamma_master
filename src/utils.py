@@ -86,8 +86,8 @@ def verify_results(
     log.info(f"Verifying {file2verify}")
     if os.path.exists(file2verify):
         log.info(f"{file2verify} already processed")
-        return False
-    return True
+        return True
+    return False
 
 
 def get_et_eta(file_path) -> Tuple[int, int]:
