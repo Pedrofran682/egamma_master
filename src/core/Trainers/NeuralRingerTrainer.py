@@ -35,6 +35,7 @@ class NeuralRingerTrainer:
         self.et = -1
         self.eta = -1
         self.full_dataset: EgammaNpzDataset = get_instance(self.config.dataset)
+        self.results_folder_path = ""
 
         if self.config.debug:
             log.warning("#### EXECUTING ON DEBUG MODE. ####")
@@ -87,13 +88,19 @@ class NeuralRingerTrainer:
         test_data, train_cross_validation = self.generate_folds_with_holdout(
             data, target
         )
-        self.all_training_results = []
         total_folds = len(train_cross_validation)
         for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
             train_dl = self.initDataLoader(data[train_index], target[train_index])
             val_dl = self.initDataLoader(data[val_index], target[val_index])
+            self.all_training_results = []
             for repeat in range(self.config.n_initializations):
-                log.info(f"Executing fold: {fold_idx + 1}/{total_folds}. Repeat: {repeat + 1}")
+                if verify_results(
+                    self.results_folder_path, self.et, self.eta, repeat, fold_idx
+                ):
+                    continue
+                log.info(
+                    f"Executing fold: {fold_idx + 1}/{total_folds}. Repeat: {repeat + 1}"
+                )
                 self.model = self.initModel()
                 self.optimizer = self.initOptimizer()
                 self.loss = self.initLossFunction()
@@ -147,6 +154,9 @@ class NeuralRingerTrainer:
                             "history": fold_history,
                         }
                     )
+            self.save_results(
+                self.results_folder_path, self.et, self.eta, repeat, fold_idx
+            )
         return path
 
     def doTraining(self, epoch_ndx: int, train_dl: DataLoader):
@@ -221,8 +231,10 @@ class NeuralRingerTrainer:
 
         return loss, corrects_batch
 
-    def save_results(self, folder_path: str, et: int, eta: int) -> None:
-        all_training_results_template = get_results_file_name(et, eta)
+    def save_results(
+        self, folder_path: str, et: int, eta: int, repeat: int, fold_idx: int
+    ) -> None:
+        all_training_results_template = get_results_file_name(et, eta, repeat, fold_idx)
         pd.DataFrame(self.all_training_results).to_pickle(
             os.path.join(folder_path, all_training_results_template)
         )
@@ -233,7 +245,7 @@ class NeuralRingerTrainer:
                 config_name=self.config.config_name,
                 id=datetime.now().strftime("%Y%m%d%H%M%S"),
             )
-            self.config.results_folder_path = str(create_folder(folderTemplateName))
+            self.results_folder_path = str(create_folder(folderTemplateName))
 
         eta_et_region = list(
             ParameterGrid(
@@ -248,14 +260,10 @@ class NeuralRingerTrainer:
             if {
                 "eta": int(self.eta),
                 "et": int(self.et),
-            } in eta_et_region and self.config.results_folder_path:
-                if verify_results(self.config.results_folder_path, self.et, self.eta):
-                    self.main(index)
-                    self.save_results(
-                        self.config.results_folder_path, self.et, self.eta
-                    )
-                if self.config.debug:
-                    break
+            } in eta_et_region:
+                self.main(index)
+            if self.config.debug:
+                break
 
     def generate_folds_with_holdout(self, features, labels, test_fold_idx=0):
         all_folds = [test_idx for _, test_idx in self.kfold.split(features, labels)]

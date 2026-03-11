@@ -71,12 +71,18 @@ def compute_mean_std_saliency(
     return np.mean(saliency_array, axis=0), np.std(saliency_array, axis=0)
 
 
-def get_results_file_name(et: int, eta: int) -> str:
-    return "iet{iet}.ieta{ieta}.pkl".format(ieta=eta, iet=et)
+def get_results_file_name(et: int, eta: int, repeat: int, fold_idx: int) -> str:
+    return "repeat{repeat}.fold_idx{fold_idx}.iet{iet}.ieta{ieta}.pkl".format(
+        ieta=eta, iet=et, repeat=repeat, fold_idx=fold_idx
+    )
 
 
-def verify_results(folder_path: str, et: int, eta: int) -> bool:
-    file2verify = os.path.join(folder_path, get_results_file_name(et, eta))
+def verify_results(
+    folder_path: str, et: int, eta: int, repeat: int, fold_idx: int
+) -> bool:
+    file2verify = os.path.join(
+        folder_path, get_results_file_name(et, eta, repeat, fold_idx)
+    )
     log.info(f"Verifying {file2verify}")
     if os.path.exists(file2verify):
         log.info(f"{file2verify} already processed")

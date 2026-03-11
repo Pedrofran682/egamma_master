@@ -3,7 +3,6 @@ import logging
 from typing import Any, Dict, Tuple, cast
 
 import numpy as np
-import numpy.typing as npt
 import torch
 from sklearn.metrics import roc_auc_score, roc_curve
 
@@ -72,8 +71,8 @@ class SPCallbackPyTorch:
         self,
         model: torch.nn.Module,
         epoch: int,
-        y_true: npt.NDArray[np.float64],
-        y_pred: npt.NDArray[np.float64],
+        y_true: list[np.ndarray] | np.ndarray,
+        y_pred: list[np.ndarray] | np.ndarray,
     ) -> Tuple[bool, Dict[str, float]]:
         self.model = model
         if not isinstance(y_true, np.ndarray):
