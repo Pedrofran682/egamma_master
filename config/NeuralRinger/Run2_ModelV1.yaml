@@ -1,14 +1,14 @@
 # results_folder_path: "./results/2023_05_20_run"
 
-config_name: "ModelV1_BCELoss_Adam"
+config_name: "RUN2_ModelV1_BCELoss_Adam"
 batch_size: 64
 epochs: 100
 n_initializations: 5
-pred_target_limiar: 0.5
+pred_target_limiar: 0
 num_workers: 4
-debug: true
+debug: false
 
-et_range_idx: [0]
+et_range_idx: [1]
 eta_range_idx: [1]
 
 loss_function:
@@ -19,7 +19,7 @@ optimizer_function:
   module: "torch.optim"
   object_name: "Adam"
   parameters:
-    lr: 0.001
+    lr: 0.010
 
 kFold:
   module: "sklearn.model_selection"
@@ -30,16 +30,16 @@ kFold:
     shuffle: True
 
 model:
-  module: "src.Models.egamma.ModelV1"
-  object_name: "ModelV1"
+  module: "src.Models.egamma.Run2_ModelV1"
+  object_name: "Run2_ModelV1"
   parameters:
-    input_dim: 50
+    input_dim: 100
 
 dataset:
   module: "src.core.Datasets.EgammaNpzDataset"
   object_name: "EgammaNpzDataset"
   parameters:
-    drive_path: "/eos/user/j/jlieberm/photonRinger/datasets/notIso"
-    startswith: "mc23_13TeV"
+    drive_path: "/eos/user/p/pmourafr/RootFiles/mc16_13TeV.sgn.MC.gammajet.bkg.vetoMC.dijet"
+    startswith: "mc16_13TeV"
     endswith: ".npz"
-    percentage: 0.5
+    percentage: 1

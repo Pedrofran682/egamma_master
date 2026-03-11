@@ -22,6 +22,7 @@ class EgammaNpzDataset(Dataset):
         self.percentage: float = percentage
         self.indexes = self._get_rings_index(self.percentage)
         self.percentage_dim = len(self.indexes)
+        log.info("Dataset created.")
 
     def __len__(self):
         return len(self.file_paths)

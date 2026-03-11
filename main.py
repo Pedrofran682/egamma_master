@@ -25,18 +25,10 @@ def main(args: argparse.Namespace):
     with open(args.config, "r") as file:
         yaml_data = yaml.safe_load(file)
         config_instance = NeuralRingerTrainerConfiguration.model_validate(yaml_data)
-    if bool(args.debug):
         trainer = NeuralRingerTrainer(
             config_instance,
         )
         trainer.run()
-    else:
-        trainer = NeuralRingerTrainer(
-            config_instance,
-        )
-        trainer.run()
-
-    log.info("Fim da execução")
 
 
 if __name__ == "__main__":

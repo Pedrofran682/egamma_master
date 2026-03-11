@@ -88,11 +88,12 @@ class NeuralRingerTrainer:
             data, target
         )
         self.all_training_results = []
+        total_folds = len(train_cross_validation)
         for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
             train_dl = self.initDataLoader(data[train_index], target[train_index])
             val_dl = self.initDataLoader(data[val_index], target[val_index])
             for repeat in range(self.config.n_initializations):
-                log.info(f"Executing fold: {fold_idx + 1}. Repeat: {repeat + 1}")
+                log.info(f"Executing fold: {fold_idx + 1}/{total_folds}. Repeat: {repeat + 1}")
                 self.model = self.initModel()
                 self.optimizer = self.initOptimizer()
                 self.loss = self.initLossFunction()
@@ -107,15 +108,14 @@ class NeuralRingerTrainer:
                 }
                 for epoch_ndx in range(1, self.config.epochs + 1):
                     avg_train_loss, avg_train_acc = self.doTraining(epoch_ndx, train_dl)
-
-                    avg_val_loss, avg_val_acc = self.doValidation(epoch_ndx, val_dl)
                     self.all_y_preds_list = []
                     self.all_y_true_list = []
+                    avg_val_loss, avg_val_acc = self.doValidation(epoch_ndx, val_dl)
                     stop_training, callbackMetrics = sp_tracker.on_epoch_end(
                         self.model,
                         epoch_ndx,
-                        np.array(self.all_y_true_list),
-                        np.array(self.all_y_preds_list),
+                        self.all_y_true_list,
+                        self.all_y_preds_list,
                     )
                     fold_history["train_loss"].append(avg_train_loss)
                     fold_history["train_acc"].append(avg_train_acc)
@@ -212,7 +212,7 @@ class NeuralRingerTrainer:
 
         loss = self.loss(pred_target, target)
 
-        preds_label = (pred_target >= 0.5).float()
+        preds_label = (pred_target >= self.config.pred_target_limiar).float()
         corrects_batch = (preds_label == target).sum().item()
 
         if validation_step:
@@ -229,12 +229,9 @@ class NeuralRingerTrainer:
 
     def run(self) -> None:
         if self.config.results_folder_path is None:
-            folderTemplateName = (
-                "model{model_tag}.config_name{config_name}_id{id}".format(
-                    config_name=self.config.config_name,
-                    model_tag=self.model.__class__.__name__,
-                    id=datetime.now().strftime("%Y%m%d%H%M%S"),
-                )
+            folderTemplateName = "config_name{config_name}_id{id}".format(
+                config_name=self.config.config_name,
+                id=datetime.now().strftime("%Y%m%d%H%M%S"),
             )
             self.config.results_folder_path = str(create_folder(folderTemplateName))
 
@@ -247,7 +244,7 @@ class NeuralRingerTrainer:
             )
         )
         for index in range(len(self.full_dataset)):
-            self.et, self.eta = get_et_eta(self.full_dataset[index])
+            self.et, self.eta = get_et_eta(self.full_dataset.file_paths[index])
             if {
                 "eta": int(self.eta),
                 "et": int(self.et),

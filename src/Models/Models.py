@@ -16,4 +16,6 @@ def get_model(tag: str, input_dim: int) -> nn.Module:
         return egamma.ModelV4(input_dim)
     if tag == "V5":
         return egamma.ModelV5(input_dim)
+    if tag == "Run2_ModelV1":
+        return egamma.Run2_ModelV1(input_dim)
     raise Exception("No model tag was informed")
