@@ -78,14 +78,16 @@ class NeuralRingerTrainer:
         if self.use_cuda:
             batch_size *= torch.cuda.device_count()
         sampler = None
+        shuffle = True
         if self.config.balance_data:
-            sampler = get_class_weight(labels_tensor)
+            sampler = get_class_weight(labels.astype(int))
+            shuffle = False
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
             num_workers=self.config.num_workers,
             pin_memory=self.use_cuda,
-            shuffle=True,
+            shuffle=shuffle,
             sampler=sampler,
         )
         return dataloader
