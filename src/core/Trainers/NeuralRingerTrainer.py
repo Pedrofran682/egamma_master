@@ -67,7 +67,7 @@ class NeuralRingerTrainer:
         return get_instance(self.config.kFold)
 
     def initDataLoader(self, data, labels):
-        print(
+        log.info(
             f"Singal: {len(np.where(labels == 0)[0])}\tJets: {len(np.where(labels == 1)[0])}"
         )
         features_tensor = torch.from_numpy(data).float()
@@ -79,7 +79,7 @@ class NeuralRingerTrainer:
             batch_size *= torch.cuda.device_count()
         sampler = None
         if self.config.balance_data:
-            sampler = get_class_weight(features_tensor)
+            sampler = get_class_weight(labels_tensor)
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
