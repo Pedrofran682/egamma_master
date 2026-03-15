@@ -15,6 +15,7 @@ from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 from src.utils import (
     create_folder,
+    get_class_weight,
     get_et_eta,
     get_instance,
     get_results_file_name,
@@ -73,13 +74,16 @@ class NeuralRingerTrainer:
         batch_size = self.config.batch_size
         if self.use_cuda:
             batch_size *= torch.cuda.device_count()
-
+        sampler = None
+        if self.config.balance_data:
+            sampler = get_class_weight(features_tensor)
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
             num_workers=self.config.num_workers,
             pin_memory=self.use_cuda,
             shuffle=True,
+            sampler=sampler,
         )
         return dataloader
 

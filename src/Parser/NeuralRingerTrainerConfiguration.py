@@ -14,7 +14,7 @@ class NeuralRingerTrainerConfiguration(BaseModel):
     num_workers: int
     debug: bool = False
     results_folder_path: str | None = None
-
+    balance_data: bool = True
     loss_function: DynamicConfiguration
     optimizer_function: DynamicConfiguration
     model: DynamicConfiguration

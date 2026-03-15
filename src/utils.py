@@ -8,6 +8,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import WeightedRandomSampler
 
 from src.Models.Models import get_model
 from src.Parser.DynamicConfiguration import DynamicConfiguration
@@ -194,3 +195,19 @@ def get_instance(configuration: DynamicConfiguration):
         )
     except Exception as e:
         raise ValueError(f"Error initializing {configuration.object_name}: {e}")
+
+
+def get_class_weight(target) -> WeightedRandomSampler:
+    class_sample_count = np.array(
+        [len(np.where(target == t)[0]) for t in np.unique(target)]
+    )
+    weight = 1.0 / class_sample_count
+    samples_weight = np.array([weight[t] for t in target])
+
+    samples_weight = torch.from_numpy(samples_weight)
+    number_generator = torch.Generator().manual_seed(42)
+    return WeightedRandomSampler(
+        samples_weight.tolist(),
+        len(samples_weight),
+        generator=number_generator,
+    )
