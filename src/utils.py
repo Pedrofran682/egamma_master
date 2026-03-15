@@ -208,7 +208,7 @@ def get_class_weight(target) -> WeightedRandomSampler:
     samples_weight = torch.from_numpy(samples_weight)
     number_generator = torch.Generator().manual_seed(42)
     return WeightedRandomSampler(
-        samples_weight.tolist(),
+        samples_weight,  # type: ignore
         len(samples_weight),
         generator=number_generator,
     )
