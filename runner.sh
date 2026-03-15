@@ -8,5 +8,8 @@
 
 
 # python main.py --config config/NeuralRinger/ModelV1.yaml
-python main.py --config config/NeuralRinger/Run2_ModelV1.yaml
+python main.py --config config/NeuralRinger/Run2_ModelV1_fix.yaml
+
+
+python validate_pd.py --config config/NeuralRinger/Run2_ModelV1.yaml
 
