@@ -67,6 +67,9 @@ class NeuralRingerTrainer:
         return get_instance(self.config.kFold)
 
     def initDataLoader(self, data, labels):
+        print(
+            f"Singal: {len(np.where(labels == 0)[0])}\tJets: {len(np.where(labels == 1)[0])}"
+        )
         features_tensor = torch.from_numpy(data).float()
         labels_tensor = torch.from_numpy(labels).float().view(-1, 1)
 
@@ -94,7 +97,9 @@ class NeuralRingerTrainer:
         )
         total_folds = len(train_cross_validation)
         for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
+            log.info("Creating training dataloader")
             train_dl = self.initDataLoader(data[train_index], target[train_index])
+            log.info("Creating validation dataloader")
             val_dl = self.initDataLoader(data[val_index], target[val_index])
             self.all_training_results = []
             for repeat in range(self.config.n_initializations):

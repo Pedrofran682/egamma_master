@@ -198,6 +198,7 @@ def get_instance(configuration: DynamicConfiguration):
 
 
 def get_class_weight(target) -> WeightedRandomSampler:
+    log.info("Creating samples_weight")
     class_sample_count = np.array(
         [len(np.where(target == t)[0]) for t in np.unique(target)]
     )
