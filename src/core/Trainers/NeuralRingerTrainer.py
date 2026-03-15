@@ -37,7 +37,7 @@ class NeuralRingerTrainer:
         self.eta = -1
         self.full_dataset: EgammaNpzDataset = get_instance(self.config.dataset)
         self.results_folder_path = ""
-
+        self.generator = torch.Generator().manual_seed(42)
         if self.config.debug:
             log.warning("#### EXECUTING ON DEBUG MODE. ####")
             self.config.epochs = 2
@@ -80,7 +80,7 @@ class NeuralRingerTrainer:
         sampler = None
         shuffle = True
         if self.config.balance_data:
-            sampler = get_class_weight(labels.astype(int))
+            sampler = get_class_weight(labels.astype(int), self.generator)
             shuffle = False
         dataloader = DataLoader(
             dataset,

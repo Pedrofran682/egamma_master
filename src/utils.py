@@ -197,7 +197,7 @@ def get_instance(configuration: DynamicConfiguration):
         raise ValueError(f"Error initializing {configuration.object_name}: {e}")
 
 
-def get_class_weight(target) -> WeightedRandomSampler:
+def get_class_weight(target, number_generator) -> WeightedRandomSampler:
     log.info("Creating samples_weight")
     target = target.flatten()
     class_sample_count = np.array(
@@ -207,7 +207,6 @@ def get_class_weight(target) -> WeightedRandomSampler:
     samples_weight = np.array([weight[t] for t in target])
 
     samples_weight = torch.from_numpy(samples_weight)
-    number_generator = torch.Generator().manual_seed(42)
     return WeightedRandomSampler(
         samples_weight,  # type: ignore
         len(samples_weight),
