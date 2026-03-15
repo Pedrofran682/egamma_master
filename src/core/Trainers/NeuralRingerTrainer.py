@@ -79,7 +79,7 @@ class NeuralRingerTrainer:
             batch_size *= torch.cuda.device_count()
         sampler = None
         if self.config.balance_data:
-            sampler = get_class_weight(labels_tensor)
+            sampler = get_class_weight(labels)
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
