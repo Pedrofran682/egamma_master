@@ -26,7 +26,7 @@ class ModelV6(nn.Module):
         Returns:
             Output sigmoid probability tensor of shape (batch_size, 1).
         """
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = F.tanh(self.fc1(x))
+        x = F.tanh(self.fc2(x))
         x = torch.sigmoid(self.fc3(x))
         return x

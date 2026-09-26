@@ -101,6 +101,7 @@ class EgammaNpzDataset(Dataset):
         mask_bg = (target == 0) & (mc_origin == 42) & mask_jf17_data
 
         if self.config and getattr(self.config, "use_trigger_filter", False):
+            log.warning("Using ph var filer. This should not be used.")
             ph_trigger_index = np.where(features == self.config.trigger_filter)[0][0]
             ph_trigger = data[:, ph_trigger_index].flatten().astype(int)
             mask_signal = mask_signal & (ph_trigger == 1)

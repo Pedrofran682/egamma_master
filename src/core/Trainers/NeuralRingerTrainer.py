@@ -65,6 +65,9 @@ class NeuralRingerTrainer:
                 id=datetime.now().strftime("%Y%m%d%H%M%S"),
             )
             self.results_folder_path = str(create_folder(folder_name))
+        else:
+            self.results_folder_path = str(self.config.results_folder_path)
+            os.makedirs(self.results_folder_path, exist_ok=True)
 
         eta_et_region = list(
             ParameterGrid(
@@ -160,7 +163,6 @@ class NeuralRingerTrainer:
 
         return path
 
-    main = train_region
 
     def generate_folds_with_holdout(
         self, features: np.ndarray, labels: np.ndarray, test_fold_idx: int = 0

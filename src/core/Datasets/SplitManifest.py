@@ -80,6 +80,11 @@ class SplitManifest:
             ValueError: If test_fold_idx is outside valid split bounds.
         """
         all_folds = [test_idx.tolist() for _, test_idx in kfold_splitter.split(features, labels)]
+        if len(all_folds) < 3:
+            raise ValueError(
+                f"kfold_splitter must produce at least 3 splits to reserve 1 holdout test fold "
+                f"and at least 2 folds for cross-validation; got {len(all_folds)} splits."
+            )
         if not (0 <= test_fold_idx < len(all_folds)):
             raise ValueError(f"test_fold_idx must be between 0 and {len(all_folds) - 1}")
 
@@ -97,8 +102,12 @@ class SplitManifest:
             "test_indices": holdout_indices,
             "cv_splits": cv_splits,
         }
-        return np.array(holdout_indices), [
-            (np.array(split["train"]), np.array(split["val"])) for split in cv_splits
+        return np.array(holdout_indices, dtype=np.int64), [
+            (
+                np.array(split["train"], dtype=np.int64),
+                np.array(split["val"], dtype=np.int64),
+            )
+            for split in cv_splits
         ]
 
     def get_region_splits(
@@ -121,9 +130,12 @@ class SplitManifest:
             raise KeyError(f"Region key {region_key} not found in split manifest.")
 
         region_data = self.data[region_key]
-        test_indices = np.array(region_data["test_indices"])
+        test_indices = np.array(region_data["test_indices"], dtype=np.int64)
         cv_splits = [
-            (np.array(split["train"]), np.array(split["val"]))
+            (
+                np.array(split["train"], dtype=np.int64),
+                np.array(split["val"], dtype=np.int64),
+            )
             for split in region_data["cv_splits"]
         ]
         return test_indices, cv_splits
