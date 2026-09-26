@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score, roc_curve
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class SPCallbackPyTorch:

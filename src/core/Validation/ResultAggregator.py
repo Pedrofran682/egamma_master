@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 import pandas as pd
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class ResultAggregator:

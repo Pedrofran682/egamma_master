@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 @dataclass

@@ -15,7 +15,7 @@ from src.core.Trainers.TrainingFactory import TrainingFactory
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 from src.utils import create_folder, get_et_eta, get_instance, verify_results
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class NeuralRingerTrainer:

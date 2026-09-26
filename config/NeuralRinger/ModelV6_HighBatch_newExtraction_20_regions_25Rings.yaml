@@ -9,8 +9,8 @@ balance_data: False
 
 
 
-et_range_idx: [0,1,2,3,4]
-eta_range_idx: [1]
+et_range_idx: [1,2]
+eta_range_idx: [2]
 
 loss_function:
   module: "torch.nn"
@@ -40,7 +40,7 @@ dataset:
   module: "src.core.Datasets.EgammaNpzDataset"
   object_name: "EgammaNpzDataset"
   parameters:
-    drive_path: "/eos/user/p/pmourafr/RootFiles/dataSetup/concatenated_results/"
+    drive_path: "/home/pmourafr/egamma_master/data/consolidated"
     startswith: "consolidated.et"
     endswith: ".npz"
     percentage: 0.25

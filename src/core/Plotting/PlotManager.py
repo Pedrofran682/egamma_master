@@ -8,7 +8,7 @@ from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.MetricPlotter import BoxplotSPPlotter, ModelMetricsPlotter, RocPlotter
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class PlotManager:

@@ -16,7 +16,7 @@ from src.core.Validation.HoldoutEvaluator import HoldoutEvaluationResult, Holdou
 from src.core.Validation.ResultAggregator import ResultAggregator
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class ModelValidator:

@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 from src.utils import norm1
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class EgammaNpzDataset(Dataset):

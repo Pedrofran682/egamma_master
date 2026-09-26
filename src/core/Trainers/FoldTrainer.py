@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from src.core.Callbacks.SPCallbackPyTorch import SPCallbackPyTorch
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class FoldTrainer:

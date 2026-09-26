@@ -10,7 +10,7 @@ from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 from src.utils import compute_mean_std_saliency
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 def extract_convolutional_features(model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:

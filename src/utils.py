@@ -13,7 +13,7 @@ from torch.utils.data import WeightedRandomSampler
 from src.Models.Models import get_model
 from src.Parser.DynamicConfiguration import DynamicConfiguration
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 def get_best_sp_model(

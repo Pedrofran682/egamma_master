@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 from src.utils import get_class_weight, get_instance
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class TrainingFactory:

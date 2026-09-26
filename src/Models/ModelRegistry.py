@@ -8,7 +8,7 @@ import torch.nn as nn
 
 import src.Models.egamma as egamma_pkg
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class ModelRegistry:

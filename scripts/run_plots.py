@@ -20,7 +20,11 @@ LOG_DIR = "log"
 os.makedirs(LOG_DIR, exist_ok=True)
 log_filename = f"{LOG_DIR}/plotter_{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
 
-fileConfig(CONFIG_FILE, defaults={"log_file_path": log_filename})
+fileConfig(
+    CONFIG_FILE,
+    defaults={"log_file_path": log_filename},
+    disable_existing_loggers=False,
+)
 log = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(prog="plotter")
