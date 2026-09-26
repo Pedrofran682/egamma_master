@@ -12,8 +12,8 @@
    - Ensure clear separation of concerns, modularity, and maintainability.
 
 2. **Minimal/No Comments**:
-   - Code must be self-documenting with descriptive naming conventions.
-   - Do NOT add redundant comments, standard docstrings, or inline explanations unless explicitly asked or strictly necessary for complex mathematical formulations.
+   - Code must be self-documenting with descriptive naming conventions and type hints.
+   - Use concise Google-style docstrings (`Args:`, `Returns:`) for public APIs when documentation is needed.
    - Keep code concise, clean, and uncommented by default.
 
 3. **Architecture Improvement**:
@@ -23,3 +23,103 @@
 4. **Consultative Decision-Making (Ask First)**:
    - **Ask for user confirmation before EVERY architectural, structural, or design decision.**
    - Present proposed class designs, directory changes, or patterns with concise options, and wait for explicit user input before editing files.
+
+---
+
+## Environment & Execution Guidelines (WSL / Conda)
+
+- **Conda Environment**: Always use the `egamma` conda environment for all commands and execution:
+  - CLI: `conda run -n egamma <command>`
+  - Python binary: `/home/pmourafr/anaconda3/envs/egamma/bin/python`
+  - Pytest binary: `/home/pmourafr/anaconda3/envs/egamma/bin/pytest`
+
+---
+
+## Standard CLI Commands
+
+### 1. Running Tests
+Run the entire unit test suite:
+```bash
+conda run -n egamma pytest -v
+```
+Run a specific test file:
+```bash
+conda run -n egamma pytest tests/test_model_registry.py -v
+```
+
+### 2. Training Models
+Launch NeuralRinger training using a YAML configuration:
+```bash
+conda run -n egamma python main.py --config config/NeuralRinger/ModelV1.yaml
+```
+
+### 3. Plotting & Analysis
+- **Metric & ROC Curves**:
+  ```bash
+  conda run -n egamma python scripts/run_plots.py <results_path>
+  ```
+- **Ringer Mean Energy Profiles**:
+  ```bash
+  conda run -n egamma python scripts/run_plots.py <results_path> --plot_ringer --percentage 0.5
+  ```
+- **Comparative Multi-Model ROC Grid**:
+  ```bash
+  conda run -n egamma python scripts/run_roc_plots.py --results_path results/
+  ```
+
+### 4. Validation & Benchmark Cuts
+Validate trained models against standard threshold baseline selections:
+```bash
+conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/
+```
+
+---
+
+## Codebase Map & File Discovery
+
+- **`src/core/`**:
+  - `Datasets/`:
+    - `EgammaNpzDataset.py`: Custom PyTorch Dataset reading `.npz` calorimeter ring data.
+    - `SplitManifest.py`: Cross-validation data partitioning, manifest caching, and deterministic loading.
+  - `Trainers/`:
+    - `NeuralRingerTrainer.py`: High-level training lifecycle orchestrator.
+    - `FoldTrainer.py`: Isolated single-fold train/validation loop with early stopping.
+    - `TrainingFactory.py`: Factory for data loaders, optimizers, loss functions, and model weights.
+    - `ResultsRecorder.py`: Serializer for fold metrics, best weights, and histories.
+  - `Plotting/`:
+    - `PlotManager.py`: Coordinator dispatching plotting routines.
+    - `BasePlotter.py`: Abstract base class for all plotters.
+    - `ProfilePlotter.py`: Mean energy ring profile plots.
+    - `MetricPlotter.py`: Training loss, SP, and ROC curve plotters.
+    - `LegacyPlotter.py`: Convolutional feature slice and saliency map visualizers.
+    - `Context.py`: Dataclasses encapsulating plotting state (`RegionPlotContext`, `FoldPlotContext`).
+  - `Validation/`:
+    - `ModelValidator.py`: End-to-end evaluation pipeline comparing neural models against baseline threshold cuts.
+    - `HoldoutEvaluator.py`: Evaluator computing predictions and SP index on holdout sets.
+    - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator.
+    - `ResultAggregator.py`: Utility aggregating `.pkl` fold outputs into pandas DataFrames.
+  - `Callbacks/`:
+    - `SPCallbackPyTorch.py`: PyTorch callback calculating ROC, SP metric, knee operating points, and early stopping.
+- **`src/Models/`**:
+  - `ModelRegistry.py`: Auto-discovery registry. Automatically scans `src/Models/egamma/` and registers all `nn.Module` subclasses by their exact class name.
+  - `Models.py`: Factory method `get_model(tag, input_dim)` delegating to `ModelRegistry.create()`.
+  - `egamma/`: Individual architecture definitions (`ModelV1.py`, `ModelV2.py`, ..., `ModelV6.py`, `Run2_ModelV1.py`, `Run2_ModelV1_2.py`).
+- **`src/Parser/`**:
+  - `NeuralRingerTrainerConfiguration.py`: Pydantic V2 configuration models validating YAML schemas.
+  - `DynamicConfiguration.py`: Dynamic class resolution from module and object strings.
+- **`src/utils.py`**:
+  - Reusable mathematical functions (`norm1`), model weight loaders (`get_best_sp_model`), filesystem helpers (`create_folder`), and string parsers (`get_et_eta`).
+- **`config/NeuralRinger/`**:
+  - YAML configuration files controlling dataset paths, model architectures, hyperparameters, and cross-validation folds.
+- **`scripts/`**:
+  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `runner.sh`).
+- **`tests/`**:
+  - Unit tests covering configuration parsing, split manifests, model registry, trainers, and validation.
+
+---
+
+## Adding New Architectures
+To add a new model:
+1. Create a new file in `src/Models/egamma/` (e.g. `ModelV7.py`).
+2. Define the class subclassing `torch.nn.Module` with the class name matching the file (e.g. `class ModelV7(nn.Module):`).
+3. `ModelRegistry` will automatically discover and register `ModelV7` without requiring modifications to `Models.py` or `__init__.py`.
