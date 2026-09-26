@@ -1,9 +1,7 @@
-# results_folder_path: "./results/2023_05_20_run"
-
-config_name: "ModelV5_HighBatch_newExtraction_20_regions"
+config_name: "ModelV6_HighBatch_newExtraction_20_regions_50Rings"
 batch_size: 512
 epochs: 100
-n_initializations: 1
+n_initializations: 5
 pred_target_limiar: 0.5
 num_workers: 4
 debug: false
@@ -33,10 +31,10 @@ kFold:
     shuffle: True
 
 model:
-  module: "src.Models.egamma.ModelV5"
-  object_name: "ModelV5"
+  module: "src.Models.egamma.ModelV6"
+  object_name: "ModelV6"
   parameters:
-    input_dim: 100
+    input_dim: 50
 
 dataset:
   module: "src.core.Datasets.EgammaNpzDataset"
@@ -45,4 +43,4 @@ dataset:
     drive_path: "/eos/user/p/pmourafr/RootFiles/dataSetup/concatenated_results/"
     startswith: "consolidated.et"
     endswith: ".npz"
-    percentage: 1
+    percentage: 0.5
