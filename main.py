@@ -20,8 +20,12 @@ parser = argparse.ArgumentParser(prog="TrainerRunner")
 parser.add_argument("--config", required=True, type=str)
 
 
-def main(args: argparse.Namespace):
+def main(args: argparse.Namespace) -> None:
+    """Load YAML training configuration and execute NeuralRingerTrainer.
 
+    Args:
+        args: Parsed command-line arguments containing the config path.
+    """
     with open(args.config, "r") as file:
         yaml_data = yaml.safe_load(file)
         config_instance = NeuralRingerTrainerConfiguration.model_validate(yaml_data)

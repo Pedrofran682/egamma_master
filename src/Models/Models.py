@@ -4,6 +4,18 @@ from src.Models import egamma
 
 
 def get_model(tag: str, input_dim: int) -> nn.Module:
+    """Instantiate a neural network model matching the requested architecture tag.
+
+    Args:
+        tag: Model architecture identifier string.
+        input_dim: Number of input features (rings).
+
+    Returns:
+        Configured PyTorch nn.Module instance.
+
+    Raises:
+        ValueError: If the tag does not match any registered architecture.
+    """
     if tag == "V1":
         return egamma.ModelV1(input_dim)
     if tag == "V1_tanh":
@@ -18,4 +30,6 @@ def get_model(tag: str, input_dim: int) -> nn.Module:
         return egamma.ModelV5(input_dim)
     if tag == "Run2_ModelV1":
         return egamma.Run2_ModelV1(input_dim)
-    raise Exception("No model tag was informed")
+    if tag == "Run2_ModelV1_2":
+        return egamma.Run2_ModelV1_2(input_dim)
+    raise ValueError(f"Unknown or unspecified model architecture tag: '{tag}'")

@@ -1,0 +1,86 @@
+import argparse
+import logging
+import os
+import sys
+from datetime import datetime
+from logging.config import fileConfig
+from pathlib import Path
+from typing import List, Optional
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.core.Plotting.Context import RegionPlotContext
+from src.core.Plotting.MetricPlotter import MetricsGridPlotter
+from src.utils import (
+    extract_et,
+    extract_eta,
+    extract_model_name,
+    extract_percentage,
+    get_results,
+)
+
+CONFIG_FILE = "logging.ini"
+LOG_DIR = "log"
+os.makedirs(LOG_DIR, exist_ok=True)
+log_filename = f"{LOG_DIR}/plotter_{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
+
+fileConfig(CONFIG_FILE, defaults={"log_file_path": log_filename})
+log = logging.getLogger(__name__)
+
+parser = argparse.ArgumentParser(prog="run_roc_plots")
+parser.add_argument("--results_path", type=str, required=True)
+
+
+class RocPlotRunner:
+    """Runner for collecting multi-model training metrics and plotting summary grid comparisons."""
+
+    def __init__(
+        self, results_path: str, folders: Optional[List[str]] = None
+    ) -> None:
+        """Initialize the RocPlotRunner instance.
+
+        Args:
+            results_path: Base directory where output summary plots will be saved.
+            folders: List of specific result folders to scan and aggregate.
+        """
+        self.results_path: str = results_path
+        self.folders: List[str] = folders or [
+            "results/modelV5.dim0.5.folds10_id20251126183757",
+            "results/modelV4.dim0.5.folds10_id20251125151554",
+            "results/modelV3.dim0.5.folds10_id20251117001936",
+            "results/modelV2.dim0.5.folds10_id20251120131323",
+        ]
+        self.plotter: MetricsGridPlotter = MetricsGridPlotter()
+
+    def run(self) -> None:
+        """Aggregate metric results across folders and generate per-model summary plots."""
+        all_metrics = []
+        for folder_path in self.folders:
+            current_results = get_results(folder_path)
+            all_metrics.extend(current_results)
+
+        df = pd.DataFrame(all_metrics)
+        df["percentage"] = df.apply(extract_percentage, axis=1)
+        df["model_name"] = df.apply(extract_model_name, axis=1)
+        df["et"] = df.apply(extract_et, axis=1)
+        df["eta"] = df.apply(extract_eta, axis=1)
+
+        dummy_context = RegionPlotContext(
+            iet=0,
+            ieta=0,
+            output_dir=self.results_path,
+            data=None,
+            target=None,
+        )
+
+        for model_name in df["model_name"].unique():
+            filtered_df = df[df["model_name"] == model_name]
+            self.plotter.plot(dummy_context, df=filtered_df, model_name=model_name)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    runner = RocPlotRunner(results_path=args.results_path)
+    runner.run()

@@ -1,262 +1,70 @@
 import logging
 import os
 from datetime import datetime
-from typing import Any
-
+from typing import Any, List, Tuple
 import numpy as np
-import pandas as pd
 import torch
-import torch.nn as nn
-from sklearn.model_selection import ParameterGrid, StratifiedGroupKFold
-from torch.utils.data import DataLoader, TensorDataset
+from sklearn.model_selection import ParameterGrid
 
 from src.core.Callbacks.SPCallbackPyTorch import SPCallbackPyTorch
 from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
+from src.core.Datasets.SplitManifest import SplitManifest
+from src.core.Trainers.FoldTrainer import FoldTrainer
+from src.core.Trainers.ResultsRecorder import ResultsRecorder
+from src.core.Trainers.TrainingFactory import TrainingFactory
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
-from src.utils import (
-    create_folder,
-    get_class_weight,
-    get_et_eta,
-    get_instance,
-    get_results_file_name,
-    verify_results,
-)
+from src.utils import create_folder, get_et_eta, get_instance, verify_results
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 
 class NeuralRingerTrainer:
-    def __init__(self, config: NeuralRingerTrainerConfiguration):
+    """Orchestrator for the Neural Ringer training workflow across kinematic regions and folds.
+
+    Attributes:
+        config: Configuration specification object.
+        use_cuda: Indicates whether CUDA hardware is available.
+        device: Active PyTorch computation device.
+        factory: TrainingFactory generating models, optimizers, and dataloaders.
+        recorder: ResultsRecorder tracking history and serializing checkpoints.
+        kfold: Cross-validation splitter instance.
+        et: Current transverse energy bin index.
+        eta: Current pseudorapidity bin index.
+        full_dataset: EgammaNpzDataset containing regional data files.
+        results_folder_path: Directory path where output checkpoints are stored.
+    """
+
+    def __init__(self, config: NeuralRingerTrainerConfiguration) -> None:
+        """Initializes NeuralRingerTrainer with configuration and setup components.
+
+        Args:
+            config: NeuralRingerTrainerConfiguration instance.
+        """
         self.config: NeuralRingerTrainerConfiguration = config
-        self.use_cuda = torch.cuda.is_available()
-        self.device = torch.device("cuda" if self.use_cuda else "cpu")
-        self.kfold = self.initCrossValidation()
-        self.all_y_preds_list = []
-        self.all_y_true_list = []
-        self.et = -1
-        self.eta = -1
+        self.use_cuda: bool = torch.cuda.is_available()
+        self.device: torch.device = torch.device("cuda" if self.use_cuda else "cpu")
+        self.factory: TrainingFactory = TrainingFactory(self.config, self.device)
+        self.recorder: ResultsRecorder = ResultsRecorder()
+        self.kfold: Any = self.factory.create_cross_validation()
+        self.et: int = -1
+        self.eta: int = -1
         self.full_dataset: EgammaNpzDataset = get_instance(self.config.dataset)
-        self.results_folder_path = ""
-        self.generator = torch.Generator().manual_seed(42)
+        self.full_dataset.config = config
+        self.results_folder_path: str = ""
+
         if self.config.debug:
             log.warning("#### EXECUTING ON DEBUG MODE. ####")
             self.config.epochs = 2
             self.config.n_initializations = 1
 
-    def initModel(self):
-        log.info("Initializing model")
-        model = get_instance(self.config.model)
-        if self.use_cuda:
-            log.info(f"Using CUDA; {torch.cuda.device_count()} devices")
-            if torch.cuda.device_count() > 1:
-                model = nn.DataParallel(model)
-            model.to(self.device)
-        return model
-
-    def initOptimizer(self):
-        log.info(f"Initializing optimizer {self.config.optimizer_function.object_name}")
-        self.config.optimizer_function.parameters["params"] = self.model.parameters()
-        return get_instance(self.config.optimizer_function)
-
-    def initLossFunction(self):
-        log.info(f"Initializing loss function: {self.config.loss_function.object_name}")
-        return get_instance(self.config.loss_function)
-
-    def initCrossValidation(self) -> StratifiedGroupKFold:
-        log.info(f"Initializing cross validation: {self.config.kFold.object_name}")
-        return get_instance(self.config.kFold)
-
-    def initDataLoader(self, data, labels):
-        log.info(
-            f"Singal: {len(np.where(labels == 0)[0])}\tJets: {len(np.where(labels == 1)[0])}"
-        )
-        features_tensor = torch.from_numpy(data).float()
-        labels_tensor = torch.from_numpy(labels).float().view(-1, 1)
-
-        dataset = TensorDataset(features_tensor, labels_tensor)
-        batch_size = self.config.batch_size
-        if self.use_cuda:
-            batch_size *= torch.cuda.device_count()
-        sampler = None
-        shuffle = True
-        if self.config.balance_data:
-            sampler = get_class_weight(labels.astype(int), self.generator)
-            shuffle = False
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            num_workers=self.config.num_workers,
-            pin_memory=self.use_cuda,
-            shuffle=shuffle,
-            sampler=sampler,
-        )
-        return dataloader
-
-    def main(self, index: int):
-        data, target, path = self.full_dataset[index]
-        test_data, train_cross_validation = self.generate_folds_with_holdout(
-            data, target
-        )
-        total_folds = len(train_cross_validation)
-        for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
-            log.info("Creating training dataloader")
-            train_dl = self.initDataLoader(data[train_index], target[train_index])
-            log.info("Creating validation dataloader")
-            val_dl = self.initDataLoader(data[val_index], target[val_index])
-            self.all_training_results = []
-            for repeat in range(self.config.n_initializations):
-                if verify_results(
-                    self.results_folder_path, self.et, self.eta, repeat, fold_idx
-                ):
-                    continue
-                log.info(
-                    f"Executing fold: {fold_idx + 1}/{total_folds}. Repeat: {repeat + 1}"
-                )
-                self.model = self.initModel()
-                self.optimizer = self.initOptimizer()
-                self.loss = self.initLossFunction()
-                sp_tracker = SPCallbackPyTorch(patience=10, verbose=True)
-                fold_history: dict[str, Any] = {
-                    "train_loss": [],
-                    "train_acc": [],
-                    "val_loss": [],
-                    "val_acc": [],
-                    "callbackMetrics": [],
-                    "reapet": [],
-                }
-                for epoch_ndx in range(1, self.config.epochs + 1):
-                    avg_train_loss, avg_train_acc = self.doTraining(epoch_ndx, train_dl)
-                    self.all_y_preds_list = []
-                    self.all_y_true_list = []
-                    avg_val_loss, avg_val_acc = self.doValidation(epoch_ndx, val_dl)
-                    stop_training, callbackMetrics = sp_tracker.on_epoch_end(
-                        self.model,
-                        epoch_ndx,
-                        self.all_y_true_list,
-                        self.all_y_preds_list,
-                    )
-                    fold_history["train_loss"].append(avg_train_loss)
-                    fold_history["train_acc"].append(avg_train_acc)
-                    fold_history["val_loss"].append(avg_val_loss)
-                    fold_history["val_acc"].append(avg_val_acc)
-
-                    if stop_training:
-                        log.info(
-                            f"Fold {fold_idx}: Early stopping acionado na época {epoch_ndx}."
-                        )
-                        break
-
-                fold_history["callbackMetrics"] = callbackMetrics
-                fold_history["reapet"] = repeat + 1
-                best_weights_for_this_run = sp_tracker.get_best_model_weights()
-                best_sp_for_this_run = sp_tracker.get_best_sp_value()
-                best_fa_for_this_run = sp_tracker.get_best_fa_at_knee()
-                best_pd_for_this_run = sp_tracker.get_best_pd_at_knee()
-
-                if best_weights_for_this_run is not None:
-                    self.all_training_results.append(
-                        {
-                            "file_path": path,
-                            "fold": fold_idx,
-                            "best_sp_value": best_sp_for_this_run,
-                            "best_fa_value": best_fa_for_this_run,
-                            "best_pd_value": best_pd_for_this_run,
-                            "best_weights": best_weights_for_this_run,
-                            "history": fold_history,
-                        }
-                    )
-            self.save_results(
-                self.results_folder_path, self.et, self.eta, repeat, fold_idx
-            )
-        return path
-
-    def doTraining(self, epoch_ndx: int, train_dl: DataLoader):
-        log.info(f"Starting training epoch {epoch_ndx}...")
-        self.model.train()
-
-        running_loss = 0.0
-        running_corrects = 0
-        total_samples = 0
-
-        batch_iter = enumerate(train_dl)
-        for _, batch_tup in batch_iter:
-            self.optimizer.zero_grad()
-            loss_var, corrects_batch = self.computeBatchLoss(
-                batch_tup, validation_step=False
-            )
-            loss_var.backward()
-            self.optimizer.step()
-
-            batch_size = batch_tup[0].size(0)
-            running_loss += loss_var.item() * batch_size
-            running_corrects += corrects_batch
-            total_samples += batch_size
-
-        epoch_loss = running_loss / total_samples
-        epoch_acc = running_corrects / total_samples
-        log.info(f"Training: {epoch_loss = }\t{epoch_acc = }")
-        return epoch_loss, epoch_acc
-
-    def doValidation(self, epoch_ndx: int, val_dl: DataLoader):
-        log.info(f"Starting validation epoch {epoch_ndx}...")
-        self.model.eval()
-        running_loss = 0.0
-        running_corrects = 0
-        total_samples = 0
-
-        with torch.no_grad():
-            for _, batch_tup in enumerate(val_dl):
-                loss_var, corrects_batch = self.computeBatchLoss(
-                    batch_tup, validation_step=True
-                )
-
-                batch_size = batch_tup[0].size(0)
-                running_loss += loss_var.item() * batch_size
-                running_corrects += corrects_batch
-                total_samples += batch_size
-
-        epoch_loss = running_loss / total_samples
-        epoch_acc = running_corrects / total_samples
-        log.info(f"Validation: {epoch_loss = }\t{epoch_acc = }")
-        return epoch_loss, epoch_acc
-
-    def computeBatchLoss(
-        self,
-        batch_tup: tuple[torch.Tensor, torch.Tensor],
-        validation_step: bool = False,
-    ):
-
-        feature, target = batch_tup
-        feature = feature.to(self.device, non_blocking=True)
-        target = target.to(self.device, non_blocking=True)
-        pred_target = self.model(feature)
-
-        loss = self.loss(pred_target, target)
-
-        preds_label = (pred_target >= self.config.pred_target_limiar).float()
-        corrects_batch = (preds_label == target).sum().item()
-
-        if validation_step:
-            self.all_y_preds_list.append(pred_target.cpu().detach().numpy())
-            self.all_y_true_list.append(target.cpu().detach().numpy())
-
-        return loss, corrects_batch
-
-    def save_results(
-        self, folder_path: str, et: int, eta: int, repeat: int, fold_idx: int
-    ) -> None:
-        all_training_results_template = get_results_file_name(et, eta, repeat, fold_idx)
-        pd.DataFrame(self.all_training_results).to_pickle(
-            os.path.join(folder_path, all_training_results_template)
-        )
-
     def run(self) -> None:
+        """Runs training across all specified transverse energy (ET) and pseudorapidity (eta) regions."""
         if self.config.results_folder_path is None:
-            folderTemplateName = "config_name{config_name}_id{id}".format(
+            folder_name = "config_name{config_name}_id{id}".format(
                 config_name=self.config.config_name,
                 id=datetime.now().strftime("%Y%m%d%H%M%S"),
             )
-            self.results_folder_path = str(create_folder(folderTemplateName))
+            self.results_folder_path = str(create_folder(folder_name))
 
         eta_et_region = list(
             ParameterGrid(
@@ -272,31 +80,119 @@ class NeuralRingerTrainer:
                 "eta": int(self.eta),
                 "et": int(self.et),
             } in eta_et_region:
-                self.main(index)
+                self.train_region(index)
             if self.config.debug:
                 break
 
-    def generate_folds_with_holdout(self, features, labels, test_fold_idx=0):
+    def train_region(self, index: int) -> str:
+        """Executes full training repeats and cross-validation folds for a single kinematic region.
+
+        Args:
+            index: Dataset file index to train.
+
+        Returns:
+            Source file path of the processed region dataset.
+        """
+        data, target, path = self.full_dataset[index]
+        manifest_path = os.path.join(self.results_folder_path, "split_manifest.json")
+        manifest = SplitManifest(manifest_path)
+        region_key = f"et_{int(self.et)}_eta_{int(self.eta)}"
+
+        if manifest.exists():
+            manifest.load()
+            test_data, train_cross_validation = manifest.get_region_splits(region_key)
+        else:
+            test_data, train_cross_validation = manifest.create_region_splits(
+                region_key, data, target, self.kfold
+            )
+            manifest.save()
+
+        total_folds = len(train_cross_validation)
+        ring_indices = self.full_dataset.ring_column_indices
+
+        for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
+            train_dl = self.factory.create_dataloader(
+                data[train_index][:, ring_indices], target[train_index]
+            )
+            val_dl = self.factory.create_dataloader(
+                data[val_index][:, ring_indices], target[val_index]
+            )
+
+            for repeat in range(self.config.n_initializations):
+                if verify_results(
+                    self.results_folder_path, self.et, self.eta, repeat, fold_idx
+                ):
+                    continue
+
+                log.info(
+                    f"Executing fold: {fold_idx + 1}/{total_folds}. Repeat: {repeat + 1}"
+                )
+                self.recorder.clear()
+
+                model = self.factory.create_model()
+                optimizer = self.factory.create_optimizer(model)
+                loss_fn = self.factory.create_loss_function()
+
+                trainer = FoldTrainer(
+                    model, optimizer, loss_fn, self.device, self.config.pred_target_limiar
+                )
+                callback = SPCallbackPyTorch(patience=10, verbose=True)
+
+                results = trainer.fit(
+                    train_dl, val_dl, self.config.epochs, callback
+                )
+
+                if results["best_weights"] is not None:
+                    self.recorder.record(
+                        repeat + 1,
+                        path,
+                        fold_idx,
+                        results["best_sp_value"],
+                        results["best_fa_value"],
+                        results["best_pd_value"],
+                        results["best_weights"],
+                        results["history"],
+                    )
+
+                self.recorder.save(
+                    self.results_folder_path, self.et, self.eta, repeat, fold_idx
+                )
+
+        return path
+
+    main = train_region
+
+    def generate_folds_with_holdout(
+        self, features: np.ndarray, labels: np.ndarray, test_fold_idx: int = 0
+    ) -> Tuple[np.ndarray, List[Tuple[np.ndarray, np.ndarray]]]:
+        """Splits features and labels into a holdout test partition and cross-validation iterable.
+
+        Args:
+            features: Input features array.
+            labels: Binary labels array.
+            test_fold_idx: Index of the fold selected as holdout test.
+
+        Returns:
+            Tuple of (holdout_indices, cv_train_val_iterable).
+
+        Raises:
+            ValueError: If test_fold_idx is outside split boundaries.
+        """
         all_folds = [test_idx for _, test_idx in self.kfold.split(features, labels)]
-        log.info(f"{len(all_folds)} folds were generated.")
         if not (0 <= test_fold_idx < self.kfold.get_n_splits()):
             raise ValueError(
                 f"test_fold_idx must be between 0 and {self.kfold.get_n_splits() - 1}"
             )
 
-        log.info(f"Using fold {test_fold_idx + 1} as test set")
         holdout_indices = all_folds[test_fold_idx]
-
         remaining_folds = [
             fold for index, fold in enumerate(all_folds) if index != test_fold_idx
         ]
         cv_iterable = []
         for index in range(len(remaining_folds)):
             val_indices = remaining_folds[index]
-
             train_folds = [fold for j, fold in enumerate(remaining_folds) if j != index]
             train_indices = np.concatenate(train_folds)
-
             cv_iterable.append((train_indices, val_indices))
 
         return holdout_indices, cv_iterable
