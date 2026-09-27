@@ -43,11 +43,6 @@ def parse_args() -> argparse.Namespace:
         help="List of operating points to evaluate (default: loose medium tight).",
     )
     parser.add_argument(
-        "--apply_et_cut",
-        action="store_true",
-        help="Apply ET threshold cut (ET >= threshold - 3 GeV). Default is False.",
-    )
-    parser.add_argument(
         "--output_csv",
         type=str,
         default="efficiencies_by_region.csv",
@@ -107,7 +102,7 @@ def main() -> None:
 
     log.info(f"Discovered {len(file_paths)} file(s) to process.")
     grid = UserKinematicGrid()
-    evaluator = FastPhotonCutEvaluator(grid=grid, apply_et_cut=args.apply_et_cut)
+    evaluator = FastPhotonCutEvaluator(grid=grid)
 
     log.info("Processing files sequentially and accumulating region statistics...")
     df_results = evaluator.evaluate_files(file_paths, working_points=args.working_points)

@@ -236,16 +236,13 @@ class FastPhotonCutEvaluator:
     def __init__(
         self,
         grid: Optional[UserKinematicGrid] = None,
-        apply_et_cut: bool = False,
     ) -> None:
         """Initializes FastPhotonCutEvaluator.
 
         Args:
             grid: Optional UserKinematicGrid defining region granularity.
-            apply_et_cut: Whether to enforce minimum ET >= (threshold - 3) GeV cut.
         """
         self.grid: UserKinematicGrid = grid or UserKinematicGrid()
-        self.apply_et_cut: bool = apply_et_cut
         self._cached_cut_maps: Dict[float, TrigFastPhotonCutMaps] = {}
 
     def _get_cut_map(self, threshold: float) -> TrigFastPhotonCutMaps:
@@ -300,13 +297,7 @@ class FastPhotonCutEvaluator:
         pass_rcore = rcore >= event_rcore_thrs
         pass_had_et = had_em <= event_hadet_thrs
 
-        passed_mask = valid_eta_mask & pass_rcore & pass_had_et
-
-        if self.apply_et_cut:
-            et_cut_value = (threshold - 3.0) * 1000.0
-            passed_mask &= et >= et_cut_value
-
-        return passed_mask
+        return valid_eta_mask & pass_rcore & pass_had_et
 
     def process_batch(
         self,

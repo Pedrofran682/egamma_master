@@ -204,7 +204,6 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py \
 - `--data_path <path>`: Path to a single `.npz` file or a directory of files.
 - `--pattern <glob>`: File glob pattern when `--data_path` is a directory (default: `*.npz`).
 - `--working_points loose medium tight`: Space-separated working points to evaluate (default: `loose medium tight`).
-- `--apply_et_cut`: Enforce minimum $E_T \ge (\text{threshold} - 3)\text{ GeV}$ cut (default: `False`).
 - `--output_csv <path>`: Output CSV path for region efficiencies compatible with `ModelValidator` (default: `efficiencies_by_region.csv`).
 
 ## Development Guidelines & Refactoring Focus
