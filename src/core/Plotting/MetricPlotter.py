@@ -181,7 +181,7 @@ class BoxplotSPPlotter(BasePlotter):
     def plot(
         self,
         context: RegionPlotContext,
-        all_training_results: List[Dict[str, Union[str, int, object]]],
+        all_training_results: Union[List[Dict[str, Union[str, int, object]]], pd.DataFrame, None],
         data_type: str = "best_sp_value",
         **kwargs: Any,
     ) -> str | None:
@@ -189,14 +189,26 @@ class BoxplotSPPlotter(BasePlotter):
 
         Args:
             context: RegionPlotContext with output directory settings.
-            all_training_results: List of training result records across repeats and folds.
+            all_training_results: Training result records (DataFrame or list of dicts).
             data_type: Metric key to plot ('best_sp_value', 'best_fa_value', 'best_pd_value').
             **kwargs: Extra plotting parameters.
 
         Returns:
             Saved PDF file path, or None if results are empty.
         """
-        if not all_training_results:
+        if all_training_results is None:
+            return None
+
+        if isinstance(all_training_results, pd.DataFrame):
+            df_results = all_training_results
+        else:
+            df_results = pd.DataFrame(all_training_results)
+
+        if df_results.empty or data_type not in df_results.columns:
+            return None
+
+        df_results = df_results.dropna(subset=[data_type])
+        if df_results.empty:
             return None
 
         labels_map = {
@@ -205,10 +217,6 @@ class BoxplotSPPlotter(BasePlotter):
             "best_pd_value": ("Distribution of PD by Fold", "Efficiency"),
         }
         title, y_label = labels_map.get(data_type, (f"Distribution of {data_type}", data_type))
-        df_results = pd.DataFrame(all_training_results).dropna(subset=[data_type])
-
-        if df_results.empty:
-            return None
 
         fig = plt.figure(figsize=(12, 7), clear=True, num=1)
         sns.boxplot(x="fold", y=data_type, data=df_results, palette="plasma", hue="fold", legend=False)
