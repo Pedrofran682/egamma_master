@@ -17,15 +17,26 @@ parser.add_argument(
 parser.add_argument(
     "--data_path", required=True, type=str, help="Path to processed data directory."
 )
+parser.add_argument(
+    "--output_dir",
+    required=False,
+    default=None,
+    type=str,
+    help="Custom path to output validation plots (defaults to Plots/<results_name>/Validation).",
+)
 
 
 def main(args: argparse.Namespace) -> None:
     """Run model validation pipeline comparing neural models against baseline threshold cuts.
 
     Args:
-        args: Parsed command-line arguments containing config and data_path.
+        args: Parsed command-line arguments containing config, data_path, and output_dir.
     """
-    validator = ModelValidator(config_path=args.config, data_path=args.data_path)
+    validator = ModelValidator(
+        config_path=args.config,
+        data_path=args.data_path,
+        output_dir=args.output_dir,
+    )
     validator.run()
 
 

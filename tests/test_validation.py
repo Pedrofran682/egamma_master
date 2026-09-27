@@ -1,4 +1,5 @@
 import os
+import pathlib
 import tempfile
 import unittest
 import numpy as np
@@ -80,6 +81,39 @@ class TestValidation(unittest.TestCase):
         self.assertTrue(0.0 <= result.pf <= 1.0)
         self.assertEqual(len(result.preds_05), 40)
         self.assertEqual(len(result.preds_cut), 40)
+
+    def test_model_validator_default_and_custom_plot_dir(self):
+        from unittest.mock import MagicMock, patch
+        from src.core.Validation.ModelValidator import ModelValidator
+        import scripts.validate_pd as validate_pd_module
+
+        with patch.object(ModelValidator, "_load_config", return_value=MagicMock()):
+            with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer"):
+                # Default plot_dir: Plots/<results_name>/Validation
+                validator_default = ModelValidator(
+                    config_path="dummy.yaml",
+                    data_path="results/ModelV1_Run123",
+                )
+                self.assertEqual(
+                    validator_default.plot_dir,
+                    pathlib.Path("Plots/ModelV1_Run123/Validation"),
+                )
+
+                # Custom plot_dir via output_dir argument
+                custom_dir = os.path.join(self.temp_dir.name, "CustomValidationPlots")
+                validator_custom = ModelValidator(
+                    config_path="dummy.yaml",
+                    data_path="results/ModelV1_Run123",
+                    output_dir=custom_dir,
+                )
+                self.assertEqual(validator_custom.plot_dir, pathlib.Path(custom_dir))
+                self.assertTrue(validator_custom.plot_dir.exists())
+
+        # Test CLI parser in validate_pd.py
+        parsed = validate_pd_module.parser.parse_args(
+            ["--config", "conf.yaml", "--data_path", "results/test", "--output_dir", "Plots/custom"]
+        )
+        self.assertEqual(parsed.output_dir, "Plots/custom")
 
 
 if __name__ == "__main__":
