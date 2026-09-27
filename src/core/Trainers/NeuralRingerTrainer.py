@@ -134,7 +134,7 @@ class NeuralRingerTrainer:
                 trainer = FoldTrainer(
                     model, optimizer, loss_fn, self.device, self.config.pred_target_limiar
                 )
-                callback = SPCallbackPyTorch(patience=10, verbose=True)
+                callback = SPCallbackPyTorch(patience=25, verbose=True)
 
                 results = trainer.fit(
                     train_dl, val_dl, self.config.epochs, callback
