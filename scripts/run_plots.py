@@ -32,22 +32,35 @@ parser.add_argument("results_path", type=str)
 parser.add_argument("--drive_path", default="data/", type=str, required=False)
 parser.add_argument("--percentage", default=None, type=float, required=False)
 parser.add_argument("--plot_ringer", action="store_true")
+parser.add_argument("--output_dir", default=None, type=str, required=False)
 parser.add_argument("--debug", action="store_true")
 
 
 class PlotterRunner:
     """Runner responsible for batch generating ringer profiles or training metric curves."""
 
-    def __init__(self, results_path: str, drive_path: str = "data/") -> None:
+    def __init__(
+        self,
+        results_path: str,
+        drive_path: str = "data/",
+        output_dir: Optional[str] = None,
+    ) -> None:
         """Initialize the PlotterRunner instance.
 
         Args:
             results_path: Directory path where training result files are located.
             drive_path: Directory path where raw dataset files are stored.
+            output_dir: Target directory for plots (defaults to Plots/<results_name>).
         """
-        self.results_path: str = results_path
+        self.results_path: Path = Path(results_path)
         self.drive_path: str = drive_path
         self.plot_manager: PlotManager = PlotManager()
+
+        target_name = self.results_path.name or "default"
+        self.output_dir: Path = (
+            Path(output_dir) if output_dir else Path("Plots") / target_name
+        )
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def run_ringer_profiles(self, folder_path: str, percentage: float) -> None:
         """Generate mean energy ringer profile plots for all matching npz datasets.
@@ -110,8 +123,9 @@ class PlotterRunner:
             if file.endswith(".pkl") and file.startswith("repeat")
         ]
 
+        folder_path = str(self.output_dir)
+
         for file_path in result_files:
-            folder_path = os.path.dirname(file_path)
             et, eta = get_et_eta(file_path)
 
             if plot_ringer:
@@ -127,5 +141,9 @@ class PlotterRunner:
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    runner = PlotterRunner(results_path=args.results_path, drive_path=args.drive_path)
+    runner = PlotterRunner(
+        results_path=args.results_path,
+        drive_path=args.drive_path,
+        output_dir=args.output_dir,
+    )
     runner.execute(plot_ringer=args.plot_ringer, percentage=args.percentage)

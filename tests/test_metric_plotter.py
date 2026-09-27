@@ -8,6 +8,10 @@ from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.MetricPlotter import BoxplotSPPlotter
 
 
+from scripts.run_plots import PlotterRunner
+from scripts.run_roc_plots import RocPlotRunner
+
+
 class TestMetricPlotter(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -21,6 +25,40 @@ class TestMetricPlotter(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+        import shutil
+
+        shutil.rmtree("Plots/model_test_run", ignore_errors=True)
+        shutil.rmtree("Plots/ROC_Grid", ignore_errors=True)
+        shutil.rmtree("Plots/my_model", ignore_errors=True)
+
+    def test_plotter_runner_default_output_dir(self) -> None:
+        runner = PlotterRunner(results_path="results/model_test_run")
+        self.assertEqual(str(runner.output_dir), "Plots/model_test_run")
+        self.assertTrue(runner.output_dir.exists())
+
+    def test_plotter_runner_custom_output_dir(self) -> None:
+        custom_out = os.path.join(self.temp_dir.name, "CustomPlots")
+        runner = PlotterRunner(
+            results_path="results/model_test_run", output_dir=custom_out
+        )
+        self.assertEqual(str(runner.output_dir), custom_out)
+        self.assertTrue(runner.output_dir.exists())
+
+    def test_roc_plot_runner_output_dirs(self) -> None:
+        runner_base = RocPlotRunner(results_path="results/")
+        self.assertEqual(str(runner_base.output_dir), "Plots/ROC_Grid")
+        self.assertTrue(runner_base.output_dir.exists())
+
+        runner_model = RocPlotRunner(results_path="results/my_model")
+        self.assertEqual(str(runner_model.output_dir), "Plots/my_model")
+        self.assertTrue(runner_model.output_dir.exists())
+
+        custom_out = os.path.join(self.temp_dir.name, "CustomROC")
+        runner_custom = RocPlotRunner(
+            results_path="results/", output_dir=custom_out
+        )
+        self.assertEqual(str(runner_custom.output_dir), custom_out)
+        self.assertTrue(runner_custom.output_dir.exists())
 
     def test_boxplot_sp_plotter_with_dataframe(self) -> None:
         plotter = BoxplotSPPlotter()
