@@ -52,20 +52,35 @@ class PlotManager:
             except Exception as e:
                 log.error(f"Error running plotter {plotter.name}: {e}")
 
-    def run_metrics_from_file(
-        self, results_data_path: str, output_dir: str, iet: int, ieta: int
-    ) -> None:
-        """Loads a results pickle file, selects the best model run, and triggers metric plots.
+    def run_metrics_for_region(
+        self,
+        df_region: pd.DataFrame,
+        output_dir: str,
+        iet: int,
+        ieta: int,
+    ) -> bool:
+        """Selects the best model run by highest SP value and renders region metric plots.
 
         Args:
-            results_data_path: File path of the pickled results DataFrame.
+            df_region: Consolidated DataFrame with fold and repeat records for the region.
             output_dir: Target output directory for charts.
             iet: Transverse energy bin index.
             ieta: Pseudorapidity bin index.
+
+        Returns:
+            True if plots were generated, False if skipped due to missing/empty data.
         """
-        data = pd.read_pickle(results_data_path)
-        df = pd.DataFrame(data)
-        best_run = df.iloc[np.argmax(df["best_sp_value"])]
+        if (
+            df_region is None
+            or df_region.empty
+            or "best_sp_value" not in df_region.columns
+            or df_region["best_sp_value"].dropna().empty
+        ):
+            log.warning(f"No valid metric data found for region et={iet}, eta={ieta}. Skipping.")
+            return False
+
+        valid_df = df_region.dropna(subset=["best_sp_value"])
+        best_run = valid_df.loc[valid_df["best_sp_value"].idxmax()]
 
         context = RegionPlotContext(
             iet=iet,
@@ -77,8 +92,42 @@ class PlotManager:
 
         for plotter in self.plotters:
             if isinstance(plotter, ModelMetricsPlotter):
-                plotter.plot(context, history_data=best_run["history"])
+                if "history" in best_run and best_run["history"]:
+                    plotter.plot(context, history_data=best_run["history"])
             elif isinstance(plotter, RocPlotter):
-                plotter.plot(context, best_model_details=best_run["history"]["callbackMetrics"])
+                if (
+                    "history" in best_run
+                    and isinstance(best_run["history"], dict)
+                    and "callbackMetrics" in best_run["history"]
+                ):
+                    plotter.plot(
+                        context,
+                        best_model_details=best_run["history"]["callbackMetrics"],
+                    )
             elif isinstance(plotter, BoxplotSPPlotter):
-                plotter.plot(context, all_training_results=data)
+                plotter.plot(context, all_training_results=df_region)
+
+        return True
+
+    def run_metrics_from_file(
+        self, results_data_path: str, output_dir: str, iet: int, ieta: int
+    ) -> bool:
+        """Loads a results pickle file, selects the best model run, and triggers metric plots.
+
+        Args:
+            results_data_path: File path of the pickled results DataFrame.
+            output_dir: Target output directory for charts.
+            iet: Transverse energy bin index.
+            ieta: Pseudorapidity bin index.
+
+        Returns:
+            True if plots were generated, False if skipped due to missing/empty data.
+        """
+        try:
+            data = pd.read_pickle(results_data_path)
+            df = pd.DataFrame(data)
+        except Exception as e:
+            log.warning(f"Failed to load result file {results_data_path}: {e}. Skipping.")
+            return False
+
+        return self.run_metrics_for_region(df, output_dir, iet, ieta)

@@ -39,8 +39,19 @@ class ResultAggregator:
 
         grouped_dfs: Dict[str, pd.DataFrame] = {}
         for group_key, file_list in groups.items():
-            df_list = [pd.DataFrame(pd.read_pickle(f)) for f in file_list]
-            grouped_dfs[group_key] = pd.concat(df_list, ignore_index=True)
+            df_list = []
+            for f in file_list:
+                try:
+                    loaded = pd.read_pickle(f)
+                    df_item = pd.DataFrame(loaded)
+                    if not df_item.empty:
+                        df_list.append(df_item)
+                except Exception as e:
+                    log.warning(f"Skipping unreadable result file {f}: {e}")
+            if df_list:
+                grouped_dfs[group_key] = pd.concat(df_list, ignore_index=True)
+            else:
+                grouped_dfs[group_key] = pd.DataFrame()
 
         return grouped_dfs
 

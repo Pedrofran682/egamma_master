@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+import re
 from datetime import datetime
 from logging.config import fileConfig
 from pathlib import Path
@@ -13,6 +14,7 @@ from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
 from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.PlotManager import PlotManager
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
+from src.core.Validation.ResultAggregator import ResultAggregator
 from src.utils import get_et_eta
 
 CONFIG_FILE = "logging.ini"
@@ -117,26 +119,58 @@ class PlotterRunner:
         Raises:
             ValueError: If plot_ringer is True but percentage is None.
         """
-        result_files = [
-            os.path.join(self.results_path, file)
-            for file in os.listdir(self.results_path)
-            if file.endswith(".pkl") and file.startswith("repeat")
-        ]
-
         folder_path = str(self.output_dir)
 
-        for file_path in result_files:
-            et, eta = get_et_eta(file_path)
+        if plot_ringer:
+            if percentage is None:
+                raise ValueError(
+                    "You must provide percentage of rings. Ex: --percentage 0.5"
+                )
+            self.run_ringer_profiles(folder_path, percentage)
+            return
 
-            if plot_ringer:
-                if percentage is None:
-                    raise ValueError(
-                        "You must provide percentage of rings. Ex: --percentage 0.5"
-                    )
-                self.run_ringer_profiles(folder_path, percentage)
-                break
-            else:
-                self.run_metrics_plots(file_path, folder_path, int(et), int(eta))
+        if self.results_path.is_file():
+            et, eta = get_et_eta(str(self.results_path))
+            if et is None or eta is None:
+                log.warning(
+                    f"Could not extract et/eta from file {self.results_path}. Skipping."
+                )
+                return
+            self.plot_manager.run_metrics_from_file(
+                str(self.results_path), folder_path, int(et), int(eta)
+            )
+            return
+
+        aggregator = ResultAggregator(self.results_path)
+        grouped_results = aggregator.group_and_concat()
+
+        if not grouped_results:
+            log.warning(f"No result files found in {self.results_path}.")
+            return
+
+        for region_key, df_region in grouped_results.items():
+            match = re.search(r"iet(\d+)\.ieta(\d+)", region_key)
+            if not match:
+                log.warning(
+                    f"Could not parse (iet, ieta) from region key '{region_key}'. Skipping."
+                )
+                continue
+
+            iet, ieta = int(match.group(1)), int(match.group(2))
+
+            if (
+                df_region is None
+                or df_region.empty
+                or "best_sp_value" not in df_region.columns
+                or df_region["best_sp_value"].dropna().empty
+            ):
+                log.warning(f"No metric data found in region {region_key}. Skipping.")
+                continue
+
+            log.info(f"Plotting best SP model for region {region_key}...")
+            self.plot_manager.run_metrics_for_region(
+                df_region, folder_path, iet, ieta
+            )
 
 
 if __name__ == "__main__":

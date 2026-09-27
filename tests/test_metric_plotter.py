@@ -12,6 +12,9 @@ from scripts.run_plots import PlotterRunner
 from scripts.run_roc_plots import RocPlotRunner
 
 
+from src.core.Plotting.PlotManager import PlotManager
+
+
 class TestMetricPlotter(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -30,6 +33,103 @@ class TestMetricPlotter(unittest.TestCase):
         shutil.rmtree("Plots/model_test_run", ignore_errors=True)
         shutil.rmtree("Plots/ROC_Grid", ignore_errors=True)
         shutil.rmtree("Plots/my_model", ignore_errors=True)
+
+    def test_plot_manager_run_metrics_for_region_success(self) -> None:
+        manager = PlotManager()
+        df = pd.DataFrame(
+            [
+                {
+                    "fold": 0,
+                    "reapet": 1,
+                    "best_sp_value": 0.82,
+                    "history": {
+                        "train_loss": [0.5, 0.4],
+                        "val_loss": [0.6, 0.5],
+                        "train_acc": [0.8, 0.85],
+                        "val_acc": [0.75, 0.82],
+                        "callbackMetrics": {
+                            "pd": [0.8, 0.9],
+                            "fa": [0.2, 0.1],
+                            "sp": [0.8, 0.85],
+                            "auc_score": 0.92,
+                            "best_knee_point": 1,
+                        },
+                    },
+                },
+                {
+                    "fold": 1,
+                    "reapet": 1,
+                    "best_sp_value": 0.91,
+                    "history": {
+                        "train_loss": [0.4, 0.3],
+                        "val_loss": [0.5, 0.4],
+                        "train_acc": [0.85, 0.9],
+                        "val_acc": [0.8, 0.88],
+                        "callbackMetrics": {
+                            "pd": [0.85, 0.95],
+                            "fa": [0.15, 0.05],
+                            "sp": [0.85, 0.91],
+                            "auc_score": 0.96,
+                            "best_knee_point": 1,
+                        },
+                    },
+                },
+            ]
+        )
+        success = manager.run_metrics_for_region(
+            df, self.temp_dir.name, iet=0, ieta=0
+        )
+        self.assertTrue(success)
+
+    def test_plot_manager_run_metrics_for_region_empty_skips(self) -> None:
+        manager = PlotManager()
+        empty_df = pd.DataFrame()
+        self.assertFalse(
+            manager.run_metrics_for_region(empty_df, self.temp_dir.name, iet=0, ieta=0)
+        )
+
+        missing_sp_df = pd.DataFrame([{"fold": 0, "other": 1}])
+        self.assertFalse(
+            manager.run_metrics_for_region(missing_sp_df, self.temp_dir.name, iet=0, ieta=0)
+        )
+
+    def test_plotter_runner_execute_skips_empty_regions(self) -> None:
+        results_dir = os.path.join(self.temp_dir.name, "results_run")
+        os.makedirs(results_dir, exist_ok=True)
+
+        empty_file = os.path.join(results_dir, "repeat0.fold_idx0.iet0.ieta0.pkl")
+        pd.DataFrame().to_pickle(empty_file)
+
+        valid_file = os.path.join(results_dir, "repeat0.fold_idx0.iet1.ieta1.pkl")
+        pd.DataFrame(
+            [
+                {
+                    "fold": 0,
+                    "reapet": 1,
+                    "best_sp_value": 0.88,
+                    "history": {
+                        "train_loss": [0.5],
+                        "val_loss": [0.6],
+                        "train_acc": [0.8],
+                        "val_acc": [0.75],
+                        "callbackMetrics": {
+                            "pd": [0.8],
+                            "fa": [0.2],
+                            "sp": [0.88],
+                            "auc_score": 0.94,
+                            "best_knee_point": 0,
+                        },
+                    },
+                }
+            ]
+        ).to_pickle(valid_file)
+
+        runner = PlotterRunner(
+            results_path=results_dir,
+            output_dir=os.path.join(self.temp_dir.name, "output_plots"),
+        )
+        runner.execute()
+        self.assertTrue(os.path.exists(runner.output_dir))
 
     def test_plotter_runner_default_output_dir(self) -> None:
         runner = PlotterRunner(results_path="results/model_test_run")
