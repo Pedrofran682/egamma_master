@@ -49,12 +49,45 @@ egamma_master/
 
 ### 4. Validation & Holdout Pipeline (`src/core/Validation/`)
 - `ModelValidator`: Main pipeline orchestrator selecting top-performing models and coordinating holdout evaluations.
+- `FastPhotonCutEvaluator`: Evaluates baseline detection efficiency ($P_D$) using ATLAS Athena `TrigFastPhotonCutMaps` (`loose`, `medium`, `tight`, `etcut`).
 - `HoldoutEvaluator`: Computes accuracy, TPR, TNR, FPR, FNR, and establishes target $P_D$ cut thresholds.
 - `ResultAggregator`: Discovers and groups fold/repeat statistics from serialized result archives.
 - `EfficiencyPlotter`: Plots binned signal detection efficiency curves across $E_T$ and $\eta$ distributions.
 
 ### 5. Dynamic Configuration (`src/Parser/`)
 - Type-validated YAML configuration deserialization via Pydantic (`NeuralRingerTrainerConfiguration`).
+
+## Fast Photon Trigger Cut Efficiency Calculation
+
+Calculate baseline trigger cut efficiencies across your custom $(E_T, |\eta|)$ kinematic regions using `scripts/calculate_photon_cut_efficiency.py`. The calculation does not rely on truth labels or `target` columns, evaluating pure calorimeter cut selections from ATLAS Athena `TrigFastPhotonCutMaps`. To avoid memory exhaustion, files are processed sequentially with a memory-efficient accumulator.
+
+### Kinematic Granularity
+- **$E_T$ intervals (GeV)**: `[15, 20, 30, 40, 50, inf]` (bins: `et0` to `et4`)
+- **$|\eta|$ intervals**: `[0, 0.8, 1.37, 1.54, 2.37, 2.50, inf]` (bins: `eta0` to `eta5`)
+
+For each event in an $E_T$ bin, the corresponding lower-bound ATLAS threshold map (15, 20, 30, 40, 40 GeV) is automatically selected to evaluate $R_{\text{core}} = E^{3\times 7}/E^{7\times 7}$ and $\text{HadEmRatio} = E_T^{\text{had}}/E_T^{\text{EM}}$ across detector $|\eta|$.
+
+### 1. Evaluating All Region Files (Streaming Accumulator)
+```bash
+conda run -n egamma python scripts/calculate_photon_cut_efficiency.py \
+  --data_path data/consolidated/ \
+  --pattern "*.npz" \
+  --output_csv efficiencies_by_region.csv
+```
+
+### 2. Evaluating a Single Region File
+```bash
+conda run -n egamma python scripts/calculate_photon_cut_efficiency.py \
+  --data_path data/consolidated/consolidated.et2.eta2.npz \
+  --output_csv efficiencies_by_region.csv
+```
+
+### 3. Available CLI Options
+- `--data_path <path>`: Path to a single `.npz` file or a directory of files.
+- `--pattern <glob>`: File glob pattern when `--data_path` is a directory (default: `*.npz`).
+- `--working_points loose medium tight`: Space-separated working points to evaluate (default: `loose medium tight`).
+- `--apply_et_cut`: Enforce minimum $E_T \ge (\text{threshold} - 3)\text{ GeV}$ cut (default: `False`).
+- `--output_csv <path>`: Output CSV path for region efficiencies compatible with `ModelValidator` (default: `efficiencies_by_region.csv`).
 
 ## Development Guidelines & Refactoring Focus
 - **OOP First**: Pure Object-Oriented design across trainers, datasets, evaluators, and models.
@@ -64,11 +97,10 @@ egamma_master/
 ## Running Tests
 Run all unit tests with `pytest`:
 ```bash
-conda activate egamma
-pytest -v
+conda run -n egamma pytest -v
 ```
-Or run directly using standard library:
+Run the Fast Photon Cut Evaluator test suite specifically:
 ```bash
-python -m unittest discover -s tests -v
+conda run -n egamma pytest tests/test_fast_photon_cut_evaluator.py -v
 ```
 

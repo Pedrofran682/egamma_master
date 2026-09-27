@@ -72,6 +72,10 @@ Validate trained models against standard threshold baseline selections:
 ```bash
 conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/
 ```
+Calculate ATLAS baseline fast photon cut efficiencies:
+```bash
+conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_path data/consolidated/consolidated.et2.eta2.npz --threshold 20.0
+```
 
 ---
 
