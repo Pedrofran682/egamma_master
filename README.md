@@ -21,7 +21,7 @@ egamma_master/
 │   │   └── egamma/          # Specific egamma model variants
 │   ├── Parser/              # Pydantic configuration schemas and dynamic parsing models
 │   └── utils.py             # Reusable helper functions
-├── scripts/                 # CLI entrypoint scripts (run_plots, run_roc_plots, validate_pd, runner.sh)
+├── scripts/                 # CLI entrypoints (dataGen, merge_regions_data, run_plots, run_roc_plots, validate_pd, runner.sh)
 ├── tests/                   # Pytest OOP unit test suite
 ├── notebooks/               # Jupyter exploration and analysis notebooks
 ├── main.py                  # Primary training execution entrypoint
@@ -38,6 +38,8 @@ egamma_master/
 - `ResultsRecorder`: Manages metric accumulation, history tracking, and disk serialization.
 
 ### 2. Dataset & Split Management (`src/core/Datasets/`)
+- `RootDatasetGenerator`: Extracts, vectorizes, and partitions calorimeter events from ROOT trees into binned `.npz` files in a single vectorized pass with multi-threaded branch decompression.
+- `RegionDataConsolidator`: Merges partitioned `.npz` dataset files into consolidated kinematic region files with multi-core parallel processing.
 - `EgammaNpzDataset`: Reads particle physics `.npz` binary data, extracts calorimeter rings, and handles event filtering.
 - `SplitManifest`: Manages persistent JSON manifests (`split_manifest.json`) for deterministic train/val/test partitions without relying on random seeds.
 
@@ -56,6 +58,122 @@ egamma_master/
 
 ### 5. Dynamic Configuration (`src/Parser/`)
 - Type-validated YAML configuration deserialization via Pydantic (`NeuralRingerTrainerConfiguration`).
+
+## Data Preparation Pipeline
+
+The framework provides an end-to-end data pipeline for converting raw CERN ROOT ntuples into consolidated kinematic NPZ datasets.
+
+### 1. Extracting & Partitioning ROOT Files (`scripts/dataGen.py`)
+Processes raw ROOT files, extracts calorimeter ring features and kinematic variables, vectorizes events into 2D NumPy arrays in a single batch-level pass, and partitions events into kinematic $(E_T, |\eta|)$ regions.
+
+```bash
+# Run extraction across default sample directories using 4 worker threads
+conda run -n egamma python scripts/dataGen.py --workers 4
+
+# Run with custom input and output locations
+conda run -n egamma python scripts/dataGen.py \
+  --base_dir /eos/user/p/pmourafr/RootFiles \
+  --output_dir ./data \
+  --splits 2 \
+  --workers 8
+```
+
+**Key CLI Options**:
+- `--base_dir <path>`: Base directory containing ROOT sample directories.
+- `--output_dir <path>`: Destination directory where partitioned NPZ folders are created.
+- `--tree_name <path>`: Path to TTree inside ROOT files (default: `run_450000/HLT/EgammaMon/summary/events`).
+- `--vector_col <name>`: Branch name containing ring vector data (default: `trig_L2_calo_rings`).
+- `--splits <int>`: Number of batches to split input files into (default: `2`).
+- `--workers <int>`: Parallel threads for `uproot` branch decompression (default: `4`).
+- `--compress`: Save output archives using compression (default: uncompressed).
+
+### 2. Merging Partitions into Consolidated Datasets (`scripts/merge_regions_data.py`)
+Discovers matching partition files across sample directories, extracts `data`, `target`, `source`, and `feature` arrays in a single pass, and writes consolidated region archives `consolidated.et{et}.eta{eta}.npz`.
+
+```bash
+# Run consolidation with multi-core parallel processing
+conda run -n egamma python scripts/merge_regions_data.py \
+  --input_dir ./data \
+  --output_dir ./data/consolidated
+
+# Run specifying worker processes and uncompressed output for maximum write speed
+conda run -n egamma python scripts/merge_regions_data.py \
+  --input_dir ./data \
+  --output_dir ./data/consolidated \
+  --workers 4 \
+  --no_compress
+```
+
+**Key CLI Options**:
+- `--input_dir, -i <path>`: Source directory containing partitioned NPZ files (default: `./data`).
+- `--output_dir, -o <path>`: Destination directory for consolidated files (default: `./data/consolidated`).
+- `--workers, -w <int>`: Number of parallel worker processes (default: all available CPU cores).
+- `--no_compress`: Save uncompressed NPZ archives instead of `np.savez_compressed`.
+- `--pattern <regex>`: Regex pattern matching `et` and `eta` indices from filenames.
+- `--ignore_pattern <regex>`: Regex pattern identifying files to ignore (default: `\.sys\.v\d+`).
+
+## Model Training Workflow
+
+The Neural Ringer training pipeline is modular, fully declarative via YAML configs, and orchestrated by `NeuralRingerTrainer`.
+
+### 1. Training Configuration (`config/NeuralRinger/`)
+Each training run is defined in a YAML configuration file. Key parameters include:
+- `model`: Model architecture name under `src/Models/egamma/` (e.g. `ModelV1`, `ModelV5`, `ModelV6`) and `input_dim` (100, 50, or 25 rings).
+- `dataset`: Dataset loader (`EgammaNpzDataset`), path to consolidated `.npz` files, and ring percentage (`1.0`, `0.5`, `0.25`).
+- `et_range_idx` & `eta_range_idx`: Kinematic bins to train on (e.g., `[0, 1, 2, 3, 4]`).
+- `kFold`: Stratified K-Fold cross-validation configuration (default: 10 folds).
+- `epochs`, `batch_size`, `n_initializations`: Number of training epochs, batch size, and weight initializations per fold.
+- `optimizer_function` & `loss_function`: Learning rate, optimizer parameters (e.g., Adam), and loss formulation.
+
+### 2. Launching Training
+Execute model training via `main.py`:
+
+```bash
+conda run -n egamma python main.py --config config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml
+```
+
+**Training Execution Lifecycle**:
+1. **Config Validation**: Validates the YAML file against the Pydantic `NeuralRingerTrainerConfiguration` schema.
+2. **Deterministic Data Partitioning**: `SplitManifest` reads or creates deterministic K-Fold cross-validation splits persisted in `split_manifest.json`.
+3. **Cross-Validation Training**: For each kinematic region, fold, and repeat initialization:
+   - Data is loaded and ring features are normalized ($L_1$-norm) via `EgammaNpzDataset`.
+   - `FoldTrainer` executes the training loop with early stopping.
+   - `SPCallbackPyTorch` evaluates the ROC curve, tracks the $SP$ metric ($SP = \sqrt{\sqrt{P_D \times (1 - P_F)} \times \frac{P_D + (1 - P_F)}{2}}$), and computes the optimal operating knee point.
+4. **Serialization & Checkpoints**: `ResultsRecorder` writes model weights, metrics, and training histories:
+   - Checkpoints & results: `results/<config_name>_id<timestamp>/`
+   - Detailed execution log: `log/TrainerRunner_<timestamp>.log`
+
+### 3. Post-Training Evaluation & Visualization
+
+After training completes, analyze performance and generate plots:
+
+- **Loss Curves, ROC Curves, and Metric Histories**:
+  ```bash
+  conda run -n egamma python scripts/run_plots.py results/<run_folder>/
+  ```
+
+- **Calorimeter Ringer Mean Energy Profiles**:
+  ```bash
+  conda run -n egamma python scripts/run_plots.py results/<run_folder>/ --plot_ringer --percentage 0.5
+  ```
+
+- **Comparative Multi-Model ROC Grid**:
+  ```bash
+  conda run -n egamma python scripts/run_roc_plots.py --results_path results/
+  ```
+
+- **Validation Against Benchmark Threshold Cuts**:
+  ```bash
+  conda run -n egamma python scripts/validate_pd.py \
+    --config config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+    --data_path results/<run_folder>/
+  ```
+
+### 4. Batch Training Automation
+For running multiple sequential training runs, configure and execute `scripts/runner.sh`:
+```bash
+bash scripts/runner.sh
+```
 
 ## Fast Photon Trigger Cut Efficiency Calculation
 
@@ -102,5 +220,10 @@ conda run -n egamma pytest -v
 Run the Fast Photon Cut Evaluator test suite specifically:
 ```bash
 conda run -n egamma pytest tests/test_fast_photon_cut_evaluator.py -v
+```
+Run the Data Preparation test suites:
+```bash
+conda run -n egamma pytest tests/test_root_dataset_generator.py -v
+conda run -n egamma pytest tests/test_region_data_consolidator.py -v
 ```
 

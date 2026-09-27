@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
         "--workers",
         "-w",
         type=int,
-        default=None,
+        default=4,
         help="Number of parallel worker processes. Defaults to all available CPU cores.",
     )
     parser.add_argument(
