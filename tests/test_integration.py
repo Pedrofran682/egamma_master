@@ -43,13 +43,14 @@ class TestIntegrationPipeline:
 
         source_array = np.array(["mc23_13TeV.perf_JF"] * n_total)
 
-        file_name = "mc23_13TeV.sample.et1.eta1.npz"
-        np.savez(
-            data_dir / file_name,
-            data=data_matrix,
-            feature=np.array(feature_names),
-            source=source_array,
-        )
+        for eta_idx in [1, 2]:
+            file_name = f"mc23_13TeV.sample.et1.eta{eta_idx}.npz"
+            np.savez(
+                data_dir / file_name,
+                data=data_matrix,
+                feature=np.array(feature_names),
+                source=source_array,
+            )
         return data_dir
 
     @pytest.fixture
@@ -65,7 +66,7 @@ class TestIntegrationPipeline:
             "batch_size": 16,
             "epochs": 2,
             "et_range_idx": [1],
-            "eta_range_idx": [1],
+            "eta_range_idx": [1, 2],
             "n_initializations": 1,
             "pred_target_limiar": 0.5,
             "use_trigger_filter": False,
@@ -119,29 +120,37 @@ class TestIntegrationPipeline:
         trainer = NeuralRingerTrainer(integration_config)
         trainer.run()
 
-        # 2. Verify split manifest creation and persistence
+        # 2. Verify split manifest creation and multi-region persistence
         manifest_file = results_path / "split_manifest.json"
         assert manifest_file.exists()
 
-        # 3. Verify fold result pickle files exist
-        pkl_files = list(results_path.glob("repeat*.pkl"))
-        assert len(pkl_files) == 2
+        import json
+        with open(manifest_file, "r") as f:
+            manifest_data = json.load(f)
+        assert "et_1_eta_1" in manifest_data
+        assert "et_1_eta_2" in manifest_data
 
-        # 4. Verify ResultAggregator groups and extracts top performance
+        # 3. Verify fold result pickle files exist across both regions (2 folds x 2 regions)
+        pkl_files = list(results_path.glob("repeat*.pkl"))
+        assert len(pkl_files) == 4
+
+        # 4. Verify ResultAggregator groups and extracts top performance for both regions
         aggregator = ResultAggregator(results_path)
         grouped_results = aggregator.group_and_concat()
         assert "iet1.ieta1" in grouped_results
+        assert "iet1.ieta2" in grouped_results
 
-        df_region = grouped_results["iet1.ieta1"]
-        assert len(df_region) == 2  # 2 folds
+        for region_tag in ["iet1.ieta1", "iet1.ieta2"]:
+            df_region = grouped_results[region_tag]
+            assert len(df_region) == 2  # 2 folds
 
-        best_model_details, best_rep, mean_sp, std_sp = (
-            aggregator.get_best_model_details(df_region)
-        )
-        assert best_rep == 1
-        assert "best_weights" in best_model_details
-        assert best_model_details["best_weights"] is not None
-        assert mean_sp > 0.0
+            best_model_details, best_rep, mean_sp, std_sp = (
+                aggregator.get_best_model_details(df_region)
+            )
+            assert best_rep == 1
+            assert "best_weights" in best_model_details
+            assert best_model_details["best_weights"] is not None
+            assert mean_sp > 0.0
 
         # 5. Verify ModelRegistry can reconstruct best model with loaded weights
         model = get_model("ModelV6", input_dim=50)

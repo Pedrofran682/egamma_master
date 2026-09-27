@@ -83,6 +83,30 @@ class TestSplitManifest(unittest.TestCase):
                 test_fold_idx=10,
             )
 
+    def test_get_or_create_multiple_regions(self):
+        manifest_file = f"{self.temp_dir.name}/splits_multi.json"
+        manifest = SplitManifest(manifest_file)
+
+        test_0, cv_0 = manifest.get_or_create_region_splits(
+            "et_0_eta_0", self.features, self.labels, self.kfold_splitter
+        )
+        self.assertTrue(manifest.exists())
+        self.assertIn("et_0_eta_0", manifest.data)
+
+        # Create second region on same manifest without KeyError
+        test_1, cv_1 = manifest.get_or_create_region_splits(
+            "et_0_eta_1", self.features, self.labels, self.kfold_splitter
+        )
+        self.assertIn("et_0_eta_0", manifest.data)
+        self.assertIn("et_0_eta_1", manifest.data)
+
+        # Retrieve existing first region deterministically
+        reloaded = SplitManifest(manifest_file)
+        test_0_reloaded, _ = reloaded.get_or_create_region_splits(
+            "et_0_eta_0", self.features, self.labels, self.kfold_splitter
+        )
+        np.testing.assert_array_equal(test_0, test_0_reloaded)
+
 
 if __name__ == "__main__":
     unittest.main()

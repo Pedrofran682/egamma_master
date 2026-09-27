@@ -139,3 +139,35 @@ class SplitManifest:
             for split in region_data["cv_splits"]
         ]
         return test_indices, cv_splits
+
+    def get_or_create_region_splits(
+        self,
+        region_key: str,
+        features: np.ndarray,
+        labels: np.ndarray,
+        kfold_splitter: Any,
+        test_fold_idx: int = 0,
+    ) -> Tuple[np.ndarray, List[Tuple[np.ndarray, np.ndarray]]]:
+        """Retrieves existing splits for a region, or creates and saves them if not present.
+
+        Args:
+            region_key: Unique identifier for the kinematic region.
+            features: Input feature matrix.
+            labels: Binary class labels array.
+            kfold_splitter: K-fold cross-validation splitter instance.
+            test_fold_idx: Fold index reserved as the holdout test set.
+
+        Returns:
+            A tuple of (holdout test sample indices array, list of CV fold index tuples).
+        """
+        if self.exists() and not self.data:
+            self.load()
+
+        if region_key in self.data:
+            return self.get_region_splits(region_key)
+
+        splits = self.create_region_splits(
+            region_key, features, labels, kfold_splitter, test_fold_idx
+        )
+        self.save()
+        return splits

@@ -101,14 +101,9 @@ class NeuralRingerTrainer:
         manifest = SplitManifest(manifest_path)
         region_key = f"et_{int(self.et)}_eta_{int(self.eta)}"
 
-        if manifest.exists():
-            manifest.load()
-            test_data, train_cross_validation = manifest.get_region_splits(region_key)
-        else:
-            test_data, train_cross_validation = manifest.create_region_splits(
-                region_key, data, target, self.kfold
-            )
-            manifest.save()
+        test_data, train_cross_validation = manifest.get_or_create_region_splits(
+            region_key, data, target, self.kfold
+        )
 
         total_folds = len(train_cross_validation)
         ring_indices = self.full_dataset.ring_column_indices
