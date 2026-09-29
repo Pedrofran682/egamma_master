@@ -47,10 +47,12 @@ egamma_master/
 - `PlotManager`: Orchestrates active visualizers and metric plotters.
 - `ProfileMeanEnergyPlotter`: Generates average ring energy profile curves.
 - `ModelMetricsPlotter` & `RocPlotter`: Produces loss/accuracy curves, ROC curves, and performance metrics.
+- `RegionDistributionPlotter`: Generates 2D heatmap grids and multi-panel figures of event distributions across $E_T$ and $\eta$ regions.
 - `LegacyPlotter`: Keeps `ConvLayerPlotter` and `SaliencyMapPlotter` code archived in the codebase without active pipeline execution.
 
 ### 4. Validation & Holdout Pipeline (`src/core/Validation/`)
 - `ModelValidator`: Main pipeline orchestrator selecting top-performing models and coordinating holdout evaluations.
+- `RegionDataDistributionAnalyzer`: Summarizes regional event counts by class (background, signal, total events, signal fraction) and coordinates heatmap exports.
 - `FastPhotonCutEvaluator`: Evaluates baseline detection efficiency ($P_D$) using ATLAS Athena `TrigFastPhotonCutMaps` (`loose`, `medium`, `tight`, `etcut`).
 - `HoldoutEvaluator`: Computes accuracy, TPR, TNR, FPR, FNR, and establishes target $P_D$ cut thresholds.
 - `ResultAggregator`: Discovers and groups fold/repeat statistics from serialized result archives.
@@ -168,13 +170,49 @@ After training completes, analyze performance and generate plots:
     --config config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
     --data_path results/<run_folder>/
   ```
-  *(Plots default to `Plots/<yaml_name>/` with dedicated subfolders for `ROC/`, `RingsMeanProfiles/`, and `Validation/` containing `model_eff_*` curves)*
+  *(Plots default to `Plots/<yaml_name>/` with dedicated subfolders for `ROC/`, `RingsMeanProfiles/`, and `Validation/` containing `signal_efficiency_vs_*` curves)*
+
+- **Regional Class Distribution Heatmaps (Signal vs. Background)**:
+  ```bash
+  conda run -n egamma python scripts/plot_data_distribution.py \
+    --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100RingsNoFilter.yaml \
+    --data_path data/consolidated \
+    --format png
+  ```
+  *(Generates 2D heatmap grids for background counts, signal counts, total events, and signal fraction in `Plots/<config_name>/DataDistribution/` alongside `region_data_distribution.csv`)*
 
 ### 4. Batch Training Automation
 For running multiple sequential training runs, configure and execute `scripts/runner.sh`:
 ```bash
 bash scripts/runner.sh
 ```
+
+## Regional Class Distribution Analysis
+
+Analyze and visualize event counts and class balance (Signal vs. Background) across all $(E_T, \eta)$ kinematic regions using `scripts/plot_data_distribution.py`. The tool performs fast event filtering without calorimeter ring normalization overhead, exports a summary CSV, and renders 2D heatmap grids:
+
+```bash
+# Generate 2D heatmaps using YAML configuration and consolidated NPZ directory
+conda run -n egamma python scripts/plot_data_distribution.py \
+  --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100RingsNoFilter.yaml \
+  --data_path data/consolidated \
+  --format png
+```
+
+### Generated Visualizations & Outputs
+- **Composite 2D Grid (`data_distribution_2d_grid.png`)**: 2x2 multi-panel figure displaying Background counts, Signal counts, Total events, and Signal fraction ($S / \text{Total}$) across $E_T \times \eta$.
+- **Individual Metric Heatmaps**:
+  - `distribution_background_count.png`: Background (Class 0) counts.
+  - `distribution_signal_count.png`: Signal (Class 1) counts.
+  - `distribution_total_events.png`: Total events per region.
+  - `distribution_signal_fraction.png`: Signal fraction percentage ($S / \text{Total}$).
+- **Summary Metrics CSV (`region_data_distribution.csv`)**: Tabular export containing columns `et`, `eta`, `background_count`, `signal_count`, `total_events`, `signal_fraction`, `file_path`.
+
+### CLI Options
+- `--config <path>`: Path to YAML training configuration (required).
+- `--data_path <path>`: Optional path to directory containing consolidated `.npz` files (overrides config `drive_path`).
+- `--output_dir <path>`: Custom destination path for figures and CSV (default: `Plots/<config_name>/DataDistribution/`).
+- `--format {pdf,png}`: Image format for generated figures (default: `pdf`).
 
 ## Fast Photon Trigger Cut Efficiency Calculation
 
@@ -216,6 +254,10 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py \
 Run all unit tests with `pytest`:
 ```bash
 conda run -n egamma pytest -v
+```
+Run the Regional Distribution Plotter test suite specifically:
+```bash
+conda run -n egamma pytest tests/test_region_distribution_plotter.py -v
 ```
 Run the Fast Photon Cut Evaluator test suite specifically:
 ```bash
