@@ -195,3 +195,18 @@ class TestRegionDataDistributionAnalyzer(unittest.TestCase):
 
         grid_image = output_dir / "data_distribution_2d_grid.png"
         self.assertTrue(grid_image.exists())
+
+    def test_dataset_feature_names_property(self) -> None:
+        from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
+        from src.core.Datasets.EgammaNpzDatasetNoTargetOrigin import EgammaNpzDatasetNoTargetOrigin
+
+        dataset_std = EgammaNpzDataset(drive_path=str(self.data_dir), startswith="consolidated.et", endswith=".npz")
+        self.assertIsNotNone(dataset_std.feature_names)
+        self.assertGreater(len(dataset_std.feature_names), 0)
+        self.assertEqual(dataset_std.feature_names[0], "mc_type")
+
+        dataset_no_target = EgammaNpzDatasetNoTargetOrigin(drive_path=str(self.data_dir), startswith="consolidated.et", endswith=".npz")
+        self.assertIsNotNone(dataset_no_target.feature_names)
+        self.assertGreater(len(dataset_no_target.feature_names), 0)
+        self.assertEqual(dataset_no_target.feature_names[0], "mc_type")
+

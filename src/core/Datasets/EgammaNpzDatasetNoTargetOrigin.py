@@ -44,6 +44,26 @@ class EgammaNpzDatasetNoTargetOrigin(Dataset):
         self.percentage_dim: int = len(self.indexes)
         self.ring_column_indices: npt.NDArray[np.int64] | None = None
         self.config: Any = None
+        self._feature_names: npt.NDArray[Any] | None = None
+
+    @property
+    def feature_names(self) -> npt.NDArray[Any]:
+        """Returns the array of feature column names from the dataset.
+
+        Returns:
+            Array of feature name strings.
+
+        Raises:
+            FileNotFoundError: If no dataset files are available to extract feature names.
+        """
+        if self._feature_names is None:
+            if not self.file_paths:
+                raise FileNotFoundError("No dataset files found to extract feature names.")
+            with np.load(self.file_paths[0], allow_pickle=True) as sample_archive:
+                self._feature_names = sample_archive["feature"]
+                if self.ring_column_indices is None:
+                    self._set_ring_column_indices(self._feature_names)
+        return self._feature_names
 
     def __len__(self) -> int:
         """Returns the total number of files in the dataset."""
@@ -68,6 +88,7 @@ class EgammaNpzDatasetNoTargetOrigin(Dataset):
         Args:
             features: Feature name array from the NPZ samples dictionary.
         """
+        self._feature_names = features
         first_ring_index = np.where(features == "trig_L2_calo_rings_0")[0][0]
         ring_indices = np.arange(first_ring_index, first_ring_index + 100)
         self.ring_column_indices = ring_indices[self.indexes]
