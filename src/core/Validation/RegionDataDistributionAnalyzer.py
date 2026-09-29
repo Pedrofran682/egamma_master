@@ -113,10 +113,15 @@ class RegionDataDistributionAnalyzer:
                 total_events = int(len(sample_labels))
                 signal_fraction = float(signal_count / total_events) if total_events > 0 else 0.0
 
+                et_interval = self.plotter.et_intervals.get(int(transverse_energy_bin), f"ET {transverse_energy_bin}")
+                eta_interval = self.plotter.eta_intervals.get(int(pseudorapidity_bin), f"eta {pseudorapidity_bin}")
+
                 region_records.append(
                     {
                         "et": int(transverse_energy_bin),
                         "eta": int(pseudorapidity_bin),
+                        "et_range": et_interval,
+                        "eta_range": eta_interval,
                         "background_count": background_count,
                         "signal_count": signal_count,
                         "total_events": total_events,

@@ -1,6 +1,6 @@
 import os
 import pathlib
-from typing import Dict
+from typing import Dict, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -8,13 +8,41 @@ import seaborn as sns
 from src.core.Plotting.BasePlotter import BasePlotter
 from src.utils import create_folder
 
+DEFAULT_ET_INTERVALS: Dict[int, str] = {
+    0: "15-20 GeV",
+    1: "20-30 GeV",
+    2: "30-40 GeV",
+    3: "40-50 GeV",
+    4: ">=50 GeV",
+}
+
+DEFAULT_ETA_INTERVALS: Dict[int, str] = {
+    0: "0.00-0.80",
+    1: "0.80-1.37",
+    2: "1.37-1.54",
+    3: "1.54-2.37",
+    4: "2.37-2.50",
+    5: ">=2.50",
+}
+
 
 class RegionDistributionPlotter(BasePlotter):
     """Plotter generating 2D heatmap grids of dataset event distributions across ET and eta regions."""
 
-    def __init__(self) -> None:
-        """Initializes the RegionDistributionPlotter."""
+    def __init__(
+        self,
+        et_intervals: Optional[Dict[int, str]] = None,
+        eta_intervals: Optional[Dict[int, str]] = None,
+    ) -> None:
+        """Initializes the RegionDistributionPlotter with kinematic interval mappings.
+
+        Args:
+            et_intervals: Optional dictionary mapping ET bin indices to physical intervals.
+            eta_intervals: Optional dictionary mapping eta bin indices to physical intervals.
+        """
         super().__init__(name="RegionDistributionPlotter")
+        self.et_intervals: Dict[int, str] = et_intervals or DEFAULT_ET_INTERVALS
+        self.eta_intervals: Dict[int, str] = eta_intervals or DEFAULT_ETA_INTERVALS
 
     def plot(
         self,
@@ -54,7 +82,7 @@ class RegionDistributionPlotter(BasePlotter):
         ]
 
         for metric_column, subplot_title, colormap_name, format_specifier in metric_configurations:
-            figure, subplot_axis = plt.subplots(figsize=(8, 6))
+            figure, subplot_axis = plt.subplots(figsize=(9, 7))
             self._render_single_heatmap(
                 subplot_axis=subplot_axis,
                 region_distribution_dataframe=region_distribution_dataframe,
@@ -87,7 +115,7 @@ class RegionDistributionPlotter(BasePlotter):
         Returns:
             Saved figure path string.
         """
-        composite_figure, subplot_axes = plt.subplots(2, 2, figsize=(16, 12))
+        composite_figure, subplot_axes = plt.subplots(2, 2, figsize=(18, 14))
         metric_configurations = [
             ("background_count", "Background (Class 0) Counts", "Blues", ".0f"),
             ("signal_count", "Signal (Class 1) Counts", "Greens", ".0f"),
@@ -129,7 +157,7 @@ class RegionDistributionPlotter(BasePlotter):
         colormap_name: str,
         format_specifier: str,
     ) -> None:
-        """Renders an individual heatmap on a matplotlib Axes.
+        """Renders an individual heatmap with ET and eta interval labels on axes.
 
         Args:
             subplot_axis: Matplotlib Axes to draw on.
@@ -144,6 +172,15 @@ class RegionDistributionPlotter(BasePlotter):
         )
         region_matrix_pivot = region_matrix_pivot.sort_index(ascending=False)
 
+        y_tick_labels = [
+            self.et_intervals.get(int(et_bin), f"ET {et_bin}")
+            for et_bin in region_matrix_pivot.index
+        ]
+        x_tick_labels = [
+            self.eta_intervals.get(int(eta_bin), f"eta {eta_bin}")
+            for eta_bin in region_matrix_pivot.columns
+        ]
+
         sns.heatmap(
             region_matrix_pivot,
             ax=subplot_axis,
@@ -153,7 +190,11 @@ class RegionDistributionPlotter(BasePlotter):
             cbar=True,
             linewidths=0.5,
             linecolor="white",
+            xticklabels=x_tick_labels,
+            yticklabels=y_tick_labels,
         )
         subplot_axis.set_title(subplot_title, fontsize=12, pad=10)
-        subplot_axis.set_xlabel(r"$\eta$ Bin", fontsize=11)
-        subplot_axis.set_ylabel(r"$E_T$ Bin", fontsize=11)
+        subplot_axis.set_xlabel(r"$|\eta|$ Interval", fontsize=11)
+        subplot_axis.set_ylabel(r"$E_T$ Interval", fontsize=11)
+        subplot_axis.tick_params(axis="x", rotation=30)
+        subplot_axis.tick_params(axis="y", rotation=0)

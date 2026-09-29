@@ -174,6 +174,8 @@ class TestRegionDataDistributionAnalyzer(unittest.TestCase):
         self.assertEqual(row_1_1["background_count"], 10)
         self.assertEqual(row_1_1["total_events"], 20)
         self.assertAlmostEqual(row_1_1["signal_fraction"], 0.5)
+        self.assertEqual(row_1_1["et_range"], "20-30 GeV")
+        self.assertEqual(row_1_1["eta_range"], "0.80-1.37")
 
         row_1_2 = distribution_dataframe[
             (distribution_dataframe["et"] == 1) & (distribution_dataframe["eta"] == 2)
@@ -182,6 +184,8 @@ class TestRegionDataDistributionAnalyzer(unittest.TestCase):
         self.assertEqual(row_1_2["background_count"], 5)
         self.assertEqual(row_1_2["total_events"], 20)
         self.assertAlmostEqual(row_1_2["signal_fraction"], 0.75)
+        self.assertEqual(row_1_2["et_range"], "20-30 GeV")
+        self.assertEqual(row_1_2["eta_range"], "1.37-1.54")
 
         result_dataframe = analyzer.run(file_format="png")
         self.assertEqual(len(result_dataframe), 2)
