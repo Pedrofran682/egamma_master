@@ -166,10 +166,9 @@ After training completes, analyze performance and generate plots:
   ```bash
   conda run -n egamma python scripts/validate_pd.py \
     --config config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
-    --data_path results/<run_folder>/ \
-    --output_dir Plots/<run_folder>/Validation
+    --data_path results/<run_folder>/
   ```
-  *(Plots default to `Plots/<run_folder>/Validation/` with dedicated subfolders for `ROC/` and `RingsMeanProfiles/`)*
+  *(Plots default to `Plots/<yaml_name>/` with dedicated subfolders for `ROC/`, `RingsMeanProfiles/`, and `Validation/` containing `model_eff_*` curves)*
 
 ### 4. Batch Training Automation
 For running multiple sequential training runs, configure and execute `scripts/runner.sh`:

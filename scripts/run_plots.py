@@ -34,6 +34,7 @@ parser.add_argument("results_path", type=str)
 parser.add_argument("--drive_path", default="data/", type=str, required=False)
 parser.add_argument("--percentage", default=None, type=float, required=False)
 parser.add_argument("--plot_ringer", action="store_true")
+parser.add_argument("--config", default=None, type=str, required=False)
 parser.add_argument("--output_dir", default=None, type=str, required=False)
 parser.add_argument("--debug", action="store_true")
 
@@ -46,22 +47,28 @@ class PlotterRunner:
         results_path: str,
         drive_path: str = "data/",
         output_dir: Optional[str] = None,
+        config_path: Optional[str] = None,
     ) -> None:
         """Initialize the PlotterRunner instance.
 
         Args:
             results_path: Directory path where training result files are located.
             drive_path: Directory path where raw dataset files are stored.
-            output_dir: Target directory for plots (defaults to Plots/<results_name>).
+            output_dir: Target directory for plots (defaults to Plots/<yaml_name>).
+            config_path: Optional path to YAML configuration file.
         """
         self.results_path: Path = Path(results_path)
         self.drive_path: str = drive_path
         self.plot_manager: PlotManager = PlotManager()
 
-        target_name = self.results_path.name or "default"
-        self.output_dir: Path = (
-            Path(output_dir) if output_dir else Path("Plots") / target_name
-        )
+        if output_dir:
+            self.output_dir: Path = Path(output_dir)
+        elif config_path:
+            self.output_dir = Path("Plots") / Path(config_path).stem
+        else:
+            match = re.match(r"^config_name(.*)_id\d+$", self.results_path.name)
+            target_name = match.group(1) if match else (self.results_path.name or "default")
+            self.output_dir = Path("Plots") / target_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def run_ringer_profiles(self, folder_path: str, percentage: float) -> None:
@@ -179,5 +186,6 @@ if __name__ == "__main__":
         results_path=args.results_path,
         drive_path=args.drive_path,
         output_dir=args.output_dir,
+        config_path=args.config,
     )
     runner.execute(plot_ringer=args.plot_ringer, percentage=args.percentage)

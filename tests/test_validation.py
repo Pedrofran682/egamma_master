@@ -31,6 +31,9 @@ class TestValidation(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+        import shutil
+        shutil.rmtree("Plots/dummy", ignore_errors=True)
+        shutil.rmtree("Plots/ModelV1_Run123", ignore_errors=True)
 
     def test_group_and_concat(self):
         record_1 = [
@@ -89,20 +92,20 @@ class TestValidation(unittest.TestCase):
 
         with patch.object(ModelValidator, "_load_config", return_value=MagicMock()):
             with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer"):
-                # Default plot_dir: Plots/<results_name>/Validation
+                # Default plot_dir: Plots/<yaml_name>
                 validator_default = ModelValidator(
-                    config_path="dummy.yaml",
+                    config_path="config/NeuralRinger/ModelV1_Run123.yaml",
                     data_path="results/ModelV1_Run123",
                 )
                 self.assertEqual(
                     validator_default.plot_dir,
-                    pathlib.Path("Plots/ModelV1_Run123/Validation"),
+                    pathlib.Path("Plots/ModelV1_Run123"),
                 )
 
                 # Custom plot_dir via output_dir argument
                 custom_dir = os.path.join(self.temp_dir.name, "CustomValidationPlots")
                 validator_custom = ModelValidator(
-                    config_path="dummy.yaml",
+                    config_path="config/NeuralRinger/ModelV1_Run123.yaml",
                     data_path="results/ModelV1_Run123",
                     output_dir=custom_dir,
                 )
@@ -114,6 +117,34 @@ class TestValidation(unittest.TestCase):
             ["--config", "conf.yaml", "--data_path", "results/test", "--output_dir", "Plots/custom"]
         )
         self.assertEqual(parsed.output_dir, "Plots/custom")
+
+    def test_model_validator_run_routes_validation_plots_to_subfolder(self):
+        from unittest.mock import MagicMock, patch
+        from src.core.Validation.ModelValidator import ModelValidator
+
+        mock_config = MagicMock()
+        mock_config.config_name = "TestConfig"
+        with patch.object(ModelValidator, "_load_config", return_value=mock_config):
+            with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer"):
+                custom_dir = os.path.join(self.temp_dir.name, "ValidationRunTest")
+                validator = ModelValidator(
+                    config_path="config/TestModel.yaml",
+                    data_path="results/TestRun",
+                    output_dir=custom_dir,
+                )
+                validator.aggregator = MagicMock()
+                validator.aggregator.group_and_concat.return_value = {}
+                validator.efficiency_plotter = MagicMock()
+
+                validator.run()
+
+                expected_validation_dir = pathlib.Path(custom_dir) / "Validation"
+                self.assertTrue(expected_validation_dir.exists())
+                validator.efficiency_plotter.generate_global_plots.assert_called_once_with(
+                    [],
+                    expected_validation_dir,
+                    "TestConfig",
+                )
 
 
 if __name__ == "__main__":

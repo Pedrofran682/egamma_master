@@ -33,6 +33,8 @@ class TestMetricPlotter(unittest.TestCase):
         shutil.rmtree("Plots/model_test_run", ignore_errors=True)
         shutil.rmtree("Plots/ROC_Grid", ignore_errors=True)
         shutil.rmtree("Plots/my_model", ignore_errors=True)
+        shutil.rmtree("Plots/ModelV1_ConfigTest", ignore_errors=True)
+        shutil.rmtree("Plots/ModelV5_RunName", ignore_errors=True)
 
     def test_plot_manager_run_metrics_for_region_success(self) -> None:
         manager = PlotManager()
@@ -142,6 +144,19 @@ class TestMetricPlotter(unittest.TestCase):
             results_path="results/model_test_run", output_dir=custom_out
         )
         self.assertEqual(str(runner.output_dir), custom_out)
+    def test_plotter_runner_config_path_output_dir(self) -> None:
+        runner = PlotterRunner(
+            results_path="results/model_test_run",
+            config_path="config/NeuralRinger/ModelV1_ConfigTest.yaml",
+        )
+        self.assertEqual(str(runner.output_dir), "Plots/ModelV1_ConfigTest")
+        self.assertTrue(runner.output_dir.exists())
+
+    def test_plotter_runner_extracted_config_name_output_dir(self) -> None:
+        runner = PlotterRunner(
+            results_path="results/config_nameModelV5_RunName_id20260928210000"
+        )
+        self.assertEqual(str(runner.output_dir), "Plots/ModelV5_RunName")
         self.assertTrue(runner.output_dir.exists())
 
     def test_roc_plot_runner_output_dirs(self) -> None:

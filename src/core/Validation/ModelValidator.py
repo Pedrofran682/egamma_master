@@ -51,14 +51,15 @@ class ModelValidator:
             data_path: Directory path holding result pickle archives.
             efficiencies_csv: Path to reference operating point CSV table.
             default_target_pd: Fallback target signal efficiency (default 0.9424).
-            output_dir: Optional destination directory for validation plots.
+            output_dir: Optional destination directory for plots (defaults to Plots/<yaml_name>).
         """
+        self.config_path: pathlib.Path = pathlib.Path(config_path)
         self.config_instance: NeuralRingerTrainerConfiguration = self._load_config(config_path)
         self.data_path: pathlib.Path = pathlib.Path(data_path)
         if output_dir is not None:
             self.plot_dir: pathlib.Path = pathlib.Path(output_dir)
         else:
-            self.plot_dir: pathlib.Path = pathlib.Path("Plots") / self.data_path.name / "Validation"
+            self.plot_dir: pathlib.Path = pathlib.Path("Plots") / self.config_path.stem
         self.plot_dir.mkdir(parents=True, exist_ok=True)
         self.reference_eff_df: pd.DataFrame | None = self._load_reference_efficiencies(efficiencies_csv)
 
@@ -181,8 +182,10 @@ class ModelValidator:
 
             all_results.append(result)
 
+        validation_dir = self.plot_dir / "Validation"
+        validation_dir.mkdir(parents=True, exist_ok=True)
         self.efficiency_plotter.generate_global_plots(
             all_results,
-            self.plot_dir,
+            validation_dir,
             self.config_instance.config_name,
         )
