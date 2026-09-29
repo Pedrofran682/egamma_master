@@ -135,45 +135,45 @@ class EfficiencyPlotter:
         filtered_pseudorapidity_values = filtered_features[:, self.eta_index]
         et_cutoff_gev = int(self.et_cutoff / 1000)
 
-        et_default_threshold_plot_path = plot_dir / f"{config_name}_global_model_eff_05_et.png"
+        et_standard_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_et_standard_cut.png"
         self.plot_efficiency_vs_feature(
             filtered_transverse_energy_gev,
             filtered_targets,
             filtered_predictions_default,
-            et_default_threshold_plot_path,
+            et_standard_cut_plot_path,
             feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV)",
             bins=10,
             label="Efficiency (Threshold 0.5)",
         )
 
-        et_tuned_cut_plot_path = plot_dir / f"{config_name}_global_model_eff_cut_et.png"
+        et_target_pd_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_et_target_pd_cut.png"
         self.plot_efficiency_vs_feature(
             filtered_transverse_energy_gev,
             filtered_targets,
             filtered_predictions_tuned_cut,
-            et_tuned_cut_plot_path,
+            et_target_pd_cut_plot_path,
             feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV) (Proposed Cut)",
             bins=10,
             label="Efficiency (Proposed Cut)",
         )
 
-        eta_default_threshold_plot_path = plot_dir / f"{config_name}_global_model_eff_05_eta.png"
+        eta_standard_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_eta_standard_cut.png"
         self.plot_efficiency_vs_feature(
             filtered_pseudorapidity_values,
             filtered_targets,
             filtered_predictions_default,
-            eta_default_threshold_plot_path,
+            eta_standard_cut_plot_path,
             feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV)",
             bins=20,
             label="Efficiency (Threshold 0.5)",
         )
 
-        eta_tuned_cut_plot_path = plot_dir / f"{config_name}_global_model_eff_cut_eta.png"
+        eta_target_pd_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_eta_target_pd_cut.png"
         self.plot_efficiency_vs_feature(
             filtered_pseudorapidity_values,
             filtered_targets,
             filtered_predictions_tuned_cut,
-            eta_tuned_cut_plot_path,
+            eta_target_pd_cut_plot_path,
             feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV) (Proposed Cut)",
             bins=20,
             label="Efficiency (Proposed Cut)",
