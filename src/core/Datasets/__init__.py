@@ -5,8 +5,8 @@ from .RootDatasetGenerator import RootDatasetGenerator
 
 __all__ = [
     "EgammaNpzDataset",
+    "EgammaNpzDatasetNoTargetOrigin",
     "SplitManifest",
     "RegionDataConsolidator",
     "RootDatasetGenerator",
 ]
-
