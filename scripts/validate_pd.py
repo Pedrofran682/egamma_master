@@ -22,7 +22,7 @@ parser.add_argument(
     required=False,
     default=None,
     type=str,
-    help="Custom path to output plots (defaults to Plots/<yaml_name>).",
+    help="Custom path to output plots (defaults to Plots/<results_folder_name>).",
 )
 
 

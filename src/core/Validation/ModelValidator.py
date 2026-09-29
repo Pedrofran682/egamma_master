@@ -54,7 +54,7 @@ class ModelValidator:
             data_path: Directory path holding result pickle archives.
             efficiencies_csv: Path to reference operating point CSV table.
             default_target_pd: Fallback target signal efficiency (default 0.9424).
-            output_dir: Optional destination directory for plots (defaults to Plots/<yaml_name>).
+            output_dir: Optional destination directory for plots (defaults to Plots/<results_folder_name>).
         """
         self.config_path: pathlib.Path = pathlib.Path(config_path)
         self.config_instance: NeuralRingerTrainerConfiguration = self._load_config(config_path)
@@ -64,7 +64,13 @@ class ModelValidator:
         if output_dir is not None:
             self.plot_dir: pathlib.Path = pathlib.Path(output_dir)
         else:
-            self.plot_dir: pathlib.Path = pathlib.Path("Plots") / self.config_path.stem
+            target_name = (
+                self.data_path.parent.name
+                if self.data_path.is_file()
+                or self.data_path.suffix in [".pkl", ".npz", ".pt"]
+                else (self.data_path.name or "default")
+            )
+            self.plot_dir: pathlib.Path = pathlib.Path("Plots") / target_name
         self.plot_dir.mkdir(parents=True, exist_ok=True)
         self.reference_eff_df: pd.DataFrame | None = self._load_reference_efficiencies(efficiencies_csv)
 
@@ -168,27 +174,27 @@ class ModelValidator:
             best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_details(df)
             self.model.load_state_dict(best_model["best_weights"])
 
-            context = RegionPlotContext(
-                iet=iet,
-                ieta=ieta,
-                output_dir=self.plot_dir,
-                data=data,
-                target=target,
-                test_indices=test_indices,
-                trainer=self.trainer,
-                model=self.model,
-            )
+            # context = RegionPlotContext(
+            #     iet=iet,
+            #     ieta=ieta,
+            #     output_dir=self.plot_dir,
+            #     data=data,
+            #     target=target,
+            #     test_indices=test_indices,
+            #     trainer=self.trainer,
+            #     model=self.model,
+            # )
 
-            self.roc_plotter.plot(
-                context,
-                best_model_details=best_model["history"]["callbackMetrics"],
-            )
+            # self.roc_plotter.plot(
+            #     context,
+            #     best_model_details=best_model["history"]["callbackMetrics"],
+            # )
 
-            self.profile_plotter.plot(
-                context,
-                x_rings=context.x_holdout_rings,
-                plot_name="RingsMeanProfiles_NeuralRinger",
-            )
+            # self.profile_plotter.plot(
+            #     context,
+            #     x_rings=context.x_holdout_rings,
+            #     plot_name="RingsMeanProfiles_NeuralRinger",
+            # )
 
             result = self.evaluator.evaluate(
                 model=self.model,

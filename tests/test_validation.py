@@ -92,9 +92,9 @@ class TestValidation(unittest.TestCase):
 
         with patch.object(ModelValidator, "_load_config", return_value=MagicMock()):
             with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer"):
-                # Default plot_dir: Plots/<yaml_name>
+                # Default plot_dir: Plots/<results_folder_name>
                 validator_default = ModelValidator(
-                    config_path="config/NeuralRinger/ModelV1_Run123.yaml",
+                    config_path="config/NeuralRinger/ModelV1.yaml",
                     data_path="results/ModelV1_Run123",
                 )
                 self.assertEqual(
