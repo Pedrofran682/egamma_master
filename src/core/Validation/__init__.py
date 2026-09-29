@@ -8,6 +8,7 @@ from .FastPhotonCutEvaluator import (
     UserKinematicGrid,
     RegionEfficiencyAccumulator,
 )
+from .RegionDataDistributionAnalyzer import RegionDataDistributionAnalyzer
 
 __all__ = [
     "ResultAggregator",
@@ -19,4 +20,5 @@ __all__ = [
     "TrigFastPhotonCutMaps",
     "UserKinematicGrid",
     "RegionEfficiencyAccumulator",
+    "RegionDataDistributionAnalyzer",
 ]

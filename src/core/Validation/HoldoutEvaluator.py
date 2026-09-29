@@ -12,34 +12,99 @@ class HoldoutEvaluationResult:
     """Encapsulates model inference predictions and statistical metrics on holdout data.
 
     Attributes:
-        x_holdout_full: Matrix of features for holdout events.
-        y_holdout: Vector of true binary labels for holdout events.
-        preds_05: Binary predictions using the standard 0.5 threshold.
-        preds_cut: Binary predictions using the target PD threshold cut.
-        probs: Continuous model output probability scores.
-        global_acc: Overall accuracy at 0.5 threshold.
-        signal_acc: True positive rate (TPR) at 0.5 threshold.
-        bg_acc: True negative rate (TNR) at 0.5 threshold.
-        fpr: False positive rate (FPR) at 0.5 threshold.
-        fnr: False negative rate (FNR) at 0.5 threshold.
-        cutoff_percentile: Cutoff percentile used for establishing the target PD.
-        target_threshold: Model score decision threshold corresponding to target PD.
-        pf: False alarm probability (PF) obtained at the target PD threshold.
+        holdout_features_full: Matrix of features for holdout events.
+        holdout_labels: Vector of true binary labels for holdout events.
+        predictions_default_threshold: Binary predictions using the standard 0.5 threshold.
+        predictions_calibrated_cut: Binary predictions using the target PD threshold cut.
+        predicted_probabilities: Continuous model output probability scores.
+        accuracy_default_threshold: Overall accuracy at 0.5 threshold.
+        signal_efficiency_default_threshold: True positive rate (TPR) at 0.5 threshold.
+        background_rejection_default_threshold: True negative rate (TNR) at 0.5 threshold.
+        false_positive_rate: False positive rate (FPR) at 0.5 threshold.
+        false_negative_rate: False negative rate (FNR) at 0.5 threshold.
+        signal_cutoff_percentile: Cutoff percentile used for establishing the target PD.
+        calibrated_decision_threshold: Model score decision threshold corresponding to target PD.
+        false_alarm_probability: False alarm probability obtained at the target PD threshold.
     """
 
-    x_holdout_full: np.ndarray
-    y_holdout: np.ndarray
-    preds_05: np.ndarray
-    preds_cut: np.ndarray
-    probs: np.ndarray
-    global_acc: float
-    signal_acc: float
-    bg_acc: float
-    fpr: float
-    fnr: float
-    cutoff_percentile: float
-    target_threshold: float
-    pf: float
+    holdout_features_full: np.ndarray
+    holdout_labels: np.ndarray
+    predictions_default_threshold: np.ndarray
+    predictions_calibrated_cut: np.ndarray
+    predicted_probabilities: np.ndarray
+    accuracy_default_threshold: float
+    signal_efficiency_default_threshold: float
+    background_rejection_default_threshold: float
+    false_positive_rate: float
+    false_negative_rate: float
+    signal_cutoff_percentile: float
+    calibrated_decision_threshold: float
+    false_alarm_probability: float
+
+    @property
+    def x_holdout_full(self) -> np.ndarray:
+        """Matrix of features for holdout events (backward-compatible alias)."""
+        return self.holdout_features_full
+
+    @property
+    def y_holdout(self) -> np.ndarray:
+        """Vector of true binary labels for holdout events (backward-compatible alias)."""
+        return self.holdout_labels
+
+    @property
+    def preds_05(self) -> np.ndarray:
+        """Binary predictions using standard 0.5 threshold (backward-compatible alias)."""
+        return self.predictions_default_threshold
+
+    @property
+    def preds_cut(self) -> np.ndarray:
+        """Binary predictions using target PD threshold cut (backward-compatible alias)."""
+        return self.predictions_calibrated_cut
+
+    @property
+    def probs(self) -> np.ndarray:
+        """Continuous model output probability scores (backward-compatible alias)."""
+        return self.predicted_probabilities
+
+    @property
+    def global_acc(self) -> float:
+        """Overall accuracy at 0.5 threshold (backward-compatible alias)."""
+        return self.accuracy_default_threshold
+
+    @property
+    def signal_acc(self) -> float:
+        """True positive rate at 0.5 threshold (backward-compatible alias)."""
+        return self.signal_efficiency_default_threshold
+
+    @property
+    def bg_acc(self) -> float:
+        """True negative rate at 0.5 threshold (backward-compatible alias)."""
+        return self.background_rejection_default_threshold
+
+    @property
+    def fpr(self) -> float:
+        """False positive rate at 0.5 threshold (backward-compatible alias)."""
+        return self.false_positive_rate
+
+    @property
+    def fnr(self) -> float:
+        """False negative rate at 0.5 threshold (backward-compatible alias)."""
+        return self.false_negative_rate
+
+    @property
+    def cutoff_percentile(self) -> float:
+        """Cutoff percentile for establishing target PD (backward-compatible alias)."""
+        return self.signal_cutoff_percentile
+
+    @property
+    def target_threshold(self) -> float:
+        """Decision threshold corresponding to target PD (backward-compatible alias)."""
+        return self.calibrated_decision_threshold
+
+    @property
+    def pf(self) -> float:
+        """False alarm probability at target PD threshold (backward-compatible alias)."""
+        return self.false_alarm_probability
 
 
 class HoldoutEvaluator:
@@ -81,48 +146,58 @@ class HoldoutEvaluator:
         Returns:
             HoldoutEvaluationResult containing predictions, probabilities, and rates.
         """
-        eff_target = target_pd if target_pd is not None else self.default_target_pd
+        target_signal_efficiency = target_pd if target_pd is not None else self.default_target_pd
         model.eval()
 
-        x_holdout_full = data[test_indices]
-        y_holdout = target[test_indices]
-        x_holdout_rings = x_holdout_full[:, ring_column_indices]
+        holdout_features_full = data[test_indices]
+        holdout_labels = target[test_indices]
+        holdout_ring_features = holdout_features_full[:, ring_column_indices]
 
         with torch.no_grad():
-            tensor_in = torch.from_numpy(x_holdout_rings).float().to(device)
-            probs_tensor = model(tensor_in)
-            probs = probs_tensor.detach().cpu().numpy().flatten()
+            ring_features_tensor = torch.from_numpy(holdout_ring_features).float().to(device)
+            probabilities_tensor = model(ring_features_tensor)
+            predicted_probabilities = probabilities_tensor.detach().cpu().numpy().flatten()
 
-            preds_05 = (probs > 0.5).astype(int)
+            predictions_default_threshold = (predicted_probabilities > 0.5).astype(int)
 
-            global_acc = float(np.mean(preds_05 == y_holdout))
-            signal_acc = float(np.mean(preds_05[y_holdout == 1] == 1))
-            bg_acc = float(np.mean(preds_05[y_holdout == 0] == 0))
-            fpr = float(np.mean(preds_05[y_holdout == 0] == 1))
-            fnr = float(np.mean(preds_05[y_holdout == 1] == 0))
+            accuracy_default_threshold = float(np.mean(predictions_default_threshold == holdout_labels))
+            signal_efficiency_default_threshold = float(
+                np.mean(predictions_default_threshold[holdout_labels == 1] == 1)
+            )
+            background_rejection_default_threshold = float(
+                np.mean(predictions_default_threshold[holdout_labels == 0] == 0)
+            )
+            false_positive_rate = float(np.mean(predictions_default_threshold[holdout_labels == 0] == 1))
+            false_negative_rate = float(np.mean(predictions_default_threshold[holdout_labels == 1] == 0))
 
-            signal_scores = probs[y_holdout == 1]
-            bg_scores = probs[y_holdout == 0]
+            signal_probability_scores = predicted_probabilities[holdout_labels == 1]
+            background_probability_scores = predicted_probabilities[holdout_labels == 0]
 
-            cutoff_percentile = (1 - eff_target) * 100
-            new_threshold = float(np.percentile(signal_scores, cutoff_percentile))
-            false_alarms = (bg_scores > new_threshold).sum()
-            pf = float(false_alarms / len(bg_scores)) if len(bg_scores) > 0 else 0.0
+            signal_cutoff_percentile = (1 - target_signal_efficiency) * 100
+            calibrated_decision_threshold = float(
+                np.percentile(signal_probability_scores, signal_cutoff_percentile)
+            )
+            false_alarm_count = int((background_probability_scores > calibrated_decision_threshold).sum())
+            false_alarm_probability = (
+                float(false_alarm_count / len(background_probability_scores))
+                if len(background_probability_scores) > 0
+                else 0.0
+            )
 
-            preds_cut = (probs > new_threshold).astype(int)
+            predictions_calibrated_cut = (predicted_probabilities > calibrated_decision_threshold).astype(int)
 
         return HoldoutEvaluationResult(
-            x_holdout_full=x_holdout_full,
-            y_holdout=y_holdout,
-            preds_05=preds_05,
-            preds_cut=preds_cut,
-            probs=probs,
-            global_acc=global_acc,
-            signal_acc=signal_acc,
-            bg_acc=bg_acc,
-            fpr=fpr,
-            fnr=fnr,
-            cutoff_percentile=cutoff_percentile,
-            target_threshold=new_threshold,
-            pf=pf,
+            holdout_features_full=holdout_features_full,
+            holdout_labels=holdout_labels,
+            predictions_default_threshold=predictions_default_threshold,
+            predictions_calibrated_cut=predictions_calibrated_cut,
+            predicted_probabilities=predicted_probabilities,
+            accuracy_default_threshold=accuracy_default_threshold,
+            signal_efficiency_default_threshold=signal_efficiency_default_threshold,
+            background_rejection_default_threshold=background_rejection_default_threshold,
+            false_positive_rate=false_positive_rate,
+            false_negative_rate=false_negative_rate,
+            signal_cutoff_percentile=signal_cutoff_percentile,
+            calibrated_decision_threshold=calibrated_decision_threshold,
+            false_alarm_probability=false_alarm_probability,
         )

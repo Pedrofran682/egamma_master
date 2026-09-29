@@ -54,36 +54,38 @@ class EfficiencyPlotter:
             label: Legend label text.
         """
         signal_mask = y_holdout == 1
-        signal_feature = feature_values[signal_mask]
-        signal_preds = preds[signal_mask]
+        signal_feature_values = feature_values[signal_mask]
+        signal_predictions = preds[signal_mask]
 
-        bin_edges = np.histogram_bin_edges(signal_feature, bins=bins)
-        bin_centers, efficiencies, errors = [], [], []
+        bin_edges = np.histogram_bin_edges(signal_feature_values, bins=bins)
+        bin_centers: List[float] = []
+        efficiencies: List[float] = []
+        binomial_uncertainties: List[float] = []
 
-        for i in range(len(bin_edges) - 1):
-            bin_min = bin_edges[i]
-            bin_max = bin_edges[i + 1]
+        for bin_index in range(len(bin_edges) - 1):
+            bin_lower = bin_edges[bin_index]
+            bin_upper = bin_edges[bin_index + 1]
 
-            if i == len(bin_edges) - 2:
-                in_bin = (signal_feature >= bin_min) & (signal_feature <= bin_max)
+            if bin_index == len(bin_edges) - 2:
+                in_bin_mask = (signal_feature_values >= bin_lower) & (signal_feature_values <= bin_upper)
             else:
-                in_bin = (signal_feature >= bin_min) & (signal_feature < bin_max)
+                in_bin_mask = (signal_feature_values >= bin_lower) & (signal_feature_values < bin_upper)
 
-            total_in_bin = np.sum(in_bin)
-            if total_in_bin > 0:
-                correct_preds = np.sum(signal_preds[in_bin] == 1)
-                eff = correct_preds / total_in_bin
-                error = np.sqrt((eff * (1 - eff)) / total_in_bin)
+            total_events_in_bin = int(np.sum(in_bin_mask))
+            if total_events_in_bin > 0:
+                true_positive_count = int(np.sum(signal_predictions[in_bin_mask] == 1))
+                efficiency = true_positive_count / total_events_in_bin
+                binomial_uncertainty = float(np.sqrt((efficiency * (1 - efficiency)) / total_events_in_bin))
 
-                bin_centers.append((bin_min + bin_max) / 2)
-                efficiencies.append(eff)
-                errors.append(error)
+                bin_centers.append((bin_lower + bin_upper) / 2.0)
+                efficiencies.append(efficiency)
+                binomial_uncertainties.append(binomial_uncertainty)
 
-        fig = plt.figure(figsize=(8, 5))
+        figure = plt.figure(figsize=(8, 5))
         plt.errorbar(
             bin_centers,
             efficiencies,
-            yerr=errors,
+            yerr=binomial_uncertainties,
             fmt="o-",
             capsize=4,
             color="#1f77b4",
@@ -98,7 +100,7 @@ class EfficiencyPlotter:
         plt.legend(fontsize=11)
 
         plt.savefig(file_path, format="png", transparent=True, bbox_inches="tight")
-        plt.close(fig)
+        plt.close(figure)
 
     def generate_global_plots(
         self,
@@ -116,62 +118,62 @@ class EfficiencyPlotter:
         if not results:
             return
 
-        x_h_global = np.concatenate([r.x_holdout_full for r in results], axis=0)
-        y_h_global = np.concatenate([r.y_holdout for r in results], axis=0)
-        preds_05_global = np.concatenate([r.preds_05 for r in results], axis=0)
-        preds_cut_global = np.concatenate([r.preds_cut for r in results], axis=0)
+        global_features = np.concatenate([evaluation_result.holdout_features_full for evaluation_result in results], axis=0)
+        global_targets = np.concatenate([evaluation_result.holdout_labels for evaluation_result in results], axis=0)
+        global_predictions_default = np.concatenate([evaluation_result.predictions_default_threshold for evaluation_result in results], axis=0)
+        global_predictions_tuned = np.concatenate([evaluation_result.predictions_calibrated_cut for evaluation_result in results], axis=0)
 
-        et_values_global = x_h_global[:, self.et_index]
-        et_cut_mask = et_values_global < self.et_cutoff
+        global_transverse_energies = global_features[:, self.et_index]
+        energy_filter_mask = global_transverse_energies < self.et_cutoff
 
-        x_h_cut = x_h_global[et_cut_mask]
-        y_h_cut = y_h_global[et_cut_mask]
-        preds_05_cut = preds_05_global[et_cut_mask]
-        preds_cut_cut = preds_cut_global[et_cut_mask]
+        filtered_features = global_features[energy_filter_mask]
+        filtered_targets = global_targets[energy_filter_mask]
+        filtered_predictions_default = global_predictions_default[energy_filter_mask]
+        filtered_predictions_tuned_cut = global_predictions_tuned[energy_filter_mask]
 
-        et_cut_values = x_h_cut[:, self.et_index] / 1000.0
-        eta_cut_values = x_h_cut[:, self.eta_index]
+        filtered_transverse_energy_gev = filtered_features[:, self.et_index] / 1000.0
+        filtered_pseudorapidity_values = filtered_features[:, self.eta_index]
         et_cutoff_gev = int(self.et_cutoff / 1000)
 
-        path_et_05 = plot_dir / f"{config_name}_global_model_eff_05_et.png"
+        et_default_threshold_plot_path = plot_dir / f"{config_name}_global_model_eff_05_et.png"
         self.plot_efficiency_vs_feature(
-            et_cut_values,
-            y_h_cut,
-            preds_05_cut,
-            path_et_05,
+            filtered_transverse_energy_gev,
+            filtered_targets,
+            filtered_predictions_default,
+            et_default_threshold_plot_path,
             feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV)",
             bins=10,
             label="Efficiency (Threshold 0.5)",
         )
 
-        path_et_cut = plot_dir / f"{config_name}_global_model_eff_cut_et.png"
+        et_tuned_cut_plot_path = plot_dir / f"{config_name}_global_model_eff_cut_et.png"
         self.plot_efficiency_vs_feature(
-            et_cut_values,
-            y_h_cut,
-            preds_cut_cut,
-            path_et_cut,
+            filtered_transverse_energy_gev,
+            filtered_targets,
+            filtered_predictions_tuned_cut,
+            et_tuned_cut_plot_path,
             feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV) (Proposed Cut)",
             bins=10,
             label="Efficiency (Proposed Cut)",
         )
 
-        path_eta_05 = plot_dir / f"{config_name}_global_model_eff_05_eta.png"
+        eta_default_threshold_plot_path = plot_dir / f"{config_name}_global_model_eff_05_eta.png"
         self.plot_efficiency_vs_feature(
-            eta_cut_values,
-            y_h_cut,
-            preds_05_cut,
-            path_eta_05,
+            filtered_pseudorapidity_values,
+            filtered_targets,
+            filtered_predictions_default,
+            eta_default_threshold_plot_path,
             feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV)",
             bins=20,
             label="Efficiency (Threshold 0.5)",
         )
 
-        path_eta_cut = plot_dir / f"{config_name}_global_model_eff_cut_eta.png"
+        eta_tuned_cut_plot_path = plot_dir / f"{config_name}_global_model_eff_cut_eta.png"
         self.plot_efficiency_vs_feature(
-            eta_cut_values,
-            y_h_cut,
-            preds_cut_cut,
-            path_eta_cut,
+            filtered_pseudorapidity_values,
+            filtered_targets,
+            filtered_predictions_tuned_cut,
+            eta_tuned_cut_plot_path,
             feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV) (Proposed Cut)",
             bins=20,
             label="Efficiency (Proposed Cut)",

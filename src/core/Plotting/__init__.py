@@ -9,6 +9,7 @@ from .MetricPlotter import (
 )
 from .PlotManager import PlotManager
 from .ProfilePlotter import ProfileMeanEnergyPlotter
+from .RegionDistributionPlotter import RegionDistributionPlotter
 
 __all__ = [
     "RegionPlotContext",
@@ -21,4 +22,5 @@ __all__ = [
     "ConvLayerPlotter",
     "SaliencyMapPlotter",
     "PlotManager",
+    "RegionDistributionPlotter",
 ]

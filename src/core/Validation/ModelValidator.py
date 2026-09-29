@@ -169,32 +169,11 @@ class ModelValidator:
             test_indices, _ = self.manifest.get_region_splits(region_key)
 
             target_index = matched_indices[0]
-            data, target, _ = self.trainer.full_dataset[target_index]
+            data, target, data_path = self.trainer.full_dataset[target_index]
+            log.info(f"Using {data_path} for region {region_name}")
 
             best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_details(df)
             self.model.load_state_dict(best_model["best_weights"])
-
-            # context = RegionPlotContext(
-            #     iet=iet,
-            #     ieta=ieta,
-            #     output_dir=self.plot_dir,
-            #     data=data,
-            #     target=target,
-            #     test_indices=test_indices,
-            #     trainer=self.trainer,
-            #     model=self.model,
-            # )
-
-            # self.roc_plotter.plot(
-            #     context,
-            #     best_model_details=best_model["history"]["callbackMetrics"],
-            # )
-
-            # self.profile_plotter.plot(
-            #     context,
-            #     x_rings=context.x_holdout_rings,
-            #     plot_name="RingsMeanProfiles_NeuralRinger",
-            # )
 
             result = self.evaluator.evaluate(
                 model=self.model,
