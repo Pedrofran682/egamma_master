@@ -54,7 +54,7 @@ class PlotterRunner:
         Args:
             results_path: Directory path where training result files are located.
             drive_path: Directory path where raw dataset files are stored.
-            output_dir: Target directory for plots (defaults to Plots/<yaml_name>).
+            output_dir: Target directory for plots (defaults to Plots/<results_folder_name>).
             config_path: Optional path to YAML configuration file.
         """
         self.results_path: Path = Path(results_path)
@@ -63,11 +63,13 @@ class PlotterRunner:
 
         if output_dir:
             self.output_dir: Path = Path(output_dir)
-        elif config_path:
-            self.output_dir = Path("Plots") / Path(config_path).stem
         else:
-            match = re.match(r"^config_name(.*)_id\d+$", self.results_path.name)
-            target_name = match.group(1) if match else (self.results_path.name or "default")
+            target_name = (
+                self.results_path.parent.name
+                if self.results_path.is_file()
+                or self.results_path.suffix in [".pkl", ".npz", ".pt"]
+                else (self.results_path.name or "default")
+            )
             self.output_dir = Path("Plots") / target_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

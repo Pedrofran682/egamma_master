@@ -149,14 +149,27 @@ class TestMetricPlotter(unittest.TestCase):
             results_path="results/model_test_run",
             config_path="config/NeuralRinger/ModelV1_ConfigTest.yaml",
         )
-        self.assertEqual(str(runner.output_dir), "Plots/ModelV1_ConfigTest")
+        self.assertEqual(str(runner.output_dir), "Plots/model_test_run")
         self.assertTrue(runner.output_dir.exists())
 
-    def test_plotter_runner_extracted_config_name_output_dir(self) -> None:
+    def test_plotter_runner_preserves_results_folder_name(self) -> None:
         runner = PlotterRunner(
             results_path="results/config_nameModelV5_RunName_id20260928210000"
         )
-        self.assertEqual(str(runner.output_dir), "Plots/ModelV5_RunName")
+        self.assertEqual(
+            str(runner.output_dir),
+            "Plots/config_nameModelV5_RunName_id20260928210000",
+        )
+        self.assertTrue(runner.output_dir.exists())
+
+    def test_plotter_runner_file_path_output_dir(self) -> None:
+        runner = PlotterRunner(
+            results_path="results/config_nameModelV5_RunName_id20260928210000/model_et1_eta1.pkl"
+        )
+        self.assertEqual(
+            str(runner.output_dir),
+            "Plots/config_nameModelV5_RunName_id20260928210000",
+        )
         self.assertTrue(runner.output_dir.exists())
 
     def test_roc_plot_runner_output_dirs(self) -> None:
