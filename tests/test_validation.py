@@ -127,9 +127,15 @@ class TestValidation(unittest.TestCase):
         with patch.object(ModelValidator, "_load_config", return_value=mock_config):
             with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer"):
                 custom_dir = os.path.join(self.temp_dir.name, "ValidationRunTest")
+                run_dir = os.path.join(self.temp_dir.name, "RunDir")
+                os.makedirs(run_dir, exist_ok=True)
+                manifest_path = os.path.join(run_dir, "split_manifest.json")
+                with open(manifest_path, "w") as f:
+                    f.write("{}")
+
                 validator = ModelValidator(
                     config_path="config/TestModel.yaml",
-                    data_path="results/TestRun",
+                    data_path=run_dir,
                     output_dir=custom_dir,
                 )
                 validator.aggregator = MagicMock()
@@ -145,6 +151,112 @@ class TestValidation(unittest.TestCase):
                     expected_validation_dir,
                     "TestConfig",
                 )
+
+    def test_model_validator_raises_when_manifest_missing(self):
+        from unittest.mock import MagicMock, patch
+        from src.core.Validation.ModelValidator import ModelValidator
+
+        mock_config = MagicMock()
+        with patch.object(ModelValidator, "_load_config", return_value=mock_config):
+            with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer"):
+                empty_run_dir = os.path.join(self.temp_dir.name, "EmptyRunDir")
+                os.makedirs(empty_run_dir, exist_ok=True)
+                validator = ModelValidator(
+                    config_path="config/TestModel.yaml",
+                    data_path=empty_run_dir,
+                )
+                with self.assertRaises(FileNotFoundError):
+                    validator.run()
+
+    def test_model_validator_retrieves_exact_manifest_test_indices(self):
+        import json
+        from unittest.mock import MagicMock, patch
+        from src.core.Validation.ModelValidator import ModelValidator
+
+        mock_config = MagicMock()
+        mock_config.config_name = "TestConfig"
+        with patch.object(ModelValidator, "_load_config", return_value=mock_config):
+            with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer") as mock_trainer_cls:
+                mock_trainer = MagicMock()
+                mock_trainer_cls.return_value = mock_trainer
+                mock_trainer.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
+                mock_trainer.full_dataset.ring_column_indices = np.arange(10)
+                mock_trainer.full_dataset.__getitem__.return_value = (
+                    np.zeros((50, 10), dtype=np.float32),
+                    np.zeros(50, dtype=np.int32),
+                    "consolidated.et1.eta1.npz",
+                )
+
+                run_dir = os.path.join(self.temp_dir.name, "ManifestRunDir")
+                os.makedirs(run_dir, exist_ok=True)
+                manifest_path = os.path.join(run_dir, "split_manifest.json")
+                expected_test_indices = [2, 5, 8, 12]
+                with open(manifest_path, "w") as f:
+                    json.dump(
+                        {
+                            "et_1_eta_1": {
+                                "test_indices": expected_test_indices,
+                                "cv_splits": [],
+                            }
+                        },
+                        f,
+                    )
+
+                validator = ModelValidator(
+                    config_path="config/TestModel.yaml",
+                    data_path=run_dir,
+                    output_dir=os.path.join(self.temp_dir.name, "OutputPlots"),
+                )
+                validator.aggregator = MagicMock()
+                fake_df = pd.DataFrame(
+                    [{"reapet": 0, "best_sp_value": 0.95, "best_weights": {}, "history": {"callbackMetrics": {}}}]
+                )
+                validator.aggregator.group_and_concat.return_value = {"iet1.ieta1": fake_df}
+                validator.aggregator.get_best_model_details.return_value = (
+                    {"best_weights": {}, "history": {"callbackMetrics": {}}},
+                    0,
+                    0.95,
+                    0.0,
+                )
+                validator.evaluator = MagicMock()
+                validator.roc_plotter = MagicMock()
+                validator.profile_plotter = MagicMock()
+                validator.efficiency_plotter = MagicMock()
+
+                validator.run()
+
+                validator.evaluator.evaluate.assert_called_once()
+                call_kwargs = validator.evaluator.evaluate.call_args[1]
+                np.testing.assert_array_equal(call_kwargs["test_indices"], np.array(expected_test_indices))
+
+    def test_model_validator_raises_when_region_missing_in_manifest(self):
+        import json
+        from unittest.mock import MagicMock, patch
+        from src.core.Validation.ModelValidator import ModelValidator
+
+        mock_config = MagicMock()
+        with patch.object(ModelValidator, "_load_config", return_value=mock_config):
+            with patch("src.core.Validation.ModelValidator.NeuralRingerTrainer") as mock_trainer_cls:
+                mock_trainer = MagicMock()
+                mock_trainer_cls.return_value = mock_trainer
+                mock_trainer.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
+
+                run_dir = os.path.join(self.temp_dir.name, "MissingRegionRunDir")
+                os.makedirs(run_dir, exist_ok=True)
+                manifest_path = os.path.join(run_dir, "split_manifest.json")
+                with open(manifest_path, "w") as f:
+                    json.dump({"et_2_eta_2": {"test_indices": [1], "cv_splits": []}}, f)
+
+                validator = ModelValidator(
+                    config_path="config/TestModel.yaml",
+                    data_path=run_dir,
+                )
+                fake_df = pd.DataFrame([{"reapet": 0, "best_sp_value": 0.9}])
+                validator.aggregator = MagicMock()
+                validator.aggregator.group_and_concat.return_value = {"iet1.ieta1": fake_df}
+
+                with self.assertRaises(KeyError):
+                    validator.run()
 
 
 if __name__ == "__main__":

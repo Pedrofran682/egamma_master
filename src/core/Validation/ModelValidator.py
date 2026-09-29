@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from src.core.Datasets.SplitManifest import SplitManifest
 from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.MetricPlotter import RocPlotter
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
@@ -25,6 +26,8 @@ class ModelValidator:
     Attributes:
         config_instance: NeuralRingerTrainerConfiguration object.
         data_path: Path to the directory holding model run pickles.
+        manifest_path: Path to the expected split manifest JSON file.
+        manifest: SplitManifest manager instance for loading deterministic partitions.
         plot_dir: Directory where figures and plots will be placed.
         reference_eff_df: Optional reference efficiency benchmark DataFrame.
         trainer: NeuralRingerTrainer instance used for dataset indexing and device context.
@@ -56,6 +59,8 @@ class ModelValidator:
         self.config_path: pathlib.Path = pathlib.Path(config_path)
         self.config_instance: NeuralRingerTrainerConfiguration = self._load_config(config_path)
         self.data_path: pathlib.Path = pathlib.Path(data_path)
+        self.manifest_path: pathlib.Path = self.data_path / "split_manifest.json"
+        self.manifest: SplitManifest = SplitManifest(str(self.manifest_path))
         if output_dir is not None:
             self.plot_dir: pathlib.Path = pathlib.Path(output_dir)
         else:
@@ -120,7 +125,18 @@ class ModelValidator:
         return self.evaluator.default_target_pd
 
     def run(self) -> None:
-        """Executes full validation workflow across all kinematic regions."""
+        """Executes full validation workflow across all kinematic regions.
+
+        Raises:
+            FileNotFoundError: If the split manifest file does not exist in data_path.
+            KeyError: If a kinematic region key is missing from the split manifest.
+        """
+        if not self.manifest.exists():
+            raise FileNotFoundError(
+                f"Split manifest not found at {self.manifest_path}. Validation requires persisted splits."
+            )
+        self.manifest.load()
+
         grouped_dfs = self.aggregator.group_and_concat()
         all_results: List[HoldoutEvaluationResult] = []
 
@@ -134,16 +150,20 @@ class ModelValidator:
             target_pd = self._get_target_pd(iet, ieta)
 
             file_name_pattern = f"consolidated.et{iet}.eta{ieta}.npz"
-            all_paths = np.array([item for item in self.trainer.full_dataset.file_paths])
+            all_paths = np.array(
+                [str(item) for item in self.trainer.full_dataset.file_paths], dtype=str
+            )
             matched_indices = np.where(np.char.find(all_paths, file_name_pattern) != -1)[0]
 
             if len(matched_indices) == 0:
                 log.warning(f"File pattern '{file_name_pattern}' not found. Skipping region...")
                 continue
 
+            region_key = f"et_{iet}_eta_{ieta}"
+            test_indices, _ = self.manifest.get_region_splits(region_key)
+
             target_index = matched_indices[0]
             data, target, _ = self.trainer.full_dataset[target_index]
-            test_indices, _ = self.trainer.generate_folds_with_holdout(data, target)
 
             best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_details(df)
             self.model.load_state_dict(best_model["best_weights"])
