@@ -61,9 +61,9 @@ Output results and checkpoints are stored in `results/` and execution logs in `l
   ```
 
 ### Validating Models
-Compare model performance against benchmark threshold cuts:
+Compare model performance against benchmark threshold cuts (supports optional `--efficiencies_csv` and `--target_pd`):
 ```bash
-conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/
+conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/ [--efficiencies_csv <csv_path>] [--target_pd 0.9424]
 ```
 Calculate ATLAS baseline fast photon cut efficiencies:
 ```bash

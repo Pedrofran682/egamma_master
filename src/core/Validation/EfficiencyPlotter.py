@@ -17,8 +17,8 @@ class EfficiencyPlotter:
 
     def __init__(
         self,
-        et_index: int = 1,
-        eta_index: int = 2,
+        et_index: int,
+        eta_index: int,
         et_cutoff: float = 150000.0,
     ) -> None:
         """Initializes EfficiencyPlotter with column indices and energy cutoff.

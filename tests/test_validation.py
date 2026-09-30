@@ -123,9 +123,28 @@ class TestValidation(unittest.TestCase):
 
         # Test CLI parser in validate_pd.py
         parsed = validate_pd_module.parser.parse_args(
-            ["--config", "conf.yaml", "--data_path", "results/test", "--output_dir", "Plots/custom"]
+            [
+                "--config",
+                "conf.yaml",
+                "--data_path",
+                "results/test",
+                "--output_dir",
+                "Plots/custom",
+                "--efficiencies_csv",
+                "custom_eff.csv",
+                "--target_pd",
+                "0.95",
+            ]
         )
         self.assertEqual(parsed.output_dir, "Plots/custom")
+        self.assertEqual(parsed.efficiencies_csv, "custom_eff.csv")
+        self.assertAlmostEqual(parsed.target_pd, 0.95)
+
+        parsed_defaults = validate_pd_module.parser.parse_args(
+            ["--config", "conf.yaml", "--data_path", "results/test"]
+        )
+        self.assertIsNone(parsed_defaults.efficiencies_csv)
+        self.assertAlmostEqual(parsed_defaults.target_pd, 0.9424)
 
     def test_plot_regional_efficiency(self):
         evaluator = HoldoutEvaluator(default_target_pd=0.90)

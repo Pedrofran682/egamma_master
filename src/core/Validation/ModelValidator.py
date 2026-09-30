@@ -44,7 +44,7 @@ class ModelValidator:
         self,
         config_path: str,
         data_path: str,
-        efficiencies_csv: str = "efficiencies_by_region.csv",
+        efficiencies_csv: str | pathlib.Path | None = None,
         default_target_pd: float = 0.9424,
         output_dir: str | pathlib.Path | None = None,
     ) -> None:
@@ -53,7 +53,7 @@ class ModelValidator:
         Args:
             config_path: YAML file path containing run configuration.
             data_path: Directory path holding result pickle archives.
-            efficiencies_csv: Path to reference operating point CSV table.
+            efficiencies_csv: Optional path to reference operating point CSV table.
             default_target_pd: Fallback target signal efficiency (default 0.9424).
             output_dir: Optional destination directory for plots (defaults to Plots/<results_folder_name>).
         """
@@ -100,16 +100,16 @@ class ModelValidator:
             return NeuralRingerTrainerConfiguration.model_validate(yaml_data)
 
     @staticmethod
-    def _load_reference_efficiencies(path: str) -> pd.DataFrame | None:
+    def _load_reference_efficiencies(path: str | pathlib.Path | None) -> pd.DataFrame | None:
         """Loads reference benchmark efficiencies from CSV if available.
 
         Args:
-            path: CSV file path.
+            path: Optional CSV file path.
 
         Returns:
-            Parsed DataFrame or None if file does not exist.
+            Parsed DataFrame or None if file does not exist or path is None.
         """
-        if os.path.exists(path):
+        if path is not None and os.path.exists(path):
             log.info(f"Loading reference efficiencies from {path}")
             return pd.read_csv(path)
         return None
