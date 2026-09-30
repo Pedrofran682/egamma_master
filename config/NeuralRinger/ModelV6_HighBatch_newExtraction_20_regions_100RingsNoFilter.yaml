@@ -1,4 +1,4 @@
-config_name: "ModelV6_HighBatch_newExtraction_20_regions_100Rings"
+config_name: "ModelV6_HighBatch_newExtraction_20_regions_100RingsNoFilter"
 batch_size: 512
 epochs: 1000
 n_initializations: 3
