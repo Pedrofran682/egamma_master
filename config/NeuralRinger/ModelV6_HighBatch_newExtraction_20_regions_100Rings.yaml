@@ -8,8 +8,8 @@ debug: false
 balance_data: False
 
 
-et_range_idx: [1]
-eta_range_idx: [1]
+et_range_idx: [0,1,2,3,4]
+eta_range_idx: [0,1,2,3,4]
 
 loss_function:
   module: "torch.nn"
