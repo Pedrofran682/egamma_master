@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Tuple
 import numpy as np
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 
 class SplitManifest:
@@ -40,6 +40,7 @@ class SplitManifest:
         """
         with open(self.manifest_file, "r") as f:
             self.data = json.load(f)
+        log.info(f"Loaded existing split manifest from: {self.manifest_file}")
         return self.data
 
     def save(self, data: Dict[str, Any] | None = None) -> None:
@@ -53,6 +54,7 @@ class SplitManifest:
         os.makedirs(os.path.dirname(self.manifest_file), exist_ok=True)
         with open(self.manifest_file, "w") as f:
             json.dump(self.data, f, indent=4)
+        log.info(f"Saved split manifest to: {self.manifest_file}")
 
     def create_region_splits(
         self,
@@ -102,6 +104,9 @@ class SplitManifest:
             "test_indices": holdout_indices,
             "cv_splits": cv_splits,
         }
+        log.info(
+            f"Created new splits for region '{region_key}' (test={len(holdout_indices)}, folds={len(cv_splits)})."
+        )
         return np.array(holdout_indices, dtype=np.int64), [
             (
                 np.array(split["train"], dtype=np.int64),
@@ -138,6 +143,7 @@ class SplitManifest:
             )
             for split in region_data["cv_splits"]
         ]
+        log.info(f"Retrieved existing splits for region '{region_key}' from manifest.")
         return test_indices, cv_splits
 
     def get_or_create_region_splits(
@@ -161,11 +167,18 @@ class SplitManifest:
             A tuple of (holdout test sample indices array, list of CV fold index tuples).
         """
         if self.exists() and not self.data:
+            log.info(f"Found existing manifest file at '{self.manifest_file}'. Loading partitions.")
             self.load()
 
         if region_key in self.data:
+            log.info(
+                f"Using existing split for region '{region_key}' from manifest: {self.manifest_file}"
+            )
             return self.get_region_splits(region_key)
 
+        log.info(
+            f"No existing split for region '{region_key}'. Creating new splits and saving to manifest: {self.manifest_file}"
+        )
         splits = self.create_region_splits(
             region_key, features, labels, kfold_splitter, test_fold_idx
         )
