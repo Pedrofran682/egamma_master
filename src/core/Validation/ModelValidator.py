@@ -171,9 +171,10 @@ class ModelValidator:
             log.info(f"Using {data_path} for region iet{iet}.ieta{ieta}")
 
             if hasattr(self.aggregator, "get_best_model_for_region"):
+                log.info("Getting best model for the region")
                 best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(iet, ieta)
             else:
-                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_details(None)
+                raise Exception("Could not load the best model for et and eta region (iet={}, ieta={})".format(iet, ieta))
             self.model.load_state_dict(best_model["best_weights"])
 
             target_pd = self._get_target_pd(iet, ieta)
