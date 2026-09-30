@@ -6,6 +6,7 @@ from logging.config import fileConfig
 
 import yaml
 
+from src.core.Handlers.ProcessLifecycleManager import ProcessLifecycleManager
 from src.core.Trainers.NeuralRingerTrainer import NeuralRingerTrainer
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 
@@ -19,6 +20,9 @@ fileConfig(
     disable_existing_loggers=False,
 )
 log = logging.getLogger(__name__)
+lifecycle_manager = ProcessLifecycleManager(log)
+lifecycle_manager.install()
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build and configure the command-line argument parser.
