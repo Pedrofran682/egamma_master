@@ -149,6 +149,7 @@ class ModelValidator:
 
         et_filter = getattr(self.config_instance, "et_range_idx", None)
         eta_filter = getattr(self.config_instance, "eta_range_idx", None)
+        all_results: List[HoldoutEvaluationResult] = []
 
         for index in range(len(self.trainer.full_dataset)):
             data_path = self.trainer.full_dataset.file_paths[index]
@@ -192,4 +193,12 @@ class ModelValidator:
                 ieta=ieta,
                 plot_dir=validation_dir,
                 config_name=self.config_instance.config_name,
+            )
+            all_results.append(result)
+
+        if all_results:
+            self.efficiency_plotter.generate_global_plots(
+                all_results,
+                validation_dir,
+                self.config_instance.config_name,
             )

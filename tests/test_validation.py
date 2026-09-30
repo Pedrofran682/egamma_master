@@ -262,6 +262,7 @@ class TestValidation(unittest.TestCase):
                 call_kwargs = validator.evaluator.evaluate.call_args[1]
                 np.testing.assert_array_equal(call_kwargs["test_indices"], np.array(expected_test_indices))
                 validator.efficiency_plotter.plot_regional_efficiency.assert_called_once()
+                validator.efficiency_plotter.generate_global_plots.assert_called_once()
 
     def test_model_validator_raises_when_region_missing_in_manifest(self):
         import json

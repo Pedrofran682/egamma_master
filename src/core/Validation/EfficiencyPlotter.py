@@ -57,6 +57,9 @@ class EfficiencyPlotter:
         signal_feature_values = feature_values[signal_mask]
         signal_predictions = preds[signal_mask]
 
+        if len(signal_feature_values) == 0:
+            return
+
         bin_edges = np.histogram_bin_edges(signal_feature_values, bins=bins)
         bin_centers: List[float] = []
         efficiencies: List[float] = []
