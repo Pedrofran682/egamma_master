@@ -16,6 +16,7 @@ from src.core.Validation.EfficiencyPlotter import EfficiencyPlotter
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluationResult, HoldoutEvaluator
 from src.core.Validation.ResultAggregator import ResultAggregator
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
+from src.utils import get_et_eta
 
 log = logging.getLogger()
 
@@ -143,38 +144,38 @@ class ModelValidator:
             )
         self.manifest.load()
 
-        grouped_dfs = self.aggregator.group_and_concat()
-        all_results: List[HoldoutEvaluationResult] = []
+        validation_dir = self.plot_dir / "Validation"
+        validation_dir.mkdir(parents=True, exist_ok=True)
 
-        for region_name, df in grouped_dfs.items():
-            if region_name == "undefined_region":
+        et_filter = getattr(self.config_instance, "et_range_idx", None)
+        eta_filter = getattr(self.config_instance, "eta_range_idx", None)
+
+        for index in range(len(self.trainer.full_dataset)):
+            data_path = self.trainer.full_dataset.file_paths[index]
+            iet, ieta = get_et_eta(data_path)
+
+            if isinstance(et_filter, (list, tuple, set)) and iet not in et_filter:
+                continue
+            if isinstance(eta_filter, (list, tuple, set)) and ieta not in eta_filter:
                 continue
 
-            match = re.search(r"iet(\d+)\.ieta(\d+)", region_name)
-            iet = int(match.group(1)) if match else 1
-            ieta = int(match.group(2)) if match else 1
-            target_pd = self._get_target_pd(iet, ieta)
-
-            file_name_pattern = f"consolidated.et{iet}.eta{ieta}.npz"
-            all_paths = np.array(
-                [str(item) for item in self.trainer.full_dataset.file_paths], dtype=str
-            )
-            matched_indices = np.where(np.char.find(all_paths, file_name_pattern) != -1)[0]
-
-            if len(matched_indices) == 0:
-                log.warning(f"File pattern '{file_name_pattern}' not found. Skipping region...")
+            if hasattr(self.aggregator, "has_region") and not self.aggregator.has_region(iet, ieta):
+                log.warning(f"No result records found for region iet{iet}.ieta{ieta}. Skipping...")
                 continue
 
             region_key = f"et_{iet}_eta_{ieta}"
             test_indices, _ = self.manifest.get_region_splits(region_key)
 
-            target_index = matched_indices[0]
-            data, target, data_path = self.trainer.full_dataset[target_index]
-            log.info(f"Using {data_path} for region {region_name}")
+            data, target, _ = self.trainer.full_dataset[index]
+            log.info(f"Using {data_path} for region iet{iet}.ieta{ieta}")
 
-            best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_details(df)
+            if hasattr(self.aggregator, "get_best_model_for_region"):
+                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(iet, ieta)
+            else:
+                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_details(None)
             self.model.load_state_dict(best_model["best_weights"])
 
+            target_pd = self._get_target_pd(iet, ieta)
             result = self.evaluator.evaluate(
                 model=self.model,
                 data=data,
@@ -185,12 +186,10 @@ class ModelValidator:
                 target_pd=target_pd,
             )
 
-            all_results.append(result)
-
-        validation_dir = self.plot_dir / "Validation"
-        validation_dir.mkdir(parents=True, exist_ok=True)
-        self.efficiency_plotter.generate_global_plots(
-            all_results,
-            validation_dir,
-            self.config_instance.config_name,
-        )
+            self.efficiency_plotter.plot_regional_efficiency(
+                result=result,
+                iet=iet,
+                ieta=ieta,
+                plot_dir=validation_dir,
+                config_name=self.config_instance.config_name,
+            )

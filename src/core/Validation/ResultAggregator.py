@@ -22,6 +22,7 @@ class ResultAggregator:
             directory_path: Folder containing fold/repeat result pickle archives.
         """
         self.directory_path: pathlib.Path = pathlib.Path(directory_path)
+        self._grouped_dfs: Dict[str, pd.DataFrame] | None = None
 
     def group_and_concat(self) -> Dict[str, pd.DataFrame]:
         """Scans directory for .pkl files, groups them by region, and concatenates statistics.
@@ -53,7 +54,51 @@ class ResultAggregator:
             else:
                 grouped_dfs[group_key] = pd.DataFrame()
 
+        self._grouped_dfs = grouped_dfs
         return grouped_dfs
+
+    def has_region(self, et: int, eta: int) -> bool:
+        """Checks if result records exist for a specified kinematic region.
+
+        Args:
+            et: Transverse energy bin index.
+            eta: Pseudorapidity bin index.
+
+        Returns:
+            True if records exist for the region, False otherwise.
+        """
+        region_key = f"iet{et}.ieta{eta}"
+        if self._grouped_dfs is None:
+            self._grouped_dfs = self.group_and_concat()
+        return region_key in self._grouped_dfs and not self._grouped_dfs[region_key].empty
+
+    def get_best_model_for_region(
+        self, et: int, eta: int
+    ) -> Tuple[Dict[str, Any], int, float, float]:
+        """Extracts the best model details specifically for a given kinematic region.
+
+        Args:
+            et: Transverse energy bin index.
+            eta: Pseudorapidity bin index.
+
+        Returns:
+            A tuple containing:
+                - Dictionary representation of the best model row (weights, metrics).
+                - Best repetition index.
+                - Mean SP value across folds for that repetition.
+                - Standard deviation of the SP values across folds.
+
+        Raises:
+            KeyError: If no result records exist for the specified region.
+        """
+        region_key = f"iet{et}.ieta{eta}"
+        if self._grouped_dfs is None:
+            self._grouped_dfs = self.group_and_concat()
+        if region_key not in self._grouped_dfs or self._grouped_dfs[region_key].empty:
+            raise KeyError(
+                f"No result records found for region '{region_key}' in {self.directory_path}."
+            )
+        return self.get_best_model_details(self._grouped_dfs[region_key])
 
     @staticmethod
     def get_best_model_details(df: pd.DataFrame) -> Tuple[Dict[str, Any], int, float, float]:

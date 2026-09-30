@@ -102,6 +102,85 @@ class EfficiencyPlotter:
         plt.savefig(file_path, format="png", transparent=True, bbox_inches="tight")
         plt.close(figure)
 
+    def plot_regional_efficiency(
+        self,
+        result: HoldoutEvaluationResult,
+        iet: int,
+        ieta: int,
+        plot_dir: pathlib.Path,
+        config_name: str,
+    ) -> None:
+        """Generates efficiency vs ET and eta curves for a single kinematic region.
+
+        Args:
+            result: HoldoutEvaluationResult for the given region.
+            iet: Transverse energy bin index.
+            ieta: Pseudorapidity bin index.
+            plot_dir: Target output directory.
+            config_name: Model configuration name used in filenames.
+        """
+        features = result.holdout_features_full
+        targets = result.holdout_labels
+        predictions_default = result.predictions_default_threshold
+        predictions_tuned = result.predictions_calibrated_cut
+
+        transverse_energies = features[:, self.et_index]
+        energy_filter_mask = transverse_energies < self.et_cutoff
+
+        filtered_features = features[energy_filter_mask]
+        filtered_targets = targets[energy_filter_mask]
+        filtered_predictions_default = predictions_default[energy_filter_mask]
+        filtered_predictions_tuned = predictions_tuned[energy_filter_mask]
+
+        filtered_transverse_energy_gev = filtered_features[:, self.et_index] / 1000.0
+        filtered_pseudorapidity_values = filtered_features[:, self.eta_index]
+        et_cutoff_gev = int(self.et_cutoff / 1000)
+        prefix = f"{config_name}_iet{iet}_ieta{ieta}"
+
+        et_standard_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_et_standard_cut.png"
+        self.plot_efficiency_vs_feature(
+            filtered_transverse_energy_gev,
+            filtered_targets,
+            filtered_predictions_default,
+            et_standard_cut_plot_path,
+            feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV)",
+            bins=10,
+            label="Efficiency (Threshold 0.5)",
+        )
+
+        et_target_pd_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_et_target_pd_cut.png"
+        self.plot_efficiency_vs_feature(
+            filtered_transverse_energy_gev,
+            filtered_targets,
+            filtered_predictions_tuned,
+            et_target_pd_cut_plot_path,
+            feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV) (Proposed Cut)",
+            bins=10,
+            label="Efficiency (Proposed Cut)",
+        )
+
+        eta_standard_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_eta_standard_cut.png"
+        self.plot_efficiency_vs_feature(
+            filtered_pseudorapidity_values,
+            filtered_targets,
+            filtered_predictions_default,
+            eta_standard_cut_plot_path,
+            feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV)",
+            bins=20,
+            label="Efficiency (Threshold 0.5)",
+        )
+
+        eta_target_pd_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_eta_target_pd_cut.png"
+        self.plot_efficiency_vs_feature(
+            filtered_pseudorapidity_values,
+            filtered_targets,
+            filtered_predictions_tuned,
+            eta_target_pd_cut_plot_path,
+            feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV) (Proposed Cut)",
+            bins=20,
+            label="Efficiency (Proposed Cut)",
+        )
+
     def generate_global_plots(
         self,
         results: List[HoldoutEvaluationResult],

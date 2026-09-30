@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
+from src.core.Validation.EfficiencyPlotter import EfficiencyPlotter
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
 from src.core.Validation.ResultAggregator import ResultAggregator
 
@@ -63,6 +64,14 @@ class TestValidation(unittest.TestCase):
         self.assertAlmostEqual(mean_sp, 0.93, places=2)
         self.assertEqual(best_model["best_sp_value"], 0.94)
 
+        self.assertTrue(aggregator.has_region(1, 1))
+        self.assertFalse(aggregator.has_region(2, 2))
+        best_model_reg, best_rep_reg, mean_sp_reg, std_sp_reg = aggregator.get_best_model_for_region(1, 1)
+        self.assertEqual(best_rep_reg, 2)
+        self.assertEqual(best_model_reg["best_sp_value"], 0.94)
+        with self.assertRaises(KeyError):
+            aggregator.get_best_model_for_region(2, 2)
+
     def test_evaluate_holdout(self):
         test_indices = np.arange(40)
         ring_indices = np.arange(10)
@@ -118,6 +127,37 @@ class TestValidation(unittest.TestCase):
         )
         self.assertEqual(parsed.output_dir, "Plots/custom")
 
+    def test_plot_regional_efficiency(self):
+        evaluator = HoldoutEvaluator(default_target_pd=0.90)
+        result = evaluator.evaluate(
+            model=self.model,
+            data=self.features,
+            target=self.labels,
+            test_indices=np.arange(40),
+            ring_column_indices=np.arange(10),
+            device=torch.device("cpu"),
+            target_pd=0.90,
+        )
+        plotter = EfficiencyPlotter(et_index=1, eta_index=2)
+        out_dir = pathlib.Path(self.temp_dir.name) / "RegionPlots"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        plotter.plot_regional_efficiency(
+            result, iet=1, ieta=2, plot_dir=out_dir, config_name="TestModel"
+        )
+
+        self.assertTrue(
+            (out_dir / "TestModel_iet1_ieta2_signal_efficiency_vs_et_standard_cut.png").exists()
+        )
+        self.assertTrue(
+            (out_dir / "TestModel_iet1_ieta2_signal_efficiency_vs_et_target_pd_cut.png").exists()
+        )
+        self.assertTrue(
+            (out_dir / "TestModel_iet1_ieta2_signal_efficiency_vs_eta_standard_cut.png").exists()
+        )
+        self.assertTrue(
+            (out_dir / "TestModel_iet1_ieta2_signal_efficiency_vs_eta_target_pd_cut.png").exists()
+        )
+
     def test_model_validator_run_routes_validation_plots_to_subfolder(self):
         from unittest.mock import MagicMock, patch
         from src.core.Validation.ModelValidator import ModelValidator
@@ -138,19 +178,14 @@ class TestValidation(unittest.TestCase):
                     data_path=run_dir,
                     output_dir=custom_dir,
                 )
-                validator.aggregator = MagicMock()
-                validator.aggregator.group_and_concat.return_value = {}
+                validator.trainer = MagicMock()
+                validator.trainer.full_dataset = []
                 validator.efficiency_plotter = MagicMock()
 
                 validator.run()
 
                 expected_validation_dir = pathlib.Path(custom_dir) / "Validation"
                 self.assertTrue(expected_validation_dir.exists())
-                validator.efficiency_plotter.generate_global_plots.assert_called_once_with(
-                    [],
-                    expected_validation_dir,
-                    "TestConfig",
-                )
 
     def test_model_validator_raises_when_manifest_missing(self):
         from unittest.mock import MagicMock, patch
@@ -181,6 +216,7 @@ class TestValidation(unittest.TestCase):
                 mock_trainer_cls.return_value = mock_trainer
                 mock_trainer.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
                 mock_trainer.full_dataset.ring_column_indices = np.arange(10)
+                mock_trainer.full_dataset.__len__.return_value = 1
                 mock_trainer.full_dataset.__getitem__.return_value = (
                     np.zeros((50, 10), dtype=np.float32),
                     np.zeros(50, dtype=np.int32),
@@ -208,11 +244,8 @@ class TestValidation(unittest.TestCase):
                     output_dir=os.path.join(self.temp_dir.name, "OutputPlots"),
                 )
                 validator.aggregator = MagicMock()
-                fake_df = pd.DataFrame(
-                    [{"reapet": 0, "best_sp_value": 0.95, "best_weights": {}, "history": {"callbackMetrics": {}}}]
-                )
-                validator.aggregator.group_and_concat.return_value = {"iet1.ieta1": fake_df}
-                validator.aggregator.get_best_model_details.return_value = (
+                validator.aggregator.has_region.return_value = True
+                validator.aggregator.get_best_model_for_region.return_value = (
                     {"best_weights": {}, "history": {"callbackMetrics": {}}},
                     0,
                     0.95,
@@ -228,6 +261,7 @@ class TestValidation(unittest.TestCase):
                 validator.evaluator.evaluate.assert_called_once()
                 call_kwargs = validator.evaluator.evaluate.call_args[1]
                 np.testing.assert_array_equal(call_kwargs["test_indices"], np.array(expected_test_indices))
+                validator.efficiency_plotter.plot_regional_efficiency.assert_called_once()
 
     def test_model_validator_raises_when_region_missing_in_manifest(self):
         import json
@@ -240,6 +274,7 @@ class TestValidation(unittest.TestCase):
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
                 mock_trainer.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
+                mock_trainer.full_dataset.__len__.return_value = 1
 
                 run_dir = os.path.join(self.temp_dir.name, "MissingRegionRunDir")
                 os.makedirs(run_dir, exist_ok=True)
@@ -251,9 +286,8 @@ class TestValidation(unittest.TestCase):
                     config_path="config/TestModel.yaml",
                     data_path=run_dir,
                 )
-                fake_df = pd.DataFrame([{"reapet": 0, "best_sp_value": 0.9}])
                 validator.aggregator = MagicMock()
-                validator.aggregator.group_and_concat.return_value = {"iet1.ieta1": fake_df}
+                validator.aggregator.has_region.return_value = True
 
                 with self.assertRaises(KeyError):
                     validator.run()
