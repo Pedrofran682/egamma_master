@@ -77,14 +77,21 @@ Calculate ATLAS baseline fast photon cut efficiencies:
 conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_path data/consolidated/consolidated.et2.eta2.npz --threshold 20.0
 ```
 
+### 5. Regional Data Distribution Analysis
+Analyze and plot class/event distributions across $E_T$ and $\eta$ calorimeter regions:
+```bash
+conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
+```
+
 ---
 
 ## Codebase Map & File Discovery
 
 - **`src/core/`**:
   - `Datasets/`:
-    - `EgammaNpzDataset.py`: Custom PyTorch Dataset reading `.npz` calorimeter ring data.
-    - `SplitManifest.py`: Cross-validation data partitioning, manifest caching, and deterministic loading.
+    - `EgammaNpzDataset.py`: Custom PyTorch Dataset reading `.npz` calorimeter ring data; exposes `feature_names`.
+    - `EgammaNpzDatasetNoTargetOrigin.py`: Dataset variant omitting target origin extraction.
+    - `SplitManifest.py`: Cross-validation data partitioning, manifest caching, and deterministic loading with operational logging.
   - `Trainers/`:
     - `NeuralRingerTrainer.py`: High-level training lifecycle orchestrator.
     - `FoldTrainer.py`: Isolated single-fold train/validation loop with early stopping.
@@ -95,13 +102,15 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_pat
     - `BasePlotter.py`: Abstract base class for all plotters.
     - `ProfilePlotter.py`: Mean energy ring profile plots.
     - `MetricPlotter.py`: Training loss, SP, and ROC curve plotters.
+    - `RegionDistributionPlotter.py`: 2D heatmap generator for event and class distributions across $E_T$ and $\eta$ bins.
     - `LegacyPlotter.py`: Convolutional feature slice and saliency map visualizers.
     - `Context.py`: Dataclasses encapsulating plotting state (`RegionPlotContext`, `FoldPlotContext`).
   - `Validation/`:
-    - `ModelValidator.py`: End-to-end evaluation pipeline comparing neural models against baseline threshold cuts.
-    - `HoldoutEvaluator.py`: Evaluator computing predictions and SP index on holdout sets.
-    - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator.
-    - `ResultAggregator.py`: Utility aggregating `.pkl` fold outputs into pandas DataFrames.
+    - `ModelValidator.py`: End-to-end evaluation pipeline comparing neural models against baseline threshold cuts, evaluating both regional and global efficiency curves.
+    - `RegionDataDistributionAnalyzer.py`: Scans and tabulates class distributions (signal, background, total) across $E_T$ and $\eta$ regions into structured records and DataFrames.
+    - `HoldoutEvaluator.py`: Evaluator computing holdout metrics and predictions per region.
+    - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator for regional and global evaluations with configurable calorimeter feature indices.
+    - `ResultAggregator.py`: Utility aggregating `.pkl` fold outputs and querying best regional models.
   - `Callbacks/`:
     - `SPCallbackPyTorch.py`: PyTorch callback calculating ROC, SP metric, knee operating points, and early stopping.
 - **`src/Models/`**:
@@ -115,10 +124,12 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_pat
   - Reusable mathematical functions (`norm1`), model weight loaders (`get_best_sp_model`), filesystem helpers (`create_folder`), and string parsers (`get_et_eta`).
 - **`config/NeuralRinger/`**:
   - YAML configuration files controlling dataset paths, model architectures, hyperparameters, and cross-validation folds.
+- **`notebooks/`**:
+  - `validate_results.ipynb`: Interactive Jupyter notebook for validation inspection and plotting.
 - **`scripts/`**:
-  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `runner.sh`).
+  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `runner.sh`).
 - **`tests/`**:
-  - Unit tests covering configuration parsing, split manifests, model registry, trainers, and validation.
+  - Unit tests covering configuration parsing, split manifests, model registry, trainers, regional distribution plotting/analysis, and validation.
 
 ---
 

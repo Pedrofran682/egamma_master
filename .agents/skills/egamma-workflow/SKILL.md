@@ -70,6 +70,12 @@ Calculate ATLAS baseline fast photon cut efficiencies:
 conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_path data/consolidated/consolidated.et2.eta2.npz --threshold 20.0
 ```
 
+### Regional Data Distribution Analysis
+Analyze and visualize class distributions across $E_T$ and $\eta$ regions:
+```bash
+conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
+```
+
 ### Batch Runs
 Run batch sequential trainings via bash runner:
 ```bash
@@ -87,16 +93,17 @@ When searching for or modifying functionality, refer to the following locations:
 | **Model Registry** | `src/Models/ModelRegistry.py` | Auto-discovers all `nn.Module` classes in `src/Models/egamma/` by class name |
 | **Model Architectures** | `src/Models/egamma/*.py` | Individual models (`ModelV1` through `ModelV6`, `Run2_ModelV1`, `Run2_ModelV1_2`) |
 | **Model Factory** | `src/Models/Models.py` | `get_model(tag, input_dim)` delegating to `ModelRegistry` |
-| **Dataset & Splits** | `src/core/Datasets/` | `EgammaNpzDataset.py` (reads `.npz` rings), `SplitManifest.py` (K-fold split persistence) |
+| **Dataset & Splits** | `src/core/Datasets/` | `EgammaNpzDataset.py` (reads `.npz` rings, exposes `feature_names`), `EgammaNpzDatasetNoTargetOrigin.py`, `SplitManifest.py` (K-fold split persistence with logging) |
 | **Trainers** | `src/core/Trainers/` | `NeuralRingerTrainer.py` (coordinator), `FoldTrainer.py` (single fold), `TrainingFactory.py`, `ResultsRecorder.py` |
 | **Callbacks** | `src/core/Callbacks/` | `SPCallbackPyTorch.py` (tracks SP index, knee point, early stopping, best weights) |
-| **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `BasePlotter.py`, `ProfilePlotter.py`, `MetricPlotter.py`, `LegacyPlotter.py`, `Context.py` |
-| **Validation** | `src/core/Validation/` | `ModelValidator.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
+| **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `BasePlotter.py`, `ProfilePlotter.py`, `MetricPlotter.py`, `RegionDistributionPlotter.py` (2D heatmaps), `LegacyPlotter.py`, `Context.py` |
+| **Validation** | `src/core/Validation/` | `ModelValidator.py` (global & regional evaluation), `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
 | **Configuration** | `src/Parser/` | `NeuralRingerTrainerConfiguration.py` (Pydantic schema), `DynamicConfiguration.py` |
 | **Utilities** | `src/utils.py` | L1-norm, metric aggregation, bin extraction, dynamic instantiation |
 | **Configs** | `config/NeuralRinger/` | YAML training specifications |
-| **Entrypoints** | `main.py`, `scripts/*.py` | CLI execution scripts |
-| **Unit Tests** | `tests/` | Pytest test cases |
+| **Notebooks** | `notebooks/` | Interactive analysis (`validate_results.ipynb`) |
+| **Entrypoints** | `main.py`, `scripts/*.py` | CLI execution scripts (`validate_pd.py`, `plot_data_distribution.py`, `run_plots.py`, `run_roc_plots.py`, `calculate_photon_cut_efficiency.py`) |
+| **Unit Tests** | `tests/` | Pytest test cases (`test_region_distribution_plotter.py`, `test_validation.py`, etc.) |
 
 ---
 
