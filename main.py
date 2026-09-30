@@ -20,18 +20,34 @@ fileConfig(
 )
 log = logging.getLogger(__name__)
 
-parser = argparse.ArgumentParser(prog="TrainerRunner")
-parser.add_argument("--config", required=True, type=str)
+def build_parser() -> argparse.ArgumentParser:
+    """Build and configure the command-line argument parser.
+
+    Returns:
+        Configured ArgumentParser instance.
+    """
+    parser = argparse.ArgumentParser(prog="TrainerRunner")
+    parser.add_argument("--config", required=True, type=str, help="Path to YAML training configuration file.")
+    parser.add_argument(
+        "--results_path",
+        required=False,
+        default=None,
+        type=str,
+        help="Optional path to output results directory to resume or store outputs.",
+    )
+    return parser
 
 
 def main(args: argparse.Namespace) -> None:
     """Load YAML training configuration and execute NeuralRingerTrainer.
 
     Args:
-        args: Parsed command-line arguments containing the config path.
+        args: Parsed command-line arguments containing config path and optional results path.
     """
     with open(args.config, "r") as file:
         yaml_data = yaml.safe_load(file)
+        if args.results_path is not None:
+            yaml_data["results_folder_path"] = args.results_path
         config_instance = NeuralRingerTrainerConfiguration.model_validate(yaml_data)
         trainer = NeuralRingerTrainer(
             config_instance,
@@ -40,6 +56,8 @@ def main(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
+    parser = build_parser()
     args = parser.parse_args()
     log.info(args)
     main(args)
+
