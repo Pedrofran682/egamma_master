@@ -1,7 +1,7 @@
 config_name: "ModelV6_HighBatch_newExtraction_20_regions_100Rings"
 batch_size: 512
 epochs: 1000
-n_initializations: 5
+n_initializations: 3
 pred_target_limiar: 0.5
 num_workers: 4
 debug: false
