@@ -44,7 +44,7 @@ conda run -n egamma pytest -v
 ```
 Run a specific test file:
 ```bash
-conda run -n egamma pytest tests/test_model_registry.py -v
+conda run -n egamma pytest tests/models/test_model_registry.py -v
 ```
 
 ### 2. Training Models
@@ -145,7 +145,14 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
 - **`scripts/`**:
   - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `runner.sh`).
 - **`tests/`**:
-  - Unit tests covering configuration parsing, split manifests, model registry, trainers, regional distribution plotting/analysis, and validation.
+  - Organized to mirror `src/`:
+    - `core/datasets/`: Manifest, consolidation, and ROOT generator tests.
+    - `core/trainers/`: Training loop and factory tests.
+    - `core/plotting/`: Metric, regional distribution, and quadrant plotting tests.
+    - `core/validation/`: Benchmark cut, validation pipeline, and quadrant analysis tests.
+    - `models/`: Auto-discovery and model registry tests.
+    - `parser/`: Dynamic configuration and schema parsing tests.
+    - `integration/`: End-to-end training pipeline, CLI entrypoint, and process lifecycle tests.
 
 ---
 

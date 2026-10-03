@@ -32,11 +32,12 @@ Execute the full test suite (pytest configuration is defined in `pytest.ini` wit
 ```bash
 conda run -n egamma pytest -v
 ```
-Execute individual test files:
+Execute individual test files or packages:
 ```bash
-conda run -n egamma pytest tests/test_trainers.py -v
-conda run -n egamma pytest tests/test_model_registry.py -v
-conda run -n egamma pytest tests/test_validation.py -v
+conda run -n egamma pytest tests/core/trainers/test_trainers.py -v
+conda run -n egamma pytest tests/models/test_model_registry.py -v
+conda run -n egamma pytest tests/core/validation/test_validation.py -v
+conda run -n egamma pytest tests/core/validation/test_quadrant_analysis.py -v
 ```
 
 ### Running Model Training
