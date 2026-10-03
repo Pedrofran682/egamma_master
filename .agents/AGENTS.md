@@ -83,6 +83,20 @@ Analyze and plot class/event distributions across $E_T$ and $\eta$ calorimeter r
 conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
 ```
 
+### 6. Quadrant Analysis (Model Comparison)
+Compare two classification models on holdout test partitions across $E_T$ and $\eta$ calorimeter regions:
+```bash
+conda run -n egamma python scripts/run_quadrant_analysis.py \
+    --config1 config/NeuralRinger/ModelV1.yaml \
+    --data_path1 results/<model1_results_dir> \
+    --config2 config/NeuralRinger/ModelV2.yaml \
+    --data_path2 results/<model2_results_dir> \
+    [--threshold_mode calibrated|default] \
+    [--target_pd 0.9424] \
+    [--efficiencies_csv <csv_path>] \
+    [--output_dir Plots/quandrantic_analysis]
+```
+
 ---
 
 ## Codebase Map & File Discovery
@@ -100,6 +114,7 @@ conda run -n egamma python scripts/plot_data_distribution.py --config config/Neu
   - `Plotting/`:
     - `PlotManager.py`: Coordinator dispatching plotting routines.
     - `BasePlotter.py`: Abstract base class for all plotters.
+    - `QuadrantPlotter.py`: 2x2 contingency matrix heatmaps, score scatter partitions, and regional summaries for quadrant analysis.
     - `ProfilePlotter.py`: Mean energy ring profile plots.
     - `MetricPlotter.py`: Training loss, SP, and ROC curve plotters.
     - `RegionDistributionPlotter.py`: 2D heatmap generator for event and class distributions across $E_T$ and $\eta$ bins.
@@ -107,6 +122,7 @@ conda run -n egamma python scripts/plot_data_distribution.py --config config/Neu
     - `Context.py`: Dataclasses encapsulating plotting state (`RegionPlotContext`, `FoldPlotContext`).
   - `Validation/`:
     - `ModelValidator.py`: End-to-end evaluation pipeline comparing neural models against baseline threshold cuts, evaluating both regional and global efficiency curves.
+    - `QuadrantAnalyzer.py`: Holdout test evaluator comparing two models into 4 performance quadrants per region and globally.
     - `RegionDataDistributionAnalyzer.py`: Scans and tabulates class distributions (signal, background, total) across $E_T$ and $\eta$ regions into structured records and DataFrames.
     - `HoldoutEvaluator.py`: Evaluator computing holdout metrics and predictions per region.
     - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator for regional and global evaluations with configurable calorimeter feature indices.

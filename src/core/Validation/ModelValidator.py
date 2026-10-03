@@ -79,8 +79,11 @@ class ModelValidator:
         self.model = self.trainer.factory.create_model()
         self.aggregator: ResultAggregator = ResultAggregator(self.data_path)
         self.evaluator: HoldoutEvaluator = HoldoutEvaluator(default_target_pd=default_target_pd)
-        trig_L2_calo_eta_index = np.where(self.trainer.full_dataset.feature_names == "trig_L2_calo_eta")[0][0]
-        trig_L2_calo_et_index = np.where(self.trainer.full_dataset.feature_names == "trig_L2_calo_et")[0][0]
+        feature_names = np.atleast_1d(getattr(self.trainer.full_dataset, "feature_names", np.array([])))
+        eta_indices = np.where(feature_names == "trig_L2_calo_eta")[0]
+        et_indices = np.where(feature_names == "trig_L2_calo_et")[0]
+        trig_L2_calo_eta_index = int(eta_indices[0]) if len(eta_indices) > 0 else 0
+        trig_L2_calo_et_index = int(et_indices[0]) if len(et_indices) > 0 else 0
         self.efficiency_plotter: EfficiencyPlotter = EfficiencyPlotter(trig_L2_calo_et_index, trig_L2_calo_eta_index)
         self.profile_plotter: ProfileMeanEnergyPlotter = ProfileMeanEnergyPlotter()
         self.roc_plotter: RocPlotter = RocPlotter()
