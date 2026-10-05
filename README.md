@@ -48,10 +48,12 @@ egamma_master/
 - `ProfileMeanEnergyPlotter`: Generates average ring energy profile curves.
 - `ModelMetricsPlotter` & `RocPlotter`: Produces loss/accuracy curves, ROC curves, and performance metrics.
 - `RegionDistributionPlotter`: Generates 2D heatmap grids and multi-panel figures of event distributions across $E_T$ and $\eta$ regions.
+- `QuadrantPlotter`: Renders 2x2 contingency matrix heatmaps, score scatter partitions, and regional summaries for model comparison.
 - `LegacyPlotter`: Keeps `ConvLayerPlotter` and `SaliencyMapPlotter` code archived in the codebase without active pipeline execution.
 
 ### 4. Validation & Holdout Pipeline (`src/core/Validation/`)
 - `ModelValidator`: Main pipeline orchestrator selecting top-performing models and coordinating holdout evaluations.
+- `QuadrantAnalyzer`: Holdout test evaluator comparing two models into 4 performance quadrants per region and globally with McNemar significance testing.
 - `RegionDataDistributionAnalyzer`: Summarizes regional event counts by class (background, signal, total events, signal fraction) and coordinates heatmap exports.
 - `FastPhotonCutEvaluator`: Evaluates baseline detection efficiency ($P_D$) using ATLAS Athena `TrigFastPhotonCutMaps` (`loose`, `medium`, `tight`, `etcut`).
 - `HoldoutEvaluator`: Computes accuracy, TPR, TNR, FPR, FNR, and establishes target $P_D$ cut thresholds.
@@ -181,6 +183,24 @@ After training completes, analyze performance and generate plots:
   ```
   *(Generates 2D heatmap grids for background counts, signal counts, total events, and signal fraction in `Plots/<config_name>/DataDistribution/` alongside `region_data_distribution.csv`)*
 
+- **Comparative Quadrant Analysis (Event-by-Event Model Comparison)**:
+  ```bash
+  # Direct python execution (with conda activate egamma):
+  python scripts/run_quadrant_analysis.py \
+    --config1 config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+    --data_path1 results/<model1_results_folder>/ \
+    --config2 config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
+    --data_path2 results/<model2_results_folder>/
+
+  # Or using conda run:
+  conda run -n egamma python scripts/run_quadrant_analysis.py \
+    --config1 config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+    --data_path1 results/<model1_results_folder>/ \
+    --config2 config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
+    --data_path2 results/<model2_results_folder>/
+  ```
+  *(Generates 2x2 contingency matrix heatmaps, score scatter partitions, and McNemar test summaries under `Plots/quandrantic_analysis/<model1>_<rings1>rings_vs_<model2>_<rings2>rings/`)*
+
 ### 4. Batch Training Automation
 For running multiple sequential training runs, configure and execute `scripts/runner.sh`:
 ```bash
@@ -245,6 +265,75 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py \
 - `--working_points loose medium tight`: Space-separated working points to evaluate (default: `loose medium tight`).
 - `--output_csv <path>`: Output CSV path for region efficiencies compatible with `ModelValidator` (default: `efficiencies_by_region.csv`).
 
+## Quadrant Analysis (Model Comparison)
+
+Compare two trained neural classification models event-by-event on holdout test partitions across all $(E_T, \eta)$ kinematic regions and globally using `scripts/run_quadrant_analysis.py`.
+
+The analysis evaluates model predictions on test sets, computes optimal decision thresholds, and groups events into four performance quadrants:
+1. **Both Correct**: Events where both models predicted the correct ground-truth class.
+2. **Model 1 Only Correct**: Events where Model 1 was correct and Model 2 misclassified.
+3. **Model 2 Only Correct**: Events where Model 2 was correct and Model 1 misclassified.
+4. **Both Wrong**: Events where both models misclassified.
+
+Statistical discordance between models is quantified via **McNemar's test** (exact two-sided binomial test for discordant counts $< 25$, continuity-corrected $\chi^2$ test otherwise) to identify statistically significant advantages.
+
+### 1. Basic Execution (Calibrated Thresholds)
+Compare two models using calibrated decision thresholds derived from the target signal efficiency:
+
+```bash
+# Direct python execution (with conda activate egamma):
+python scripts/run_quadrant_analysis.py \
+  --config1 config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --data_path1 results/ModelV5_run/ \
+  --config2 config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --data_path2 results/ModelV6_run/ \
+  --file_format png
+```
+
+### 2. Using ATLAS Reference Efficiencies CSV
+Provide a reference operating point table so each kinematic region uses its exact baseline target $P_D$:
+
+```bash
+python scripts/run_quadrant_analysis.py \
+  --config1 config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --data_path1 results/ModelV5_run/ \
+  --config2 config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --data_path2 results/ModelV6_run/ \
+  --threshold_mode calibrated \
+  --efficiencies_csv efficiencies_by_region.csv \
+  --file_format pdf
+```
+
+### 3. Comparing Models at Default 0.5 Decision Boundary
+```bash
+python scripts/run_quadrant_analysis.py \
+  --config1 config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --data_path1 results/ModelV5_run/ \
+  --config2 config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --data_path2 results/ModelV6_run/ \
+  --threshold_mode default
+```
+
+### Generated Visualizations & Output Directory
+Outputs are automatically placed inside a dedicated model comparison folder under the base plots directory:
+`Plots/quandrantic_analysis/<model1>_<rings1>rings_vs_<model2>_<rings2>rings/` (e.g. `Plots/quandrantic_analysis/ModelV5_100rings_vs_ModelV6_100rings/`):
+
+- **`MatrixHeatmaps/`**: 3-panel 2x2 contingency matrix heatmaps (`iet{et}_ieta{eta}_quadrant_matrix.{format}` and `global_quadrant_matrix.{format}`) displaying All Events, Signal (Class 1), and Background (Class 0) counts, ratios, and McNemar p-values.
+- **`ScoreScatter/`**: Predicted probability scatter plots comparing Model 1 vs. Model 2 with decision threshold boundary lines (`iet{et}_ieta{eta}_score_scatter.{format}` and `global_score_scatter.{format}`).
+- **`Summary/`**: Summary comparisons across kinematic bins.
+
+### CLI Options
+- `--config1 <path>`: Path to Model 1 configuration YAML (required).
+- `--data_path1 <path>`: Path to Model 1 results directory with `.pkl` files and `split_manifest.json` (required).
+- `--config2 <path>`: Path to Model 2 configuration YAML (optional, defaults to `--config1`).
+- `--data_path2 <path>`: Path to Model 2 results directory with `.pkl` files (required).
+- `--manifest_path <path>`: Optional explicit path to split manifest JSON (defaults to `<data_path1>/split_manifest.json`).
+- `--threshold_mode {calibrated,default}`: Decision threshold mode (`calibrated` for target $P_D$ cut, `default` for 0.5 cut; default: `calibrated`).
+- `--target_pd <float>`: Target signal detection efficiency (default: `0.9424`).
+- `--efficiencies_csv <path>`: Optional path to reference operating point CSV table.
+- `--output_dir <path>`: Base output directory (the comparison subfolder is automatically appended inside; default: `Plots/quandrantic_analysis`).
+- `--file_format {pdf,png}`: Output graphic format (default: `pdf`).
+
 ## Development Guidelines & Refactoring Focus
 - **OOP First**: Pure Object-Oriented design across trainers, datasets, evaluators, and models.
 - **Minimal Commentary**: Self-documenting, concise Python code.
@@ -263,9 +352,12 @@ Run the Fast Photon Cut Evaluator test suite specifically:
 ```bash
 conda run -n egamma pytest tests/test_fast_photon_cut_evaluator.py -v
 ```
+Run the Quadrant Analysis test suite specifically:
+```bash
+conda run -n egamma pytest tests/core/validation/test_quadrant_analysis.py -v
+```
 Run the Data Preparation test suites:
 ```bash
 conda run -n egamma pytest tests/test_root_dataset_generator.py -v
 conda run -n egamma pytest tests/test_region_data_consolidator.py -v
 ```
-
