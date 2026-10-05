@@ -149,6 +149,9 @@ class HoldoutEvaluator:
         target_signal_efficiency = target_pd if target_pd is not None else self.default_target_pd
         model.eval()
 
+        if ring_column_indices is None:
+            raise ValueError("ring_column_indices cannot be None during holdout evaluation.")
+
         holdout_features_full = data[test_indices]
         holdout_labels = target[test_indices]
         holdout_ring_features = holdout_features_full[:, ring_column_indices]

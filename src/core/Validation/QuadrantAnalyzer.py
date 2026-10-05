@@ -1,12 +1,14 @@
+import gc
 import logging
 import os
 import pathlib
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from scipy import stats
+import torch
 import yaml
 
 from src.core.Datasets.SplitManifest import SplitManifest
@@ -292,17 +294,47 @@ class QuadrantAnalyzer:
             total_events=total_events,
         )
 
-    def analyze_region(self, dataset_index: int) -> Optional[RegionalQuadrantResult]:
-        """Analyzes holdout test events for a specific kinematic region index.
+    @staticmethod
+    def _build_region_index_map(trainer: NeuralRingerTrainer) -> Dict[Tuple[int, int], int]:
+        mapping: Dict[Tuple[int, int], int] = {}
+        for idx, path in enumerate(trainer.full_dataset.file_paths):
+            try:
+                iet, ieta = get_et_eta(path)
+                mapping[(iet, ieta)] = idx
+            except ValueError:
+                continue
+        return mapping
+
+    @property
+    def region_index_map1(self) -> Dict[Tuple[int, int], int]:
+        return self._build_region_index_map(self.trainer1)
+
+    @property
+    def region_index_map2(self) -> Dict[Tuple[int, int], int]:
+        return self._build_region_index_map(self.trainer2)
+
+    def analyze_region(
+        self, region: Union[int, Tuple[int, int]]
+    ) -> Optional[RegionalQuadrantResult]:
+        """Analyzes holdout test events for a specific kinematic region.
 
         Args:
-            dataset_index: Index of the regional file within trainer1 dataset.
+            region: Dataset file index in Model 1 dataset or (iet, ieta) tuple.
 
         Returns:
             RegionalQuadrantResult or None if region results cannot be located.
         """
-        data_path = self.trainer1.full_dataset.file_paths[dataset_index]
-        iet, ieta = get_et_eta(data_path)
+        if isinstance(region, tuple):
+            iet, ieta = region
+            idx1 = self.region_index_map1.get((iet, ieta))
+            if idx1 is None:
+                log.warning(f"[iet{iet}.ieta{ieta}] Skipped: region not found in Model 1 dataset.")
+                return None
+        else:
+            idx1 = region
+            data_path = self.trainer1.full_dataset.file_paths[idx1]
+            iet, ieta = get_et_eta(data_path)
+
         region_tag = f"iet{iet}.ieta{ieta}"
         region_key = f"et_{iet}_eta_{ieta}"
 
@@ -319,6 +351,11 @@ class QuadrantAnalyzer:
             log.info(f"[{region_tag}] Skipped: Model 2 has no trained results in {self.data_path2}.")
             return None
 
+        idx2 = self.region_index_map2.get((iet, ieta))
+        if idx2 is None:
+            log.warning(f"[{region_tag}] Skipped: region not found in Model 2 dataset.")
+            return None
+
         if region_key not in self.manifest.data:
             log.warning(f"[{region_tag}] Skipped: region key '{region_key}' not found in split manifest.")
             return None
@@ -328,7 +365,6 @@ class QuadrantAnalyzer:
             log.warning(f"[{region_tag}] Skipped: no holdout test events found in manifest.")
             return None
 
-        data, target, _ = self.trainer1.full_dataset[dataset_index]
         target_pd = self._get_target_pd(iet, ieta)
 
         try:
@@ -350,38 +386,63 @@ class QuadrantAnalyzer:
             f"Model 2 (Rep {best_rep2}, SP={mean_sp2:.4f}±{std_sp2:.4f}) on {len(test_indices):,} test events"
         )
 
+        data1, target1, _ = self.trainer1.full_dataset[idx1]
+        ring_indices1 = self.trainer1.full_dataset.ring_column_indices
+        if ring_indices1 is None:
+            ring_indices1 = getattr(self.trainer1.full_dataset, "indexes", None)
+
         res1 = self.evaluator.evaluate(
             model=self.model1,
-            data=data,
-            target=target,
+            data=data1,
+            target=target1,
             test_indices=test_indices,
-            ring_column_indices=self.trainer1.full_dataset.ring_column_indices,
+            ring_column_indices=ring_indices1,
             device=self.trainer1.device,
             target_pd=target_pd,
         )
 
+        probs1 = res1.predicted_probabilities
+        if self.threshold_mode == "calibrated":
+            preds1 = res1.predictions_calibrated_cut
+            th1 = res1.calibrated_decision_threshold
+        else:
+            preds1 = res1.predictions_default_threshold
+            th1 = 0.5
+        y = res1.holdout_labels
+
+        del data1, target1, res1
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        data2, target2, _ = self.trainer2.full_dataset[idx2]
+        ring_indices2 = self.trainer2.full_dataset.ring_column_indices
+        if ring_indices2 is None:
+            ring_indices2 = getattr(self.trainer2.full_dataset, "indexes", None)
+
         res2 = self.evaluator.evaluate(
             model=self.model2,
-            data=data,
-            target=target,
+            data=data2,
+            target=target2,
             test_indices=test_indices,
-            ring_column_indices=self.trainer2.full_dataset.ring_column_indices,
+            ring_column_indices=ring_indices2,
             device=self.trainer2.device,
             target_pd=target_pd,
         )
 
+        probs2 = res2.predicted_probabilities
         if self.threshold_mode == "calibrated":
-            preds1 = res1.predictions_calibrated_cut
-            th1 = res1.calibrated_decision_threshold
             preds2 = res2.predictions_calibrated_cut
             th2 = res2.calibrated_decision_threshold
         else:
-            preds1 = res1.predictions_default_threshold
-            th1 = 0.5
             preds2 = res2.predictions_default_threshold
             th2 = 0.5
 
-        y = res1.holdout_labels
+        del data2, target2, res2
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         signal_mask = y == 1
         background_mask = y == 0
 
@@ -409,8 +470,8 @@ class QuadrantAnalyzer:
             overall_metrics=overall_metrics,
             signal_metrics=signal_metrics,
             background_metrics=background_metrics,
-            probs_model1=res1.predicted_probabilities,
-            probs_model2=res2.predicted_probabilities,
+            probs_model1=probs1,
+            probs_model2=probs2,
             labels=y,
             threshold_model1=th1,
             threshold_model2=th2,
@@ -449,7 +510,7 @@ class QuadrantAnalyzer:
                 log.info(f"[iet{iet}.ieta{ieta}] Skipped: excluded by eta_range_idx filter.")
                 continue
 
-            result = self.analyze_region(index)
+            result = self.analyze_region((iet, ieta))
             if result is not None:
                 regional_results.append(result)
 
