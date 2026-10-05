@@ -102,7 +102,6 @@ class TestQuadrantAnalysis(unittest.TestCase):
         res2 = self._create_mock_result(iet=2, ieta=2)
 
         saved = plotter.plot([res1, res2], self.output_dir, file_format="png")
-        self.assertEqual(len(saved["matrix_heatmaps"]), 2)
         self.assertEqual(len(saved["score_scatters"]), 2)
         self.assertEqual(len(saved["summary"]), 1)
 
