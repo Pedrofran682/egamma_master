@@ -34,3 +34,8 @@
 # python scripts/validate_pd.py --config config/NeuralRinger/ModelV1_HighBatch_newExtraction_20_regions_25Rings.yaml  --data_path results/config_nameModelV1_HighBatch_newExtraction_20_regions_25Rings_id20260630122538
 # python scripts/validate_pd.py --config config/NeuralRinger/ModelV1_HighBatch_newExtraction_20_regions_50Rings.yaml  --data_path results/config_nameModelV1_HighBatch_newExtraction_20_regions_50Rings_id20260630043428
 # python scripts/validate_pd.py --config config/NeuralRinger/ModelV1_HighBatch_newExtraction_20_regions_100Rings.yaml  --data_path results/config_nameModelV1_HighBatch_newExtraction_20_regions_100Rings_id20260629222107
+
+python main.py --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml --results_path results/config_nameModelV6_HighBatch_newExtraction_20_regions_100Rings_id20260930044931/
+
+
+python main.py --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_50Rings.yaml --results_path results/config_nameModelV6_HighBatch_newExtraction_20_regions_50Rings_id20261005183226
