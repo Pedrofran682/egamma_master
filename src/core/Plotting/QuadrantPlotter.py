@@ -240,7 +240,9 @@ class QuadrantPlotter(BasePlotter):
         log.info(f"Rendering quadrant figures for {len(results)} evaluated result sets into: {output_dir}")
 
         for res in results:
-            region_tag = f"iet{res.iet}.ieta{res.ieta}" if res.iet >= 0 else "global"
+            if res.iet < 0:
+                continue
+            region_tag = f"iet{res.iet}.ieta{res.ieta}"
             scatter_path = self.plot_score_scatter(res, output_dir, file_format=file_format)
             saved_paths["score_scatters"].append(scatter_path)
             log.info(f"[{region_tag}] Generated score scatter plot: {scatter_path}")

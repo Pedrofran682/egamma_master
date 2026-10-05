@@ -101,8 +101,10 @@ class TestQuadrantAnalysis(unittest.TestCase):
         res1 = self._create_mock_result(iet=1, ieta=1)
         res2 = self._create_mock_result(iet=2, ieta=2)
 
-        saved = plotter.plot([res1, res2], self.output_dir, file_format="png")
+        global_res = self._create_mock_result(iet=-1, ieta=-1)
+        saved = plotter.plot([res1, res2, global_res], self.output_dir, file_format="png")
         self.assertEqual(len(saved["score_scatters"]), 2)
+        self.assertFalse(any("global" in p for p in saved["score_scatters"]))
         self.assertEqual(len(saved["summary"]), 1)
 
         for path_list in saved.values():

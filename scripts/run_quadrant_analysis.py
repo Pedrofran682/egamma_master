@@ -166,12 +166,10 @@ def main(args: argparse.Namespace) -> None:
         )
         log.info("-" * 96)
 
-    all_results = regional_results + ([global_result] if global_result is not None else [])
-
     log.info(f"Generating plots under: {output_dir}")
     plotter = QuadrantPlotter()
     saved_paths = plotter.plot(
-        results=all_results,
+        results=regional_results,
         output_dir=output_dir,
         file_format=args.file_format,
     )
