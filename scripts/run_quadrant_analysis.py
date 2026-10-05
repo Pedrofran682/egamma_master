@@ -96,22 +96,6 @@ def main(args: argparse.Namespace) -> None:
     """
     config2_path = args.config2 if args.config2 is not None else args.config1
 
-    log.info("=" * 70)
-    log.info("STARTING QUADRANT ANALYSIS MODEL COMPARISON")
-    log.info("=" * 70)
-    log.info(f"Model 1 Config:      {args.config1}")
-    log.info(f"Model 1 Results:     {args.data_path1}")
-    log.info(f"Model 2 Config:      {config2_path}")
-    log.info(f"Model 2 Results:     {args.data_path2}")
-    log.info(f"Threshold Mode:      {args.threshold_mode}")
-    if args.threshold_mode == "calibrated":
-        log.info(f"Target PD Cut:       {args.target_pd}")
-        if args.efficiencies_csv:
-            log.info(f"Efficiencies CSV:    {args.efficiencies_csv}")
-    log.info(f"Output Plot Dir:     {args.output_dir}")
-    log.info(f"Plot Format:         {args.file_format}")
-    log.info("-" * 70)
-
     analyzer = QuadrantAnalyzer(
         config_path1=args.config1,
         data_path1=args.data_path1,
@@ -122,6 +106,24 @@ def main(args: argparse.Namespace) -> None:
         efficiencies_csv=args.efficiencies_csv,
         default_target_pd=args.target_pd,
     )
+    output_dir = analyzer.get_output_dir(args.output_dir)
+
+    log.info("=" * 70)
+    log.info("STARTING QUADRANT ANALYSIS MODEL COMPARISON")
+    log.info("=" * 70)
+    log.info(f"Model 1 Config:      {args.config1}")
+    log.info(f"Model 1 Results:     {args.data_path1}")
+    log.info(f"Model 2 Config:      {config2_path}")
+    log.info(f"Model 2 Results:     {args.data_path2}")
+    log.info(f"Comparison Tag:      {analyzer.comparison_tag}")
+    log.info(f"Threshold Mode:      {args.threshold_mode}")
+    if args.threshold_mode == "calibrated":
+        log.info(f"Target PD Cut:       {args.target_pd}")
+        if args.efficiencies_csv:
+            log.info(f"Efficiencies CSV:    {args.efficiencies_csv}")
+    log.info(f"Output Plot Dir:     {output_dir}")
+    log.info(f"Plot Format:         {args.file_format}")
+    log.info("-" * 70)
 
     regional_results = analyzer.run()
     if not regional_results:
@@ -166,16 +168,16 @@ def main(args: argparse.Namespace) -> None:
 
     all_results = regional_results + ([global_result] if global_result is not None else [])
 
-    log.info(f"Generating plots under: {args.output_dir}")
+    log.info(f"Generating plots under: {output_dir}")
     plotter = QuadrantPlotter()
     saved_paths = plotter.plot(
         results=all_results,
-        output_dir=args.output_dir,
+        output_dir=output_dir,
         file_format=args.file_format,
     )
 
     total_figures = sum(len(paths) for paths in saved_paths.values())
-    log.info(f"Completed! Total generated figures: {total_figures} under {args.output_dir}")
+    log.info(f"Completed! Total generated figures: {total_figures} under {output_dir}")
     log.info("=" * 70)
 
 

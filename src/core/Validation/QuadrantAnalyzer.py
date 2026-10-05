@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
@@ -220,6 +221,45 @@ class QuadrantAnalyzer:
             if not ref_row.empty:
                 return float(ref_row["eff_sig_loose"].values[0])
         return self.default_target_pd
+
+    @staticmethod
+    def _get_model_ring_tag(config: NeuralRingerTrainerConfiguration) -> str:
+        model_name = config.model.object_name or "Model"
+        rings = None
+        if config.model.parameters and "input_dim" in config.model.parameters:
+            rings = config.model.parameters["input_dim"]
+        if rings is None:
+            match = re.search(r"(\d+)\s*Rings", config.config_name, re.IGNORECASE)
+            if match:
+                rings = match.group(1)
+        if rings is not None:
+            return f"{model_name}_{rings}rings"
+        return model_name
+
+    @property
+    def comparison_tag(self) -> str:
+        """Constructs a descriptive tag representing the model comparison and ring counts.
+
+        Returns:
+            Comparison string formatted as <model1>_<rings1>rings_vs_<model2>_<rings2>rings.
+        """
+        tag1 = self._get_model_ring_tag(self.config1)
+        tag2 = self._get_model_ring_tag(self.config2)
+        return f"{tag1}_vs_{tag2}"
+
+    def get_output_dir(self, base_dir: str | pathlib.Path = "Plots/quandrantic_analysis") -> pathlib.Path:
+        """Resolves target output directory by appending the comparison subfolder name.
+
+        Args:
+            base_dir: Destination or root directory for quadrant analysis plots.
+
+        Returns:
+            Resolved pathlib.Path ending with the comparison tag.
+        """
+        base_path = pathlib.Path(base_dir)
+        if base_path.name == self.comparison_tag:
+            return base_path
+        return base_path / self.comparison_tag
 
     @staticmethod
     def compute_quadrant_metrics(

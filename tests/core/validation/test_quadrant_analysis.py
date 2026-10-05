@@ -187,6 +187,31 @@ class TestQuadrantAnalysis(unittest.TestCase):
         self.assertEqual(args.threshold_mode, "calibrated")
         self.assertEqual(args.output_dir, "Plots/quandrantic_analysis")
 
+    def test_comparison_tag_and_output_dir(self) -> None:
+        cfg1 = MagicMock()
+        cfg1.model.object_name = "ModelV5"
+        cfg1.model.parameters = {"input_dim": 100}
+        cfg1.config_name = "ModelV5_100Rings"
+
+        cfg2 = MagicMock()
+        cfg2.model.object_name = "ModelV6"
+        cfg2.model.parameters = {"input_dim": 100}
+        cfg2.config_name = "ModelV6_100Rings"
+
+        with patch.object(QuadrantAnalyzer, "_load_config", side_effect=[cfg1, cfg2]):
+            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer"):
+                with patch("src.core.Validation.QuadrantAnalyzer.SplitManifest"):
+                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator"):
+                        analyzer = QuadrantAnalyzer("c1.yaml", "d1", "c2.yaml", "d2")
+                        self.assertEqual(analyzer.comparison_tag, "ModelV5_100rings_vs_ModelV6_100rings")
+
+                        out_dir = analyzer.get_output_dir("Plots/quandrantic_analysis")
+                        self.assertEqual(
+                            out_dir,
+                            pathlib.Path("Plots/quandrantic_analysis/ModelV5_100rings_vs_ModelV6_100rings"),
+                        )
+                        self.assertEqual(analyzer.get_output_dir(out_dir), out_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
