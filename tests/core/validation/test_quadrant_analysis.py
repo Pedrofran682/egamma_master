@@ -307,6 +307,50 @@ class TestQuadrantAnalysis(unittest.TestCase):
                 device="cpu",
             )
 
+    def test_quadrant_metrics_uncertainties(self) -> None:
+        metrics = QuadrantMetrics(
+            both_correct=50,
+            model1_only_correct=20,
+            model2_only_correct=10,
+            both_wrong=20,
+            total_events=100,
+        )
+        # p = 0.5, N = 100 -> sqrt(0.5 * 0.5 / 100) = 0.05
+        self.assertAlmostEqual(metrics.both_correct_uncertainty, 0.05, places=5)
+        # p = 0.2, N = 100 -> sqrt(0.2 * 0.8 / 100) = 0.04
+        self.assertAlmostEqual(metrics.model1_only_correct_uncertainty, 0.04, places=5)
+        # p = 0.1, N = 100 -> sqrt(0.1 * 0.9 / 100) = 0.03
+        self.assertAlmostEqual(metrics.model2_only_correct_uncertainty, 0.03, places=5)
+        self.assertAlmostEqual(metrics.both_wrong_uncertainty, 0.04, places=5)
+
+    def test_save_results_table(self) -> None:
+        import pandas as pd
+        res1 = self._create_mock_result(iet=1, ieta=1)
+        res2 = self._create_mock_result(iet=2, ieta=2)
+
+        with patch.object(QuadrantAnalyzer, "_load_config", return_value=MagicMock()):
+            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer"):
+                with patch("src.core.Validation.QuadrantAnalyzer.SplitManifest"):
+                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator"):
+                        analyzer = QuadrantAnalyzer(
+                            config_path1="config/dummy.yaml",
+                            data_path1=self.output_dir,
+                            config_path2="config/dummy.yaml",
+                            data_path2=self.output_dir,
+                        )
+                        csv_path = analyzer.save_results_table([res1, res2], self.output_dir)
+                        self.assertTrue(csv_path.exists())
+
+                        df = pd.read_csv(csv_path)
+                        # 2 regions + 1 Global = 3 entities * 3 sample types (Overall, Signal, Background) = 9 rows
+                        self.assertEqual(len(df), 9)
+                        self.assertIn("both_correct_uncertainty", df.columns)
+                        self.assertIn("model1_only_correct_uncertainty", df.columns)
+                        self.assertIn("model2_only_correct_uncertainty", df.columns)
+                        self.assertIn("both_wrong_uncertainty", df.columns)
+                        self.assertIn("mcnemar_p_value", df.columns)
+                        self.assertTrue(all(df["both_correct_uncertainty"] >= 0.0))
+
 
 if __name__ == "__main__":
     unittest.main()

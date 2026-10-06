@@ -86,6 +86,13 @@ parser.add_argument(
     default="pdf",
     help="Graphic output format ('pdf' or 'png', default: 'pdf').",
 )
+parser.add_argument(
+    "--csv_filename",
+    required=False,
+    default="quadrant_results.csv",
+    type=str,
+    help="Output CSV filename for tabular results and uncertainties (default: quadrant_results.csv).",
+)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -176,6 +183,14 @@ def main(args: argparse.Namespace) -> None:
 
     total_figures = sum(len(paths) for paths in saved_paths.values())
     log.info(f"Completed! Total generated figures: {total_figures} under {output_dir}")
+    log.info("-" * 70)
+    log.info(f"Saving tabular results with uncertainties under: {output_dir}")
+    csv_path = analyzer.save_results_table(
+        regional_results=regional_results,
+        output_dir=output_dir,
+        filename=args.csv_filename,
+    )
+    log.info(f"Tabular results saved to: {csv_path}")
     log.info("=" * 70)
 
 

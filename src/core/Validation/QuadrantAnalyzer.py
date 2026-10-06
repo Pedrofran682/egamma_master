@@ -59,6 +59,34 @@ class QuadrantMetrics:
         return float(self.both_wrong / self.total_events) if self.total_events > 0 else 0.0
 
     @property
+    def both_correct_uncertainty(self) -> float:
+        if self.total_events <= 0:
+            return 0.0
+        p = self.both_correct_ratio
+        return float(np.sqrt((p * (1.0 - p)) / self.total_events))
+
+    @property
+    def model1_only_correct_uncertainty(self) -> float:
+        if self.total_events <= 0:
+            return 0.0
+        p = self.model1_only_correct_ratio
+        return float(np.sqrt((p * (1.0 - p)) / self.total_events))
+
+    @property
+    def model2_only_correct_uncertainty(self) -> float:
+        if self.total_events <= 0:
+            return 0.0
+        p = self.model2_only_correct_ratio
+        return float(np.sqrt((p * (1.0 - p)) / self.total_events))
+
+    @property
+    def both_wrong_uncertainty(self) -> float:
+        if self.total_events <= 0:
+            return 0.0
+        p = self.both_wrong_ratio
+        return float(np.sqrt((p * (1.0 - p)) / self.total_events))
+
+    @property
     def mcnemar_statistic(self) -> float:
         b = self.model1_only_correct
         c = self.model2_only_correct
@@ -103,9 +131,13 @@ class QuadrantMetrics:
             "both_wrong": self.both_wrong,
             "total_events": self.total_events,
             "both_correct_ratio": self.both_correct_ratio,
+            "both_correct_uncertainty": self.both_correct_uncertainty,
             "model1_only_correct_ratio": self.model1_only_correct_ratio,
+            "model1_only_correct_uncertainty": self.model1_only_correct_uncertainty,
             "model2_only_correct_ratio": self.model2_only_correct_ratio,
+            "model2_only_correct_uncertainty": self.model2_only_correct_uncertainty,
             "both_wrong_ratio": self.both_wrong_ratio,
+            "both_wrong_uncertainty": self.both_wrong_uncertainty,
             "mcnemar_statistic": self.mcnemar_statistic,
             "mcnemar_p_value": self.mcnemar_p_value,
         }
@@ -628,3 +660,88 @@ class QuadrantAnalyzer:
             et=all_et,
             eta=all_eta,
         )
+
+    def build_summary_dataframe(
+        self,
+        regional_results: List[RegionalQuadrantResult],
+        include_global: bool = True,
+    ) -> pd.DataFrame:
+        """Constructs consolidated summary DataFrame containing counts, ratios, uncertainties, and p-values.
+
+        Args:
+            regional_results: List of evaluated regional results.
+            include_global: Whether to calculate and include composite global results.
+
+        Returns:
+            DataFrame containing performance records across regions and samples.
+        """
+        records: List[Dict[str, Any]] = []
+        all_results = list(regional_results)
+        if include_global:
+            global_res = self.compute_global_result(regional_results)
+            if global_res is not None:
+                all_results.append(global_res)
+
+        for res in all_results:
+            region_str = f"iet{res.iet}.ieta{res.ieta}" if res.iet >= 0 else "GLOBAL"
+            samples: List[Tuple[str, QuadrantMetrics]] = [
+                ("Overall", res.overall_metrics),
+                ("Signal", res.signal_metrics),
+                ("Background", res.background_metrics),
+            ]
+            for sample_type, m in samples:
+                records.append(
+                    {
+                        "region": region_str,
+                        "iet": res.iet,
+                        "ieta": res.ieta,
+                        "sample_type": sample_type,
+                        "model1_name": res.model1_name,
+                        "model2_name": res.model2_name,
+                        "threshold_model1": res.threshold_model1,
+                        "threshold_model2": res.threshold_model2,
+                        "total_events": m.total_events,
+                        "both_correct": m.both_correct,
+                        "both_correct_ratio": m.both_correct_ratio,
+                        "both_correct_uncertainty": m.both_correct_uncertainty,
+                        "model1_only_correct": m.model1_only_correct,
+                        "model1_only_correct_ratio": m.model1_only_correct_ratio,
+                        "model1_only_correct_uncertainty": m.model1_only_correct_uncertainty,
+                        "model2_only_correct": m.model2_only_correct,
+                        "model2_only_correct_ratio": m.model2_only_correct_ratio,
+                        "model2_only_correct_uncertainty": m.model2_only_correct_uncertainty,
+                        "both_wrong": m.both_wrong,
+                        "both_wrong_ratio": m.both_wrong_ratio,
+                        "both_wrong_uncertainty": m.both_wrong_uncertainty,
+                        "mcnemar_statistic": m.mcnemar_statistic,
+                        "mcnemar_p_value": m.mcnemar_p_value,
+                    }
+                )
+        return pd.DataFrame(records)
+
+    def save_results_table(
+        self,
+        regional_results: List[RegionalQuadrantResult],
+        output_dir: str | pathlib.Path,
+        filename: str = "quadrant_results.csv",
+        include_global: bool = True,
+    ) -> pathlib.Path:
+        """Saves tabular quadrant analysis results with uncertainties to CSV.
+
+        Args:
+            regional_results: List of evaluated regional results.
+            output_dir: Target output directory.
+            filename: Output CSV filename (default: 'quadrant_results.csv').
+            include_global: Whether to calculate and include composite global results.
+
+        Returns:
+            Destination path of saved CSV table.
+        """
+        df = self.build_summary_dataframe(regional_results, include_global=include_global)
+        target_dir = pathlib.Path(output_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = target_dir / filename
+        df.to_csv(csv_path, index=False)
+        log.info(f"Saved quadrant results table with uncertainties to: {csv_path}")
+        return csv_path
+
