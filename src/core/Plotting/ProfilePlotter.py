@@ -2,7 +2,7 @@ from typing import Any, List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.core.Plotting.BasePlotter import BasePlotter
+from src.core.Interfaces.BasePlotter import BasePlotter
 from src.core.Plotting.Context import RegionPlotContext
 from src.utils import norm1
 

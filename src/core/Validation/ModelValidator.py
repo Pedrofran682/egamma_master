@@ -11,6 +11,9 @@ from src.core.Datasets.SplitManifest import SplitManifest
 from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.MetricPlotter import RocPlotter
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
+from src.core.Interfaces.BaseEvaluator import BaseEvaluator
+from src.core.Interfaces.BaseResultAggregator import BaseResultAggregator
+from src.core.Interfaces.BaseTrainer import BaseTrainer
 from src.core.Trainers.NeuralRingerTrainer import NeuralRingerTrainer
 from src.core.Validation.EfficiencyPlotter import EfficiencyPlotter
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluationResult, HoldoutEvaluator
@@ -75,10 +78,10 @@ class ModelValidator:
         self.plot_dir.mkdir(parents=True, exist_ok=True)
         self.reference_eff_df: pd.DataFrame | None = self._load_reference_efficiencies(efficiencies_csv)
 
-        self.trainer: NeuralRingerTrainer = NeuralRingerTrainer(self.config_instance)
+        self.trainer: BaseTrainer = NeuralRingerTrainer(self.config_instance)
         self.model = self.trainer.factory.create_model()
-        self.aggregator: ResultAggregator = ResultAggregator(self.data_path)
-        self.evaluator: HoldoutEvaluator = HoldoutEvaluator(default_target_pd=default_target_pd)
+        self.aggregator: BaseResultAggregator = ResultAggregator(self.data_path)
+        self.evaluator: BaseEvaluator = HoldoutEvaluator(default_target_pd=default_target_pd)
         feature_names = np.atleast_1d(getattr(self.trainer.full_dataset, "feature_names", np.array([])))
         eta_indices = np.where(feature_names == "trig_L2_calo_eta")[0]
         et_indices = np.where(feature_names == "trig_L2_calo_et")[0]
@@ -152,20 +155,16 @@ class ModelValidator:
         validation_dir = self.plot_dir / "Validation"
         validation_dir.mkdir(parents=True, exist_ok=True)
 
-        et_filter = getattr(self.config_instance, "et_range_idx", None)
-        eta_filter = getattr(self.config_instance, "eta_range_idx", None)
         all_results: List[HoldoutEvaluationResult] = []
 
         for index in range(len(self.trainer.full_dataset)):
             data_path = self.trainer.full_dataset.file_paths[index]
             iet, ieta = get_et_eta(data_path)
 
-            if isinstance(et_filter, (list, tuple, set)) and iet not in et_filter:
-                continue
-            if isinstance(eta_filter, (list, tuple, set)) and ieta not in eta_filter:
+            if not self.config_instance.is_region_allowed(iet, ieta):
                 continue
 
-            if hasattr(self.aggregator, "has_region") and not self.aggregator.has_region(iet, ieta):
+            if not self.aggregator.has_region(iet, ieta):
                 log.warning(f"No result records found for region iet{iet}.ieta{ieta}. Skipping...")
                 continue
 
@@ -175,11 +174,8 @@ class ModelValidator:
             data, target, _ = self.trainer.full_dataset[index]
             log.info(f"Using {data_path} for region iet{iet}.ieta{ieta}")
 
-            if hasattr(self.aggregator, "get_best_model_for_region"):
-                log.info("Getting best model for the region")
-                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(iet, ieta)
-            else:
-                raise Exception("Could not load the best model for et and eta region (iet={}, ieta={})".format(iet, ieta))
+            log.info("Getting best model for the region")
+            best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(iet, ieta)
             self.model.load_state_dict(best_model["best_weights"])
 
             target_pd = self._get_target_pd(iet, ieta)

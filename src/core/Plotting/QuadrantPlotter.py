@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-from src.core.Plotting.BasePlotter import BasePlotter
+from src.core.Interfaces.BasePlotter import BasePlotter
 from src.core.Plotting.RegionDistributionPlotter import DEFAULT_ET_INTERVALS, DEFAULT_ETA_INTERVALS
 from src.core.Validation.QuadrantAnalyzer import QuadrantMetrics, RegionalQuadrantResult
 from src.utils import create_folder

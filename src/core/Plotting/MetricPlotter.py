@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from src.core.Plotting.BasePlotter import BasePlotter
-from src.core.Plotting.Context import RegionPlotContext
+from src.core.Interfaces.BasePlotter import BaseMetricPlotter, BasePlotter
+from src.core.Plotting.Context import MetricPlotContext, RegionPlotContext
 
 
 @cache
@@ -48,19 +48,25 @@ def get_eta_axis() -> List[str]:
     ]
 
 
-class ModelMetricsPlotter(BasePlotter):
+class ModelMetricsPlotter(BaseMetricPlotter):
     """Renders tripartite loss, accuracy, and SP/TPR/FPR evolution curves over epochs."""
 
     def __init__(self) -> None:
         """Initializes the ModelMetricsPlotter."""
         super().__init__(name="ModelMetricsPlotter")
 
+    def plot_metric(self, context: MetricPlotContext) -> str | None:
+        """Plots training and validation metrics using MetricPlotContext."""
+        if not context.history_data:
+            return None
+        return self._render_plot(context.region_context, context.history_data)
+
     def plot(
         self,
         context: RegionPlotContext,
-        history_data: Dict[str, Any],
+        history_data: Dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> str | None:
         """Plots training and validation metrics across training epochs.
 
         Args:
@@ -69,8 +75,13 @@ class ModelMetricsPlotter(BasePlotter):
             **kwargs: Extra plotting parameters.
 
         Returns:
-            Absolute file path of the generated PDF figure.
+            Absolute file path of the generated PDF figure, or None if missing data.
         """
+        if not history_data:
+            return None
+        return self._render_plot(context, history_data)
+
+    def _render_plot(self, context: RegionPlotContext, history_data: Dict[str, Any]) -> str:
         epochs = range(1, len(history_data["train_loss"]) + 1)
         train_loss = history_data["train_loss"]
         val_loss = history_data["val_loss"]
@@ -130,19 +141,28 @@ class ModelMetricsPlotter(BasePlotter):
         return self.save_figure(fig, context.output_dir, "model_metrics", filename)
 
 
-class RocPlotter(BasePlotter):
+class RocPlotter(BaseMetricPlotter):
     """Renders the Receiver Operating Characteristic (ROC) curve with AUC score."""
 
     def __init__(self) -> None:
         """Initializes the RocPlotter."""
         super().__init__(name="RocPlotter")
 
+    def plot_metric(self, context: MetricPlotContext) -> str | None:
+        """Plots ROC curve using MetricPlotContext."""
+        details = context.callback_metrics
+        if details is None and context.history_data:
+            details = context.history_data.get("callbackMetrics")
+        if not details or "pd" not in details or "fa" not in details:
+            return None
+        return self._render_plot(context.region_context, details)
+
     def plot(
         self,
         context: RegionPlotContext,
-        best_model_details: Dict[str, Any],
+        best_model_details: Dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> str | None:
         """Plots the ROC curve for a given model's callback details.
 
         Args:
@@ -151,10 +171,15 @@ class RocPlotter(BasePlotter):
             **kwargs: Extra plotting parameters.
 
         Returns:
-            Absolute file path of the generated PDF figure.
+            Absolute file path of the generated PDF figure, or None if details are missing.
         """
+        if not best_model_details or "pd" not in best_model_details or "fa" not in best_model_details:
+            return None
+        return self._render_plot(context, best_model_details)
+
+    def _render_plot(self, context: RegionPlotContext, best_model_details: Dict[str, Any]) -> str:
         tpr, fpr = best_model_details["pd"], best_model_details["fa"]
-        auc_score = best_model_details["auc_score"]
+        auc_score = best_model_details.get("auc_score", 0.0)
 
         fig = plt.figure(figsize=(8, 6), clear=True, num=1)
         plt.plot(fpr, tpr, color="blue", lw=2, label=f"ROC (AUC = {auc_score:.4f})")
@@ -171,12 +196,16 @@ class RocPlotter(BasePlotter):
         return self.save_figure(fig, context.output_dir, "ROC", filename)
 
 
-class BoxplotSPPlotter(BasePlotter):
+class BoxplotSPPlotter(BaseMetricPlotter):
     """Renders boxplot and swarmplot distributions of validation metrics across CV folds."""
 
     def __init__(self) -> None:
         """Initializes the BoxplotSPPlotter."""
         super().__init__(name="BoxplotSPPlotter")
+
+    def plot_metric(self, context: MetricPlotContext) -> str | None:
+        """Plots distribution of metrics using MetricPlotContext."""
+        return self._render_plot(context.region_context, context.all_training_results)
 
     def plot(
         self,
@@ -196,6 +225,14 @@ class BoxplotSPPlotter(BasePlotter):
         Returns:
             Saved PDF file path, or None if results are empty.
         """
+        return self._render_plot(context, all_training_results, data_type=data_type)
+
+    def _render_plot(
+        self,
+        context: RegionPlotContext,
+        all_training_results: Union[List[Dict[str, Union[str, int, object]]], pd.DataFrame, None],
+        data_type: str = "best_sp_value",
+    ) -> str | None:
         if all_training_results is None:
             return None
 

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from src.core.Plotting.BasePlotter import BasePlotter
+from src.core.Interfaces.BasePlotter import BasePlotter
 from src.utils import create_folder
 
 DEFAULT_ET_INTERVALS: Dict[int, str] = {

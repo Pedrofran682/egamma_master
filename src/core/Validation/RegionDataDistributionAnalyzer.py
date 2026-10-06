@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from src.core.Interfaces.BaseEgammaDataset import BaseEgammaDataset
 from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
 from src.core.Plotting.RegionDistributionPlotter import RegionDistributionPlotter
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
@@ -44,7 +45,7 @@ class RegionDataDistributionAnalyzer:
         self.data_path: Optional[pathlib.Path] = pathlib.Path(data_path) if data_path else None
         self.output_dir: pathlib.Path = self._resolve_output_dir(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.dataset: EgammaNpzDataset = self._initialize_dataset()
+        self.dataset: BaseEgammaDataset = self._initialize_dataset()
         self.plotter: RegionDistributionPlotter = RegionDistributionPlotter()
 
     @staticmethod
@@ -103,10 +104,7 @@ class RegionDataDistributionAnalyzer:
             try:
                 transverse_energy_bin, pseudorapidity_bin = get_et_eta(file_path)
                 with np.load(file_path, allow_pickle=True) as sample_archive:
-                    if hasattr(self.dataset, "_filter_events"):
-                        _, sample_labels = self.dataset._filter_events(sample_archive)
-                    else:
-                        sample_labels = sample_archive["target"].flatten().astype(int)
+                    _, sample_labels = self.dataset.filter_events(sample_archive)
 
                 background_count = int(np.sum(sample_labels == 0))
                 signal_count = int(np.sum(sample_labels == 1))

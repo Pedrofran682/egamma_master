@@ -3,8 +3,8 @@ from typing import Any, List
 import numpy as np
 import pandas as pd
 
-from src.core.Plotting.BasePlotter import BasePlotter
-from src.core.Plotting.Context import RegionPlotContext
+from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Context import MetricPlotContext, RegionPlotContext
 from src.core.Plotting.MetricPlotter import BoxplotSPPlotter, ModelMetricsPlotter, RocPlotter
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 
@@ -90,22 +90,24 @@ class PlotManager:
             target=np.array([]),
         )
 
+        history = best_run.get("history") if "history" in best_run else None
+        callback_metrics = (
+            history.get("callbackMetrics")
+            if isinstance(history, dict)
+            else None
+        )
+        metric_context = MetricPlotContext(
+            region_context=context,
+            history_data=history if isinstance(history, dict) else None,
+            callback_metrics=callback_metrics,
+            all_training_results=df_region,
+        )
+
         for plotter in self.plotters:
-            if isinstance(plotter, ModelMetricsPlotter):
-                if "history" in best_run and best_run["history"]:
-                    plotter.plot(context, history_data=best_run["history"])
-            elif isinstance(plotter, RocPlotter):
-                if (
-                    "history" in best_run
-                    and isinstance(best_run["history"], dict)
-                    and "callbackMetrics" in best_run["history"]
-                ):
-                    plotter.plot(
-                        context,
-                        best_model_details=best_run["history"]["callbackMetrics"],
-                    )
-            elif isinstance(plotter, BoxplotSPPlotter):
-                plotter.plot(context, all_training_results=df_region)
+            try:
+                plotter.plot_metric(metric_context)
+            except Exception as e:
+                log.error(f"Error running metric plotter {plotter.name}: {e}")
 
         return True
 

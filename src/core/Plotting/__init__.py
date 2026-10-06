@@ -1,4 +1,4 @@
-from .BasePlotter import BasePlotter
+from src.core.Interfaces.BasePlotter import BasePlotter
 from .Context import RegionPlotContext
 from .LegacyPlotter import ConvLayerPlotter, SaliencyMapPlotter
 from .MetricPlotter import (

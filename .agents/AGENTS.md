@@ -102,6 +102,12 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
 ## Codebase Map & File Discovery
 
 - **`src/core/`**:
+  - `Interfaces/`:
+    - `BaseEgammaDataset.py`: Abstract base class for calorimeter NPZ datasets exposing template methods and `filter_events()`.
+    - `BaseTrainer.py`: Abstract base class for trainers defining `device`, `full_dataset`, and `run()`.
+    - `BaseResultAggregator.py`: Abstract base class for result aggregation and model discovery.
+    - `BaseEvaluator.py`: Abstract base class for holdout evaluation.
+    - `BasePlotter.py`: Abstract base classes `BasePlotter` and `BaseMetricPlotter`.
   - `Datasets/`:
     - `EgammaNpzDataset.py`: Custom PyTorch Dataset reading `.npz` calorimeter ring data; exposes `feature_names`.
     - `EgammaNpzDatasetNoTargetOrigin.py`: Dataset variant omitting target origin extraction.

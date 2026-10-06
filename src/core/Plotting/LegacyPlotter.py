@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from src.core.Plotting.BasePlotter import BasePlotter
+from src.core.Interfaces.BasePlotter import BasePlotter
 from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 from src.utils import compute_mean_std_saliency

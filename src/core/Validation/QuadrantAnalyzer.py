@@ -12,6 +12,9 @@ import torch
 import yaml
 
 from src.core.Datasets.SplitManifest import SplitManifest
+from src.core.Interfaces.BaseEvaluator import BaseEvaluator
+from src.core.Interfaces.BaseResultAggregator import BaseResultAggregator
+from src.core.Interfaces.BaseTrainer import BaseTrainer
 from src.core.Trainers.NeuralRingerTrainer import NeuralRingerTrainer
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
 from src.core.Validation.ResultAggregator import ResultAggregator
@@ -191,15 +194,15 @@ class QuadrantAnalyzer:
         self.manifest: SplitManifest = SplitManifest(str(manifest_file))
         self.reference_eff_df: Optional[pd.DataFrame] = self._load_reference_efficiencies(efficiencies_csv)
 
-        self.trainer1: NeuralRingerTrainer = NeuralRingerTrainer(self.config1)
-        self.trainer2: NeuralRingerTrainer = NeuralRingerTrainer(self.config2)
+        self.trainer1: BaseTrainer = NeuralRingerTrainer(self.config1)
+        self.trainer2: BaseTrainer = NeuralRingerTrainer(self.config2)
 
         self.model1 = self.trainer1.factory.create_model()
         self.model2 = self.trainer2.factory.create_model()
 
-        self.aggregator1: ResultAggregator = ResultAggregator(self.data_path1)
-        self.aggregator2: ResultAggregator = ResultAggregator(self.data_path2)
-        self.evaluator: HoldoutEvaluator = HoldoutEvaluator(default_target_pd=default_target_pd)
+        self.aggregator1: BaseResultAggregator = ResultAggregator(self.data_path1)
+        self.aggregator2: BaseResultAggregator = ResultAggregator(self.data_path2)
+        self.evaluator: BaseEvaluator = HoldoutEvaluator(default_target_pd=default_target_pd)
 
     @staticmethod
     def _load_config(config_path: str | pathlib.Path) -> NeuralRingerTrainerConfiguration:
@@ -492,9 +495,6 @@ class QuadrantAnalyzer:
             )
         self.manifest.load()
 
-        et_filter = getattr(self.config1, "et_range_idx", None)
-        eta_filter = getattr(self.config1, "eta_range_idx", None)
-
         total_dataset_regions = len(self.trainer1.full_dataset)
         log.info(f"Scanning {total_dataset_regions} kinematic regions for model comparison...")
 
@@ -503,11 +503,8 @@ class QuadrantAnalyzer:
             data_path = self.trainer1.full_dataset.file_paths[index]
             iet, ieta = get_et_eta(data_path)
 
-            if isinstance(et_filter, (list, tuple, set)) and iet not in et_filter:
-                log.info(f"[iet{iet}.ieta{ieta}] Skipped: excluded by et_range_idx filter.")
-                continue
-            if isinstance(eta_filter, (list, tuple, set)) and ieta not in eta_filter:
-                log.info(f"[iet{iet}.ieta{ieta}] Skipped: excluded by eta_range_idx filter.")
+            if not self.config1.is_region_allowed(iet, ieta):
+                log.info(f"[iet{iet}.ieta{ieta}] Skipped: excluded by region filters.")
                 continue
 
             result = self.analyze_region((iet, ieta))

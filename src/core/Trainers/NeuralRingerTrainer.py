@@ -9,6 +9,7 @@ from sklearn.model_selection import ParameterGrid
 from src.core.Callbacks.SPCallbackPyTorch import SPCallbackPyTorch
 from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
 from src.core.Datasets.SplitManifest import SplitManifest
+from src.core.Interfaces.BaseTrainer import BaseTrainer
 from src.core.Trainers.FoldTrainer import FoldTrainer
 from src.core.Trainers.ResultsRecorder import ResultsRecorder
 from src.core.Trainers.TrainingFactory import TrainingFactory
@@ -18,7 +19,7 @@ from src.utils import create_folder, get_et_eta, get_instance, verify_results
 log = logging.getLogger()
 
 
-class NeuralRingerTrainer:
+class NeuralRingerTrainer(BaseTrainer):
     """Orchestrator for the Neural Ringer training workflow across kinematic regions and folds.
 
     Attributes:
@@ -42,15 +43,31 @@ class NeuralRingerTrainer:
         """
         self.config: NeuralRingerTrainerConfiguration = config
         self.use_cuda: bool = torch.cuda.is_available()
-        self.device: torch.device = torch.device("cuda" if self.use_cuda else "cpu")
+        self._device: torch.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.factory: TrainingFactory = TrainingFactory(self.config, self.device)
         self.recorder: ResultsRecorder = ResultsRecorder()
         self.kfold: Any = self.factory.create_cross_validation()
         self.et: int = -1
         self.eta: int = -1
-        self.full_dataset: EgammaNpzDataset = get_instance(self.config.dataset)
-        self.full_dataset.config = config
+        self._full_dataset: Any = get_instance(self.config.dataset)
+        self._full_dataset.config = config
         self.results_folder_path: str = ""
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
+
+    @device.setter
+    def device(self, value: torch.device) -> None:
+        self._device = value
+
+    @property
+    def full_dataset(self) -> Any:
+        return self._full_dataset
+
+    @full_dataset.setter
+    def full_dataset(self, value: Any) -> None:
+        self._full_dataset = value
 
         if self.config.debug:
             log.warning("#### EXECUTING ON DEBUG MODE. ####")

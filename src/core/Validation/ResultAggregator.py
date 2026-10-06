@@ -5,10 +5,12 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 import pandas as pd
 
+from src.core.Interfaces.BaseResultAggregator import BaseResultAggregator
+
 log = logging.getLogger()
 
 
-class ResultAggregator:
+class ResultAggregator(BaseResultAggregator):
     """Discovers, groups, and aggregates model run results across kinematic regions.
 
     Attributes:

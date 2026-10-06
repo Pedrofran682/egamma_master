@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from src.core.Interfaces.BaseEvaluator import BaseEvaluator
+
 log = logging.getLogger()
 
 
@@ -107,7 +109,7 @@ class HoldoutEvaluationResult:
         return self.false_alarm_probability
 
 
-class HoldoutEvaluator:
+class HoldoutEvaluator(BaseEvaluator):
     """Performs inference and operating point threshold calculations on holdout data.
 
     Attributes:

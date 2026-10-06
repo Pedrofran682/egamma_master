@@ -48,3 +48,17 @@ class NeuralRingerTrainerConfiguration(BaseModel):
     kFold: DynamicConfiguration = Field(..., description="Cross validation config.")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def is_region_allowed(self, iet: int, ieta: int) -> bool:
+        """Determines if a kinematic region matches configured ET and eta boundaries.
+
+        Args:
+            iet: Transverse energy bin index.
+            ieta: Pseudorapidity bin index.
+
+        Returns:
+            True if region is within ranges, False otherwise.
+        """
+        et_allowed = not self.et_range_idx or iet in self.et_range_idx
+        eta_allowed = not self.eta_range_idx or ieta in self.eta_range_idx
+        return et_allowed and eta_allowed

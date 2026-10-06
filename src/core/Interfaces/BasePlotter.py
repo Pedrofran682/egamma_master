@@ -1,10 +1,11 @@
 import os
 import pathlib
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import matplotlib.pyplot as plt
 
-from src.core.Plotting.Context import RegionPlotContext
+if TYPE_CHECKING:
+    from src.core.Plotting.Context import RegionPlotContext
 from src.utils import create_folder
 
 
@@ -24,7 +25,7 @@ class BasePlotter(ABC):
         self.name: str = name
 
     @abstractmethod
-    def plot(self, context: RegionPlotContext, **kwargs: Any) -> Any:
+    def plot(self, context: Any, **kwargs: Any) -> Any:
         """Generates figure and executes rendering.
 
         Args:
@@ -32,6 +33,14 @@ class BasePlotter(ABC):
             **kwargs: Plotter-specific arguments.
         """
         pass
+
+    def plot_metric(self, context: Any) -> Any:
+        """Optional metric plotting hook for plotters consuming MetricPlotContext.
+
+        Args:
+            context: MetricPlotContext instance.
+        """
+        return None
 
     @staticmethod
     def save_figure(
@@ -75,3 +84,20 @@ class BasePlotter(ABC):
         except Exception as e:
             plt.close(fig)
             raise e
+
+
+class BaseMetricPlotter(BasePlotter, ABC):
+    """Abstract base class for metric and evaluation plotters.
+
+    Attributes:
+        name: Descriptive identifier for the metric plotter.
+    """
+
+    @abstractmethod
+    def plot_metric(self, context: Any) -> Any:
+        """Renders metric figure using standardized MetricPlotContext.
+
+        Args:
+            context: MetricPlotContext containing region data, history, and results.
+        """
+        pass

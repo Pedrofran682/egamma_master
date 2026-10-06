@@ -108,6 +108,7 @@ When searching for or modifying functionality, refer to the following locations:
 | **Model Registry** | `src/Models/ModelRegistry.py` | Auto-discovers all `nn.Module` classes in `src/Models/egamma/` by class name |
 | **Model Architectures** | `src/Models/egamma/*.py` | Individual models (`ModelV1` through `ModelV6`, `Run2_ModelV1`, `Run2_ModelV1_2`) |
 | **Model Factory** | `src/Models/Models.py` | `get_model(tag, input_dim)` delegating to `ModelRegistry` |
+| **Interfaces** | `src/core/Interfaces/` | Abstract base classes (`BaseEgammaDataset`, `BaseTrainer`, `BaseResultAggregator`, `BaseEvaluator`, `BasePlotter`, `BaseMetricPlotter`) |
 | **Dataset & Splits** | `src/core/Datasets/` | `EgammaNpzDataset.py` (reads `.npz` rings, exposes `feature_names`), `EgammaNpzDatasetNoTargetOrigin.py`, `SplitManifest.py` (K-fold split persistence with logging) |
 | **Trainers** | `src/core/Trainers/` | `NeuralRingerTrainer.py` (coordinator), `FoldTrainer.py` (single fold), `TrainingFactory.py`, `ResultsRecorder.py` |
 | **Callbacks** | `src/core/Callbacks/` | `SPCallbackPyTorch.py` (tracks SP index, knee point, early stopping, best weights) |
