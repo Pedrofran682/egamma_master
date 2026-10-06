@@ -81,6 +81,8 @@ class TestQuadrantAnalysis(unittest.TestCase):
         probs1 = np.random.uniform(0, 1, 60)
         probs2 = np.random.uniform(0, 1, 60)
         labels = np.array([1] * 35 + [0] * 25)
+        et = np.random.uniform(15.0, 100.0, 60)
+        eta = np.random.uniform(0.0, 2.5, 60)
         return RegionalQuadrantResult(
             iet=iet,
             ieta=ieta,
@@ -94,6 +96,8 @@ class TestQuadrantAnalysis(unittest.TestCase):
             labels=labels,
             threshold_model1=0.5,
             threshold_model2=0.5,
+            et=et,
+            eta=eta,
         )
 
     def test_quadrant_plotter_renders_files(self) -> None:
@@ -132,6 +136,8 @@ class TestQuadrantAnalysis(unittest.TestCase):
                         self.assertEqual(global_res.overall_metrics.total_events, 120)
                         self.assertEqual(global_res.overall_metrics.both_correct, 80)
                         self.assertEqual(len(global_res.probs_model1), 120)
+                        self.assertEqual(len(global_res.et), 120)
+                        self.assertEqual(len(global_res.eta), 120)
 
     def test_skips_region_when_model_missing(self) -> None:
         with patch.object(QuadrantAnalyzer, "_load_config", return_value=MagicMock()):

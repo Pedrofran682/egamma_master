@@ -46,10 +46,10 @@ class QuadrantPlotter(BasePlotter):
         file_format: str = "pdf",
         max_points: int = 5000,
     ) -> str:
-        """Renders scatter comparison of model probability scores partitioned by decision thresholds.
+        """Renders scatter comparison in (eta, ET) kinematic space partitioned by quadrant agreement.
 
         Args:
-            result: RegionalQuadrantResult containing scores, true labels, and thresholds.
+            result: RegionalQuadrantResult containing scores, true labels, ET, eta, and thresholds.
             output_dir: Target destination directory.
             file_format: Format ('pdf' or 'png').
             max_points: Max subsampled points to avoid graphic rendering slowdown.
@@ -58,11 +58,16 @@ class QuadrantPlotter(BasePlotter):
             Saved file path.
         """
         n_points = len(result.labels)
+        eta = result.eta if result.eta is not None and len(result.eta) == n_points else np.zeros(n_points)
+        et = result.et if result.et is not None and len(result.et) == n_points else np.zeros(n_points)
+
         if n_points > max_points:
             indices = np.random.choice(n_points, size=max_points, replace=False)
             p1 = result.probs_model1[indices]
             p2 = result.probs_model2[indices]
             y = result.labels[indices]
+            eta = eta[indices]
+            et = et[indices]
         else:
             p1 = result.probs_model1
             p2 = result.probs_model2
@@ -85,8 +90,8 @@ class QuadrantPlotter(BasePlotter):
         fig, axes = plt.subplots(1, 2, figsize=(16, 7))
         region_str = self._get_region_label(result.iet, result.ieta)
         fig.suptitle(
-            f"Score Space Quadrant Partition — {region_str}\n"
-            f"Threshold M1: {th1:.4f} | Threshold M2: {th2:.4f}",
+            f"Kinematic Distribution & Quadrant Agreement — {region_str}\n"
+            f"{result.model1_name} vs {result.model2_name}",
             fontsize=14,
             weight="bold",
         )
@@ -94,31 +99,27 @@ class QuadrantPlotter(BasePlotter):
         # Subplot 1: Truth Labels
         signal_mask = y == 1
         axes[0].scatter(
-            p1[~signal_mask],
-            p2[~signal_mask],
+            eta[~signal_mask],
+            et[~signal_mask],
             alpha=0.35,
             s=12,
             color="#d62728",
-            label="Background (0)",
+            label=f"Background (0) ({np.sum(~signal_mask):,})",
             rasterized=True,
         )
         axes[0].scatter(
-            p1[signal_mask],
-            p2[signal_mask],
+            eta[signal_mask],
+            et[signal_mask],
             alpha=0.35,
             s=12,
             color="#2ca02c",
-            label="Signal (1)",
+            label=f"Signal (1) ({np.sum(signal_mask):,})",
             rasterized=True,
         )
-        axes[0].axvline(th1, color="black", linestyle="--", linewidth=1.5, label=f"M1 Cut ({th1:.3f})")
-        axes[0].axhline(th2, color="gray", linestyle="--", linewidth=1.5, label=f"M2 Cut ({th2:.3f})")
-        axes[0].set_xlabel(f"{result.model1_name} Probability Score", fontsize=11)
-        axes[0].set_ylabel(f"{result.model2_name} Probability Score", fontsize=11)
+        axes[0].set_xlabel(r"Pseudorapidity $\eta$", fontsize=11)
+        axes[0].set_ylabel(r"Transverse Energy $E_T$ [GeV]", fontsize=11)
         axes[0].set_title("Events by Ground Truth Class", fontsize=12)
-        axes[0].set_xlim(-0.02, 1.02)
-        axes[0].set_ylim(-0.02, 1.02)
-        axes[0].legend(loc="upper left", framealpha=0.9)
+        axes[0].legend(loc="upper right", framealpha=0.9)
         axes[0].grid(True, linestyle=":", alpha=0.5)
 
         # Subplot 2: Agreement Categorization
@@ -132,8 +133,8 @@ class QuadrantPlotter(BasePlotter):
             mask = categories == cat
             if np.any(mask):
                 axes[1].scatter(
-                    p1[mask],
-                    p2[mask],
+                    eta[mask],
+                    et[mask],
                     alpha=0.45,
                     s=14,
                     color=color,
@@ -141,20 +142,27 @@ class QuadrantPlotter(BasePlotter):
                     rasterized=True,
                 )
 
-        axes[1].axvline(th1, color="black", linestyle="--", linewidth=1.5)
-        axes[1].axhline(th2, color="gray", linestyle="--", linewidth=1.5)
-        axes[1].set_xlabel(f"{result.model1_name} Probability Score", fontsize=11)
-        axes[1].set_ylabel(f"{result.model2_name} Probability Score", fontsize=11)
+        axes[1].set_xlabel(r"Pseudorapidity $\eta$", fontsize=11)
+        axes[1].set_ylabel(r"Transverse Energy $E_T$ [GeV]", fontsize=11)
         axes[1].set_title("Events by Classification Agreement", fontsize=12)
-        axes[1].set_xlim(-0.02, 1.02)
-        axes[1].set_ylim(-0.02, 1.02)
-        axes[1].legend(loc="upper left", framealpha=0.9)
+        axes[1].legend(loc="upper right", framealpha=0.9)
         axes[1].grid(True, linestyle=":", alpha=0.5)
+
+        if len(eta) > 0 and (np.max(eta) > np.min(eta) or np.max(et) > np.min(et)):
+            eta_min, eta_max = float(np.min(eta)), float(np.max(eta))
+            et_min, et_max = float(np.min(et)), float(np.max(et))
+            eta_pad = max((eta_max - eta_min) * 0.05, 0.02)
+            et_pad = max((et_max - et_min) * 0.05, 0.5)
+            for ax in axes:
+                ax.set_xlim(eta_min - eta_pad, eta_max + eta_pad)
+                ax.set_ylim(max(0.0, et_min - et_pad), et_max + et_pad)
 
         plt.tight_layout()
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
-        filename = f"{prefix}_score_scatter.{file_format}"
+        filename = f"{prefix}_quadrant_scatter.{file_format}"
         return self.save_figure(fig, output_dir, "ScoreScatter", filename, file_format=file_format)
+
+    plot_kinematic_scatter = plot_score_scatter
 
     def plot_regional_summary(
         self,

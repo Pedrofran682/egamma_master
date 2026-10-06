@@ -142,6 +142,8 @@ class RegionalQuadrantResult:
     labels: np.ndarray
     threshold_model1: float
     threshold_model2: float
+    et: Optional[np.ndarray] = None
+    eta: Optional[np.ndarray] = None
 
 
 class QuadrantAnalyzer:
@@ -413,6 +415,23 @@ class QuadrantAnalyzer:
             th1 = 0.5
         y = res1.holdout_labels
 
+        feature_names = getattr(self.trainer1.full_dataset, "feature_names", None)
+        if feature_names is not None and isinstance(feature_names, (list, np.ndarray)) and len(feature_names) > 0:
+            eta_matches = np.where(np.array(feature_names) == "trig_L2_calo_eta")[0]
+            et_matches = np.where(np.array(feature_names) == "trig_L2_calo_et")[0]
+            eta_idx = int(eta_matches[0]) if len(eta_matches) > 0 else None
+            et_idx = int(et_matches[0]) if len(et_matches) > 0 else None
+        else:
+            eta_idx = None
+            et_idx = None
+
+        if eta_idx is not None and et_idx is not None and res1.holdout_features_full.shape[1] > max(eta_idx, et_idx):
+            eta_vals = res1.holdout_features_full[:, eta_idx].copy()
+            et_vals = (res1.holdout_features_full[:, et_idx] / 1000.0).copy()
+        else:
+            eta_vals = np.zeros(len(y), dtype=float)
+            et_vals = np.zeros(len(y), dtype=float)
+
         del data1, target1, res1
         gc.collect()
         if torch.cuda.is_available():
@@ -478,6 +497,8 @@ class QuadrantAnalyzer:
             labels=y,
             threshold_model1=th1,
             threshold_model2=th2,
+            et=et_vals,
+            eta=eta_vals,
         )
 
     def run(self) -> List[RegionalQuadrantResult]:
@@ -580,6 +601,17 @@ class QuadrantAnalyzer:
         mean_th1 = float(np.mean([r.threshold_model1 for r in regional_results]))
         mean_th2 = float(np.mean([r.threshold_model2 for r in regional_results]))
 
+        all_et = (
+            np.concatenate([r.et for r in regional_results if r.et is not None and len(r.et) > 0])
+            if any(r.et is not None and len(r.et) > 0 for r in regional_results)
+            else np.array([])
+        )
+        all_eta = (
+            np.concatenate([r.eta for r in regional_results if r.eta is not None and len(r.eta) > 0])
+            if any(r.eta is not None and len(r.eta) > 0 for r in regional_results)
+            else np.array([])
+        )
+
         return RegionalQuadrantResult(
             iet=-1,
             ieta=-1,
@@ -593,4 +625,6 @@ class QuadrantAnalyzer:
             labels=all_labels,
             threshold_model1=mean_th1,
             threshold_model2=mean_th2,
+            et=all_et,
+            eta=all_eta,
         )
