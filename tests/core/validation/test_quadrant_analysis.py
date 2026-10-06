@@ -111,6 +111,9 @@ class TestQuadrantAnalysis(unittest.TestCase):
             "trig_L2_calo_weta2": np.random.uniform(0.01, 0.03, 60),
         }
 
+        et = np.random.uniform(20.0, 50.0, 60)
+        eta = np.random.uniform(0.0, 2.5, 60)
+
         return RegionalQuadrantResult(
             iet=iet,
             ieta=ieta,
@@ -127,6 +130,8 @@ class TestQuadrantAnalysis(unittest.TestCase):
             threshold_strategy1=0.5,
             threshold_strategy2=0.5,
             showershapes=showershapes,
+            et=et,
+            eta=eta,
         )
 
     def test_quadrant_plotter_renders_histograms_and_summary(self) -> None:
@@ -138,10 +143,15 @@ class TestQuadrantAnalysis(unittest.TestCase):
         self.assertEqual(len(saved["summary"]), 1)
         self.assertEqual(len(saved["class_efficiencies"]), 1)
         self.assertEqual(len(saved["histograms"]), 8)
+        self.assertEqual(len(saved["efficiency_curves"]), 4)
 
         for p in saved["histograms"]:
             self.assertTrue(os.path.exists(p))
             self.assertTrue(p.endswith("_quadrant_hist.png"))
+
+        for p in saved["efficiency_curves"]:
+            self.assertTrue(os.path.exists(p))
+            self.assertTrue("_efficiency_vs_" in p)
 
         for p in saved["summary"]:
             self.assertTrue(os.path.exists(p))

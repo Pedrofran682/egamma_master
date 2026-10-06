@@ -1,7 +1,7 @@
 import logging
 import os
 import pathlib
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -9,7 +9,7 @@ from src.core.Interfaces.BasePlotter import BasePlotter
 from src.core.Plotting.RegionDistributionPlotter import DEFAULT_ET_INTERVALS, DEFAULT_ETA_INTERVALS
 from src.core.Validation.QuadrantAnalyzer import RegionalQuadrantResult
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 VARIABLE_LABELS: Dict[str, str] = {
     "Rcore": r"L2 $R_{\text{core}}$ ($E_{237} / E_{277}$)",
@@ -27,7 +27,7 @@ VARIABLE_LABELS: Dict[str, str] = {
 
 
 class QuadrantPlotter(BasePlotter):
-    """Generates trigger shower shape quadrant histograms and regional summaries."""
+    """Generates trigger shower shape quadrant histograms, efficiency curves, and summaries."""
 
     def __init__(
         self,
@@ -155,6 +155,194 @@ class QuadrantPlotter(BasePlotter):
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_{var_name}_quadrant_hist.{file_format}"
         return self.save_figure(fig, output_dir, "ShowershapeHistograms", filename, file_format=file_format)
+
+    @staticmethod
+    def _compute_binned_efficiency(
+        values: np.ndarray,
+        preds: np.ndarray,
+        target_class: int,
+        bins: int = 10,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Computes binned classification efficiency and binomial errors for a given class.
+
+        Args:
+            values: Continuous feature values (ET or eta) for events of the target class.
+            preds: Binary predictions for events of the target class.
+            target_class: Target class label (1 for signal, 0 for background).
+            bins: Number of equal-width bins.
+
+        Returns:
+            Tuple of (bin_centers, efficiencies, binomial_errors).
+        """
+        if len(values) == 0:
+            return np.array([]), np.array([]), np.array([])
+
+        finite_mask = np.isfinite(values)
+        vals = values[finite_mask]
+        p = preds[finite_mask]
+
+        if len(vals) == 0:
+            return np.array([]), np.array([]), np.array([])
+
+        q_low, q_high = float(np.percentile(vals, 0.5)), float(np.percentile(vals, 99.5))
+        if q_low >= q_high:
+            q_low -= 1.0
+            q_high += 1.0
+
+        bin_edges = np.linspace(q_low, q_high, bins + 1)
+        bin_centers: List[float] = []
+        efficiencies: List[float] = []
+        binomial_errors: List[float] = []
+
+        for i in range(len(bin_edges) - 1):
+            low, high = bin_edges[i], bin_edges[i + 1]
+            if i == len(bin_edges) - 2:
+                in_bin = (vals >= low) & (vals <= high)
+            else:
+                in_bin = (vals >= low) & (vals < high)
+
+            n_in_bin = int(np.sum(in_bin))
+            if n_in_bin > 0:
+                n_correct = int(np.sum(p[in_bin] == target_class))
+                eff = float(n_correct / n_in_bin)
+                err = float(np.sqrt((eff * (1.0 - eff)) / n_in_bin))
+
+                bin_centers.append((low + high) / 2.0)
+                efficiencies.append(eff)
+                binomial_errors.append(err)
+
+        return np.array(bin_centers), np.array(efficiencies), np.array(binomial_errors)
+
+    def plot_efficiency_vs_variable(
+        self,
+        result: RegionalQuadrantResult,
+        var_name: str,
+        output_dir: str | pathlib.Path,
+        file_format: str = "pdf",
+        bins: int = 10,
+    ) -> Optional[str]:
+        """Renders 2-panel scatter plot with error bars of classification efficiency vs a variable.
+
+        Left panel: Signal Class (Photons) Efficiency vs variable.
+        Right panel: Background Class (Fakes) Efficiency vs variable.
+
+        Args:
+            result: RegionalQuadrantResult containing ET, eta, predictions, and labels.
+            var_name: Either 'et' or 'eta'.
+            output_dir: Destination output directory.
+            file_format: File format ('pdf' or 'png').
+            bins: Number of equal-width bins.
+
+        Returns:
+            Saved file path or None if continuous values are unavailable.
+        """
+        values = result.et if var_name == "et" else result.eta
+        if values is None or len(values) == 0 or not np.any(np.isfinite(values)):
+            return None
+
+        labels = result.labels
+        preds1 = result.preds_strategy1
+        preds2 = result.preds_strategy2
+
+        sig_mask = labels == 1
+        bg_mask = labels == 0
+
+        s1_sig_x, s1_sig_eff, s1_sig_err = self._compute_binned_efficiency(
+            values[sig_mask], preds1[sig_mask], target_class=1, bins=bins
+        )
+        s1_bg_x, s1_bg_eff, s1_bg_err = self._compute_binned_efficiency(
+            values[bg_mask], preds1[bg_mask], target_class=0, bins=bins
+        )
+
+        s2_sig_x, s2_sig_eff, s2_sig_err = self._compute_binned_efficiency(
+            values[sig_mask], preds2[sig_mask], target_class=1, bins=bins
+        )
+        s2_bg_x, s2_bg_eff, s2_bg_err = self._compute_binned_efficiency(
+            values[bg_mask], preds2[bg_mask], target_class=0, bins=bins
+        )
+
+        if len(s1_sig_x) == 0 and len(s2_sig_x) == 0:
+            return None
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        region_str = self._get_region_label(result.iet, result.ieta)
+        var_label = r"Transverse Energy $E_T$ [GeV]" if var_name == "et" else r"Pseudorapidity $\eta$"
+
+        s1_name = result.strategy1_name
+        s2_name = result.strategy2_name
+
+        # Left panel: Signal Class (Photons)
+        if len(s1_sig_x) > 0:
+            axes[0].errorbar(
+                s1_sig_x,
+                s1_sig_eff,
+                yerr=s1_sig_err,
+                fmt="o",
+                capsize=4,
+                markersize=6,
+                color="#1f77b4",
+                label=s1_name,
+            )
+        if len(s2_sig_x) > 0:
+            axes[0].errorbar(
+                s2_sig_x,
+                s2_sig_eff,
+                yerr=s2_sig_err,
+                fmt="s",
+                capsize=4,
+                markersize=6,
+                color="#ff7f0e",
+                label=s2_name,
+            )
+
+        axes[0].set_xlabel(var_label, fontsize=11)
+        axes[0].set_ylabel("Signal Efficiency (TPR / $P_d$)", fontsize=11)
+        axes[0].set_title(f"Signal Class (Photons) Efficiency vs {var_label}", fontsize=12, weight="bold")
+        axes[0].set_ylim(-0.02, 1.05)
+        axes[0].grid(True, linestyle=":", alpha=0.6)
+        axes[0].legend(loc="lower right", framealpha=0.9)
+
+        # Right panel: Background Class (Fakes)
+        if len(s1_bg_x) > 0:
+            axes[1].errorbar(
+                s1_bg_x,
+                s1_bg_eff,
+                yerr=s1_bg_err,
+                fmt="o",
+                capsize=4,
+                markersize=6,
+                color="#1f77b4",
+                label=s1_name,
+            )
+        if len(s2_bg_x) > 0:
+            axes[1].errorbar(
+                s2_bg_x,
+                s2_bg_eff,
+                yerr=s2_bg_err,
+                fmt="s",
+                capsize=4,
+                markersize=6,
+                color="#ff7f0e",
+                label=s2_name,
+            )
+
+        axes[1].set_xlabel(var_label, fontsize=11)
+        axes[1].set_ylabel(r"Background Efficiency (TNR / $\mathrm{Eff}_{\mathrm{bg}}$)", fontsize=11)
+        axes[1].set_title(f"Background Class (Fakes) Efficiency vs {var_label}", fontsize=12, weight="bold")
+        axes[1].set_ylim(-0.02, 1.05)
+        axes[1].grid(True, linestyle=":", alpha=0.6)
+        axes[1].legend(loc="lower right", framealpha=0.9)
+
+        fig.suptitle(
+            f"Classification Efficiency vs {var_label}\n{region_str} ({s1_name} vs {s2_name})",
+            fontsize=13,
+            weight="bold",
+        )
+        plt.tight_layout()
+
+        prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
+        filename = f"{prefix}_efficiency_vs_{var_name}.{file_format}"
+        return self.save_figure(fig, output_dir, "EfficiencyCurves", filename, file_format=file_format)
 
     def plot_regional_summary(
         self,
@@ -320,7 +508,7 @@ class QuadrantPlotter(BasePlotter):
         file_format: str = "pdf",
         **kwargs: object,
     ) -> Dict[str, List[str]]:
-        """Coordinates rendering of all shower shape histograms and regional summaries.
+        """Coordinates rendering of shower shape histograms, efficiency curves, and regional summaries.
 
         Args:
             results: List of RegionalQuadrantResult instances.
@@ -332,6 +520,7 @@ class QuadrantPlotter(BasePlotter):
         """
         saved_paths: Dict[str, List[str]] = {
             "histograms": [],
+            "efficiency_curves": [],
             "summary": [],
             "class_efficiencies": [],
         }
@@ -341,6 +530,7 @@ class QuadrantPlotter(BasePlotter):
             return saved_paths
 
         hist_base_dir = pathlib.Path(output_dir) / "histograms"
+        eff_base_dir = pathlib.Path(output_dir) / "efficiency_curves"
         summary_dir = pathlib.Path(output_dir) / "summary"
 
         log.info(f"Rendering quadrant figures for {len(results)} evaluated result sets into: {output_dir}")
@@ -349,20 +539,40 @@ class QuadrantPlotter(BasePlotter):
             if res.iet < 0:
                 continue
             region_tag = f"iet{res.iet}.ieta{res.ieta}"
-            region_output_dir = hist_base_dir / f"iet{res.iet}_ieta{res.ieta}"
+            region_hist_dir = hist_base_dir / f"iet{res.iet}_ieta{res.ieta}"
+            region_eff_dir = eff_base_dir / f"iet{res.iet}_ieta{res.ieta}"
 
             for var_name in res.showershapes.keys():
                 path = self.plot_showershape_histogram(
                     result=res,
                     var_name=var_name,
-                    output_dir=region_output_dir,
+                    output_dir=region_hist_dir,
                     file_format=file_format,
                 )
                 if path:
                     saved_paths["histograms"].append(path)
 
-            log.info(f"[{region_tag}] Generated shower shape histograms in {region_output_dir}")
+            et_eff_path = self.plot_efficiency_vs_variable(
+                result=res,
+                var_name="et",
+                output_dir=region_eff_dir,
+                file_format=file_format,
+            )
+            if et_eff_path:
+                saved_paths["efficiency_curves"].append(et_eff_path)
 
+            eta_eff_path = self.plot_efficiency_vs_variable(
+                result=res,
+                var_name="eta",
+                output_dir=region_eff_dir,
+                file_format=file_format,
+            )
+            if eta_eff_path:
+                saved_paths["efficiency_curves"].append(eta_eff_path)
+
+            log.info(f"[{region_tag}] Generated figures in {region_hist_dir} and {region_eff_dir}")
+
+        # Summary plots
         summary_path = self.plot_regional_summary(results, summary_dir, file_format=file_format)
         if summary_path:
             saved_paths["summary"].append(summary_path)
