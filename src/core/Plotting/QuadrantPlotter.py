@@ -247,6 +247,15 @@ class QuadrantPlotter(BasePlotter):
         preds1 = result.preds_strategy1
         preds2 = result.preds_strategy2
 
+        if var_name == "et":
+            cutoff_mask = values < 150.0
+            values = values[cutoff_mask]
+            labels = labels[cutoff_mask]
+            preds1 = preds1[cutoff_mask]
+            preds2 = preds2[cutoff_mask]
+            if len(values) == 0:
+                return None
+
         sig_mask = labels == 1
         bg_mask = labels == 0
 
@@ -269,7 +278,7 @@ class QuadrantPlotter(BasePlotter):
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         region_str = self._get_region_label(result.iet, result.ieta)
-        var_label = r"Transverse Energy $E_T$ [GeV]" if var_name == "et" else r"Pseudorapidity $\eta$"
+        var_label = r"Transverse Energy $E_T$ [GeV] ($E_T < 150$ GeV)" if var_name == "et" else r"Pseudorapidity $\eta$"
 
         s1_name = result.strategy1_name
         s2_name = result.strategy2_name
