@@ -211,6 +211,108 @@ class QuadrantPlotter(BasePlotter):
         filename = f"regional_quadrant_summary.{file_format}"
         return self.save_figure(fig, output_dir, "Summary", filename, file_format=file_format)
 
+    def plot_regional_class_efficiencies(
+        self,
+        results: List[RegionalQuadrantResult],
+        output_dir: str | pathlib.Path,
+        file_format: str = "pdf",
+    ) -> Optional[str]:
+        """Renders grouped bar plot comparing classification efficiency per class across regions.
+
+        Args:
+            results: List of RegionalQuadrantResult objects.
+            output_dir: Base directory path.
+            file_format: Format ('pdf' or 'png').
+
+        Returns:
+            Saved file path or None if fewer than 2 regions.
+        """
+        filtered_results = [r for r in results if r.iet >= 0]
+        if len(filtered_results) < 2:
+            return None
+
+        regions = [f"iet{r.iet}.ieta{r.ieta}" for r in filtered_results]
+        s1_name = filtered_results[0].strategy1_name
+        s2_name = filtered_results[0].strategy2_name
+
+        s1_sig_eff = np.array([r.metrics_strategy1.pd for r in filtered_results])
+        s1_sig_err = np.array([r.metrics_strategy1.sig_eff_uncertainty for r in filtered_results])
+        s2_sig_eff = np.array([r.metrics_strategy2.pd for r in filtered_results])
+        s2_sig_err = np.array([r.metrics_strategy2.sig_eff_uncertainty for r in filtered_results])
+
+        s1_bg_eff = np.array([r.metrics_strategy1.bg_eff for r in filtered_results])
+        s1_bg_err = np.array([r.metrics_strategy1.bg_eff_uncertainty for r in filtered_results])
+        s2_bg_eff = np.array([r.metrics_strategy2.bg_eff for r in filtered_results])
+        s2_bg_err = np.array([r.metrics_strategy2.bg_eff_uncertainty for r in filtered_results])
+
+        fig_width = max(14, len(regions) * 1.8)
+        fig, axes = plt.subplots(1, 2, figsize=(fig_width, 6.5))
+        x = np.arange(len(regions))
+        bar_width = 0.35
+
+        # Signal Class (Photons)
+        axes[0].bar(
+            x - 0.5 * bar_width,
+            s1_sig_eff,
+            bar_width,
+            yerr=s1_sig_err,
+            capsize=4,
+            label=s1_name,
+            color="#1f77b4",
+        )
+        axes[0].bar(
+            x + 0.5 * bar_width,
+            s2_sig_eff,
+            bar_width,
+            yerr=s2_sig_err,
+            capsize=4,
+            label=s2_name,
+            color="#ff7f0e",
+        )
+        axes[0].set_ylabel("Signal Efficiency (TPR / $P_d$)", fontsize=11)
+        axes[0].set_title("Signal Class (Photons) Efficiency", fontsize=12, weight="bold")
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(regions, rotation=45, ha="right", fontsize=9)
+        axes[0].set_ylim(0.0, 1.05)
+        axes[0].grid(axis="y", linestyle=":", alpha=0.6)
+        axes[0].legend(loc="lower right", framealpha=0.9)
+
+        # Background Class (Fakes)
+        axes[1].bar(
+            x - 0.5 * bar_width,
+            s1_bg_eff,
+            bar_width,
+            yerr=s1_bg_err,
+            capsize=4,
+            label=s1_name,
+            color="#1f77b4",
+        )
+        axes[1].bar(
+            x + 0.5 * bar_width,
+            s2_bg_eff,
+            bar_width,
+            yerr=s2_bg_err,
+            capsize=4,
+            label=s2_name,
+            color="#ff7f0e",
+        )
+        axes[1].set_ylabel(r"Background Efficiency (TNR / $\mathrm{Eff}_{\mathrm{bg}}$)", fontsize=11)
+        axes[1].set_title("Background Class (Fakes) Efficiency", fontsize=12, weight="bold")
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(regions, rotation=45, ha="right", fontsize=9)
+        axes[1].set_ylim(0.0, 1.05)
+        axes[1].grid(axis="y", linestyle=":", alpha=0.6)
+        axes[1].legend(loc="lower right", framealpha=0.9)
+
+        fig.suptitle(
+            f"Regional Classification Efficiencies by Class\n{s1_name} vs {s2_name}",
+            fontsize=13,
+            weight="bold",
+        )
+        plt.tight_layout()
+        filename = f"regional_class_efficiencies.{file_format}"
+        return self.save_figure(fig, output_dir, "Summary", filename, file_format=file_format)
+
     def plot(
         self,
         results: List[RegionalQuadrantResult],
@@ -231,6 +333,7 @@ class QuadrantPlotter(BasePlotter):
         saved_paths: Dict[str, List[str]] = {
             "histograms": [],
             "summary": [],
+            "class_efficiencies": [],
         }
 
         if not results:
@@ -264,5 +367,10 @@ class QuadrantPlotter(BasePlotter):
         if summary_path:
             saved_paths["summary"].append(summary_path)
             log.info(f"[Summary] Generated regional grouped summary: {summary_path}")
+
+        eff_path = self.plot_regional_class_efficiencies(results, summary_dir, file_format=file_format)
+        if eff_path:
+            saved_paths["class_efficiencies"].append(eff_path)
+            log.info(f"[Summary] Generated regional class efficiencies: {eff_path}")
 
         return saved_paths

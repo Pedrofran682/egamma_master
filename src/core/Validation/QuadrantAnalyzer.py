@@ -87,6 +87,22 @@ class StrategyMetrics:
             total=total,
         )
 
+    @property
+    def bg_eff(self) -> float:
+        n_bg = self.tn + self.fp
+        return float(self.tn / n_bg) if n_bg > 0 else 0.0
+
+    @property
+    def sig_eff_uncertainty(self) -> float:
+        n_sig = self.tp + self.fn
+        return float(np.sqrt((self.pd * (1.0 - self.pd)) / n_sig)) if n_sig > 0 else 0.0
+
+    @property
+    def bg_eff_uncertainty(self) -> float:
+        n_bg = self.tn + self.fp
+        p = self.bg_eff
+        return float(np.sqrt((p * (1.0 - p)) / n_bg)) if n_bg > 0 else 0.0
+
 
 @dataclass
 class QuadrantMetrics:
@@ -937,10 +953,16 @@ class QuadrantAnalyzer:
                     "threshold_strategy2": res.threshold_strategy2,
                     "total_events": m.total_events,
                     "s1_pd": s1.pd,
+                    "s1_sig_eff_uncertainty": s1.sig_eff_uncertainty,
+                    "s1_bg_eff": s1.bg_eff,
+                    "s1_bg_eff_uncertainty": s1.bg_eff_uncertainty,
                     "s1_pf": s1.pf,
                     "s1_sp": s1.sp,
                     "s1_eff": s1.eff,
                     "s2_pd": s2.pd,
+                    "s2_sig_eff_uncertainty": s2.sig_eff_uncertainty,
+                    "s2_bg_eff": s2.bg_eff,
+                    "s2_bg_eff_uncertainty": s2.bg_eff_uncertainty,
                     "s2_pf": s2.pf,
                     "s2_sp": s2.sp,
                     "s2_eff": s2.eff,

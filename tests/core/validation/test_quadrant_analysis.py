@@ -136,6 +136,7 @@ class TestQuadrantAnalysis(unittest.TestCase):
 
         saved = plotter.plot([res1, res2], self.output_dir, file_format="png")
         self.assertEqual(len(saved["summary"]), 1)
+        self.assertEqual(len(saved["class_efficiencies"]), 1)
         self.assertEqual(len(saved["histograms"]), 8)
 
         for p in saved["histograms"]:
@@ -145,6 +146,10 @@ class TestQuadrantAnalysis(unittest.TestCase):
         for p in saved["summary"]:
             self.assertTrue(os.path.exists(p))
             self.assertTrue(p.endswith("regional_quadrant_summary.png"))
+
+        for p in saved["class_efficiencies"]:
+            self.assertTrue(os.path.exists(p))
+            self.assertTrue(p.endswith("regional_class_efficiencies.png"))
 
     def test_global_result_aggregation(self) -> None:
         res1 = self._create_mock_result(iet=1, ieta=1)

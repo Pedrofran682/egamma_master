@@ -168,12 +168,12 @@ def main(args: argparse.Namespace) -> None:
     log.info("-" * 128)
     header = (
         f"{'Region':<12} | "
-        f"{'S1 Pd':<7} {'S1 Pf':<7} {'S1 SP':<7} {'S1 Eff':<7} | "
-        f"{'S2 Pd':<7} {'S2 Pf':<7} {'S2 SP':<7} {'S2 Eff':<7} | "
+        f"{'S1 Pd':<7} {'S1 BgEff':<8} {'S1 Pf':<7} {'S1 SP':<7} | "
+        f"{'S2 Pd':<7} {'S2 BgEff':<8} {'S2 Pf':<7} {'S2 SP':<7} | "
         f"{'Both Right':<14} | {'S1 Adv':<12} | {'S2 Adv':<12} | {'Both Wrong':<12} | {'McNemar p':<10}"
     )
     log.info(header)
-    log.info("-" * 128)
+    log.info("-" * 144)
 
     for res in regional_results:
         m = res.overall_metrics
@@ -182,15 +182,15 @@ def main(args: argparse.Namespace) -> None:
         region_label = f"iet{res.iet}.ieta{res.ieta}"
         log.info(
             f"{region_label:<12} | "
-            f"{s1.pd:<7.4f} {s1.pf:<7.4f} {s1.sp:<7.4f} {s1.eff:<7.4f} | "
-            f"{s2.pd:<7.4f} {s2.pf:<7.4f} {s2.sp:<7.4f} {s2.eff:<7.4f} | "
+            f"{s1.pd:<7.4f} {s1.bg_eff:<8.4f} {s1.pf:<7.4f} {s1.sp:<7.4f} | "
+            f"{s2.pd:<7.4f} {s2.bg_eff:<8.4f} {s2.pf:<7.4f} {s2.sp:<7.4f} | "
             f"{m.both_correct} ({m.both_correct_ratio:.1%})".ljust(14) + " | " +
             f"{m.model1_only_correct} ({m.model1_only_correct_ratio:.1%})".ljust(12) + " | " +
             f"{m.model2_only_correct} ({m.model2_only_correct_ratio:.1%})".ljust(12) + " | " +
             f"{m.both_wrong} ({m.both_wrong_ratio:.1%})".ljust(12) + " | " +
             f"{m.mcnemar_p_value:.3e}"
         )
-    log.info("-" * 128)
+    log.info("-" * 144)
 
     global_result = analyzer.compute_global_result(regional_results)
     if global_result is not None:
@@ -199,15 +199,15 @@ def main(args: argparse.Namespace) -> None:
         gs2 = global_result.metrics_strategy2
         log.info(
             f"{'GLOBAL':<12} | "
-            f"{gs1.pd:<7.4f} {gs1.pf:<7.4f} {gs1.sp:<7.4f} {gs1.eff:<7.4f} | "
-            f"{gs2.pd:<7.4f} {gs2.pf:<7.4f} {gs2.sp:<7.4f} {gs2.eff:<7.4f} | "
+            f"{gs1.pd:<7.4f} {gs1.bg_eff:<8.4f} {gs1.pf:<7.4f} {gs1.sp:<7.4f} | "
+            f"{gs2.pd:<7.4f} {gs2.bg_eff:<8.4f} {gs2.pf:<7.4f} {gs2.sp:<7.4f} | "
             f"{gm.both_correct} ({gm.both_correct_ratio:.1%})".ljust(14) + " | " +
             f"{gm.model1_only_correct} ({gm.model1_only_correct_ratio:.1%})".ljust(12) + " | " +
             f"{gm.model2_only_correct} ({gm.model2_only_correct_ratio:.1%})".ljust(12) + " | " +
             f"{gm.both_wrong} ({gm.both_wrong_ratio:.1%})".ljust(12) + " | " +
             f"{gm.mcnemar_p_value:.3e}"
         )
-        log.info("-" * 128)
+        log.info("-" * 144)
 
     log.info(f"Generating trigger shower shape histograms under: {output_dir}")
     plotter = QuadrantPlotter()
