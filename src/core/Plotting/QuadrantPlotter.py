@@ -5,6 +5,9 @@ from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+import mplhep as mh
+mh.style.use("ATLAS")
+
 from src.core.Interfaces.BasePlotter import BasePlotter
 from src.core.Plotting.RegionDistributionPlotter import DEFAULT_ET_INTERVALS, DEFAULT_ETA_INTERVALS
 from src.core.Validation.QuadrantAnalyzer import RegionalQuadrantResult
@@ -571,6 +574,31 @@ class QuadrantPlotter(BasePlotter):
                 saved_paths["efficiency_curves"].append(eta_eff_path)
 
             log.info(f"[{region_tag}] Generated figures in {region_hist_dir} and {region_eff_dir}")
+
+        global_res = next((r for r in results if r.iet < 0), None)
+        if global_res is not None:
+            global_eff_dir = eff_base_dir / "global"
+            global_et_path = self.plot_efficiency_vs_variable(
+                result=global_res,
+                var_name="et",
+                output_dir=global_eff_dir,
+                file_format=file_format,
+                bins=20,
+            )
+            if global_et_path:
+                saved_paths["efficiency_curves"].append(global_et_path)
+                log.info(f"[Global] Generated full efficiency vs ET: {global_et_path}")
+
+            global_eta_path = self.plot_efficiency_vs_variable(
+                result=global_res,
+                var_name="eta",
+                output_dir=global_eff_dir,
+                file_format=file_format,
+                bins=20,
+            )
+            if global_eta_path:
+                saved_paths["efficiency_curves"].append(global_eta_path)
+                log.info(f"[Global] Generated full efficiency vs eta: {global_eta_path}")
 
         # Summary plots
         summary_path = self.plot_regional_summary(results, summary_dir, file_format=file_format)

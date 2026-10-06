@@ -209,10 +209,14 @@ def main(args: argparse.Namespace) -> None:
         )
         log.info("-" * 144)
 
-    log.info(f"Generating trigger shower shape histograms under: {output_dir}")
+    log.info(f"Generating trigger shower shape histograms and efficiency curves under: {output_dir}")
     plotter = QuadrantPlotter()
+    plot_results = list(regional_results)
+    if global_result is not None:
+        plot_results.append(global_result)
+
     saved_paths = plotter.plot(
-        results=regional_results,
+        results=plot_results,
         output_dir=output_dir,
         file_format=args.file_format,
     )

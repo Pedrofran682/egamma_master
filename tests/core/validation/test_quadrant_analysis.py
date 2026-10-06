@@ -138,12 +138,13 @@ class TestQuadrantAnalysis(unittest.TestCase):
         plotter = QuadrantPlotter()
         res1 = self._create_mock_result(iet=1, ieta=1)
         res2 = self._create_mock_result(iet=2, ieta=2)
+        global_res = self._create_mock_result(iet=-1, ieta=-1)
 
-        saved = plotter.plot([res1, res2], self.output_dir, file_format="png")
+        saved = plotter.plot([res1, res2, global_res], self.output_dir, file_format="png")
         self.assertEqual(len(saved["summary"]), 1)
         self.assertEqual(len(saved["class_efficiencies"]), 1)
         self.assertEqual(len(saved["histograms"]), 8)
-        self.assertEqual(len(saved["efficiency_curves"]), 4)
+        self.assertEqual(len(saved["efficiency_curves"]), 6)
 
         for p in saved["histograms"]:
             self.assertTrue(os.path.exists(p))
@@ -152,6 +153,9 @@ class TestQuadrantAnalysis(unittest.TestCase):
         for p in saved["efficiency_curves"]:
             self.assertTrue(os.path.exists(p))
             self.assertTrue("_efficiency_vs_" in p)
+
+        self.assertTrue(any("global_efficiency_vs_et.png" in p for p in saved["efficiency_curves"]))
+        self.assertTrue(any("global_efficiency_vs_eta.png" in p for p in saved["efficiency_curves"]))
 
         for p in saved["summary"]:
             self.assertTrue(os.path.exists(p))
