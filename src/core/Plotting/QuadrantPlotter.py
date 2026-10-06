@@ -46,6 +46,132 @@ class QuadrantPlotter(BasePlotter):
         file_format: str = "pdf",
         max_points: int = 5000,
     ) -> str:
+        """Renders score scatter comparison in model probability space partitioned by quadrant agreement.
+
+        Args:
+            result: RegionalQuadrantResult containing scores, true labels, and thresholds.
+            output_dir: Target destination directory.
+            file_format: Format ('pdf' or 'png').
+            max_points: Maximum subsampled points to avoid graphic rendering slowdown.
+
+        Returns:
+            Saved file path.
+        """
+        n_points = len(result.labels)
+        if n_points > max_points:
+            indices = np.random.choice(n_points, size=max_points, replace=False)
+            p1 = result.probs_model1[indices]
+            p2 = result.probs_model2[indices]
+            y = result.labels[indices]
+        else:
+            p1 = result.probs_model1
+            p2 = result.probs_model2
+            y = result.labels
+
+        th1 = result.threshold_model1
+        th2 = result.threshold_model2
+
+        pred1 = (p1 > th1).astype(int)
+        pred2 = (p2 > th2).astype(int)
+        c1 = pred1 == y
+        c2 = pred2 == y
+
+        categories = np.empty(len(y), dtype=object)
+        categories[c1 & c2] = "Both Correct"
+        categories[c1 & ~c2] = f"{result.model1_name} Only"
+        categories[~c1 & c2] = f"{result.model2_name} Only"
+        categories[~c1 & ~c2] = "Both Wrong"
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+        region_str = self._get_region_label(result.iet, result.ieta)
+        fig.suptitle(
+            f"Model Score Distribution & Quadrant Agreement — {region_str}\n"
+            f"{result.model1_name} vs {result.model2_name}",
+            fontsize=14,
+            weight="bold",
+        )
+
+        signal_mask = y == 1
+        axes[0].scatter(
+            p1[~signal_mask],
+            p2[~signal_mask],
+            alpha=0.35,
+            s=12,
+            color="#d62728",
+            label=f"Background (0) ({np.sum(~signal_mask):,})",
+            rasterized=True,
+        )
+        axes[0].scatter(
+            p1[signal_mask],
+            p2[signal_mask],
+            alpha=0.35,
+            s=12,
+            color="#2ca02c",
+            label=f"Signal (1) ({np.sum(signal_mask):,})",
+            rasterized=True,
+        )
+        axes[0].set_xlabel(f"{result.model1_name} Score", fontsize=11)
+        axes[0].set_ylabel(f"{result.model2_name} Score", fontsize=11)
+        axes[0].set_title("Events by Ground Truth Class", fontsize=12)
+        axes[0].grid(True, linestyle=":", alpha=0.5)
+
+        palette = {
+            "Both Correct": "#2ca02c",
+            f"{result.model1_name} Only": "#1f77b4",
+            f"{result.model2_name} Only": "#ff7f0e",
+            "Both Wrong": "#d62728",
+        }
+        for cat, color in palette.items():
+            mask = categories == cat
+            if np.any(mask):
+                axes[1].scatter(
+                    p1[mask],
+                    p2[mask],
+                    alpha=0.45,
+                    s=14,
+                    color=color,
+                    label=f"{cat} ({np.sum(mask):,})",
+                    rasterized=True,
+                )
+
+        axes[1].set_xlabel(f"{result.model1_name} Score", fontsize=11)
+        axes[1].set_ylabel(f"{result.model2_name} Score", fontsize=11)
+        axes[1].set_title("Events by Classification Agreement", fontsize=12)
+        axes[1].grid(True, linestyle=":", alpha=0.5)
+
+        for ax in axes:
+            ax.axvline(
+                x=th1,
+                color="black",
+                linestyle="--",
+                linewidth=1.2,
+                alpha=0.8,
+                label=f"Threshold 1 ({th1:.3f})",
+            )
+            ax.axhline(
+                y=th2,
+                color="black",
+                linestyle="--",
+                linewidth=1.2,
+                alpha=0.8,
+                label=f"Threshold 2 ({th2:.3f})",
+            )
+            ax.set_xlim(-0.02, 1.02)
+            ax.set_ylim(-0.02, 1.02)
+            ax.legend(loc="upper left", framealpha=0.9, fontsize=9)
+
+        plt.tight_layout()
+        prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
+        filename = f"{prefix}_quadrant_score_scatter.{file_format}"
+        return self.save_figure(fig, output_dir, "ScoreScatter", filename, file_format=file_format)
+
+    def plot_kinematic_scatter(
+        self,
+        result: RegionalQuadrantResult,
+        output_dir: str | pathlib.Path,
+        file_format: str = "pdf",
+        max_points: int = 5000,
+    ) -> str:
         """Renders scatter comparison in (eta, ET) kinematic space partitioned by quadrant agreement.
 
         Args:
@@ -96,7 +222,6 @@ class QuadrantPlotter(BasePlotter):
             weight="bold",
         )
 
-        # Subplot 1: Truth Labels
         signal_mask = y == 1
         axes[0].scatter(
             eta[~signal_mask],
@@ -122,7 +247,6 @@ class QuadrantPlotter(BasePlotter):
         axes[0].legend(loc="upper right", framealpha=0.9)
         axes[0].grid(True, linestyle=":", alpha=0.5)
 
-        # Subplot 2: Agreement Categorization
         palette = {
             "Both Correct": "#2ca02c",
             f"{result.model1_name} Only": "#1f77b4",
@@ -159,10 +283,8 @@ class QuadrantPlotter(BasePlotter):
 
         plt.tight_layout()
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
-        filename = f"{prefix}_quadrant_scatter.{file_format}"
-        return self.save_figure(fig, output_dir, "ScoreScatter", filename, file_format=file_format)
-
-    plot_kinematic_scatter = plot_score_scatter
+        filename = f"{prefix}_quadrant_region_scatter.{file_format}"
+        return self.save_figure(fig, output_dir, "RegionScatter", filename, file_format=file_format)
 
     def plot_regional_summary(
         self,
@@ -226,11 +348,11 @@ class QuadrantPlotter(BasePlotter):
         file_format: str = "pdf",
         **kwargs: object,
     ) -> Dict[str, List[str]]:
-        """Coordinates rendering of all quadrant analysis figures.
+        """Coordinates rendering of all quadrant analysis figures into scores and regions folders.
 
         Args:
             results: List of RegionalQuadrantResult instances.
-            output_dir: Base output directory (e.g. Plots/quandrantic_analysis).
+            output_dir: Base output directory.
             file_format: Format ('pdf' or 'png').
 
         Returns:
@@ -238,6 +360,7 @@ class QuadrantPlotter(BasePlotter):
         """
         saved_paths: Dict[str, List[str]] = {
             "score_scatters": [],
+            "region_scatters": [],
             "summary": [],
         }
 
@@ -245,17 +368,24 @@ class QuadrantPlotter(BasePlotter):
             log.warning("No quadrant results to plot. Skipping plot generation.")
             return saved_paths
 
+        scores_dir = pathlib.Path(output_dir) / "scores"
+        regions_dir = pathlib.Path(output_dir) / "regions"
+
         log.info(f"Rendering quadrant figures for {len(results)} evaluated result sets into: {output_dir}")
 
         for res in results:
             if res.iet < 0:
                 continue
             region_tag = f"iet{res.iet}.ieta{res.ieta}"
-            scatter_path = self.plot_score_scatter(res, output_dir, file_format=file_format)
-            saved_paths["score_scatters"].append(scatter_path)
-            log.info(f"[{region_tag}] Generated score scatter plot: {scatter_path}")
+            score_path = self.plot_score_scatter(res, scores_dir, file_format=file_format)
+            saved_paths["score_scatters"].append(score_path)
+            log.info(f"[{region_tag}] Generated score scatter plot: {score_path}")
 
-        summary_path = self.plot_regional_summary(results, output_dir, file_format=file_format)
+            region_path = self.plot_kinematic_scatter(res, regions_dir, file_format=file_format)
+            saved_paths["region_scatters"].append(region_path)
+            log.info(f"[{region_tag}] Generated region scatter plot: {region_path}")
+
+        summary_path = self.plot_regional_summary(results, regions_dir, file_format=file_format)
         if summary_path:
             saved_paths["summary"].append(summary_path)
             log.info(f"[Summary] Generated regional grouped summary: {summary_path}")

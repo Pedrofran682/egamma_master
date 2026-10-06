@@ -108,12 +108,36 @@ class TestQuadrantAnalysis(unittest.TestCase):
         global_res = self._create_mock_result(iet=-1, ieta=-1)
         saved = plotter.plot([res1, res2, global_res], self.output_dir, file_format="png")
         self.assertEqual(len(saved["score_scatters"]), 2)
+        self.assertEqual(len(saved["region_scatters"]), 2)
         self.assertFalse(any("global" in p for p in saved["score_scatters"]))
         self.assertEqual(len(saved["summary"]), 1)
+
+        for p in saved["score_scatters"]:
+            self.assertIn("scores", p)
+            self.assertTrue(p.endswith("_quadrant_score_scatter.png"))
+
+        for p in saved["region_scatters"]:
+            self.assertIn("regions", p)
+            self.assertTrue(p.endswith("_quadrant_region_scatter.png"))
+
+        for p in saved["summary"]:
+            self.assertIn("regions", p)
+            self.assertTrue(p.endswith("regional_quadrant_summary.png"))
 
         for path_list in saved.values():
             for p in path_list:
                 self.assertTrue(os.path.exists(p))
+
+    def test_plot_score_scatter_subsampling(self) -> None:
+        plotter = QuadrantPlotter()
+        res = self._create_mock_result(iet=1, ieta=1)
+        res.labels = np.ones(6000, dtype=int)
+        res.probs_model1 = np.random.uniform(0, 1, 6000)
+        res.probs_model2 = np.random.uniform(0, 1, 6000)
+
+        out = plotter.plot_score_scatter(res, self.output_dir / "scores", file_format="png", max_points=5000)
+        self.assertTrue(os.path.exists(out))
+        self.assertIn("scores", out)
 
     def test_global_result_aggregation(self) -> None:
         res1 = self._create_mock_result(iet=1, ieta=1)
