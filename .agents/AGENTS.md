@@ -83,10 +83,12 @@ Analyze and plot class/event distributions across $E_T$ and $\eta$ calorimeter r
 conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
 ```
 
-### 6. Quadrant Analysis (Model Comparison)
-Compare two classification models on holdout test partitions across $E_T$ and $\eta$ calorimeter regions:
+### 6. Quadrant Analysis (Model Comparison & Cut-Based Benchmark)
+Compare two classification models or a model against Athena fast photon cut-based trigger selection on holdout test partitions across $E_T$ and $\eta$ calorimeter regions:
 ```bash
+# Model vs Model comparison
 conda run -n egamma python scripts/run_quadrant_analysis.py \
+    --mode model_vs_model \
     --config1 config/NeuralRinger/ModelV1.yaml \
     --data_path1 results/<model1_results_dir> \
     --config2 config/NeuralRinger/ModelV2.yaml \
@@ -95,7 +97,19 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     [--target_pd 0.9424] \
     [--efficiencies_csv <csv_path>] \
     [--output_dir Plots/quandrantic_analysis]
+
+# Model vs Cut-Based Selection comparison
+conda run -n egamma python scripts/run_quadrant_analysis.py \
+    --mode model_vs_cut \
+    --config1 config/NeuralRinger/ModelV1.yaml \
+    --data_path1 results/<model1_results_dir> \
+    [--working_point loose|medium|tight] \
+    [--threshold_mode calibrated|default] \
+    [--target_pd 0.9424] \
+    [--efficiencies_csv <csv_path>] \
+    [--output_dir Plots/quandrantic_analysis_cut]
 ```
+
 
 ---
 

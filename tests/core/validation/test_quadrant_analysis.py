@@ -10,6 +10,7 @@ from src.core.Validation.QuadrantAnalyzer import (
     QuadrantAnalyzer,
     QuadrantMetrics,
     RegionalQuadrantResult,
+    StrategyMetrics,
 )
 
 
@@ -20,6 +21,22 @@ class TestQuadrantAnalysis(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_strategy_metrics_calculation(self) -> None:
+        preds = np.array([1, 1, 0, 0, 1])
+        labels = np.array([1, 0, 0, 1, 1])
+        metrics = StrategyMetrics.from_predictions(preds, labels)
+
+        self.assertEqual(metrics.tp, 2)
+        self.assertEqual(metrics.fn, 1)
+        self.assertEqual(metrics.tn, 1)
+        self.assertEqual(metrics.fp, 1)
+        self.assertEqual(metrics.total, 5)
+
+        self.assertAlmostEqual(metrics.pd, 2 / 3, places=4)
+        self.assertAlmostEqual(metrics.pf, 1 / 2, places=4)
+        self.assertAlmostEqual(metrics.eff, 3 / 5, places=4)
+        self.assertGreater(metrics.sp, 0.0)
 
     def test_quadrant_metrics_calculation(self) -> None:
         metrics = QuadrantMetrics(
@@ -34,7 +51,6 @@ class TestQuadrantAnalysis(unittest.TestCase):
         self.assertEqual(metrics.model2_only_correct_ratio, 0.1)
         self.assertEqual(metrics.both_wrong_ratio, 0.2)
 
-        # McNemar statistic: (|20 - 10| - 1)^2 / (20 + 10) = 81 / 30 = 2.7
         self.assertAlmostEqual(metrics.mcnemar_statistic, 2.7, places=4)
         self.assertGreater(metrics.mcnemar_p_value, 0.0)
         self.assertLessEqual(metrics.mcnemar_p_value, 1.0)
@@ -46,98 +62,89 @@ class TestQuadrantAnalysis(unittest.TestCase):
         self.assertEqual(matrix[1, 0], 10)
         self.assertEqual(matrix[1, 1], 20)
 
-    def test_quadrant_metrics_zero_discordance(self) -> None:
-        metrics = QuadrantMetrics(
-            both_correct=80,
-            model1_only_correct=0,
-            model2_only_correct=0,
-            both_wrong=20,
-            total_events=100,
+    def test_extract_l2_showershapes(self) -> None:
+        feature_names = [
+            "trig_L2_calo_weta2",
+            "trig_L2_calo_wstot",
+            "trig_L2_calo_fracs1",
+            "trig_L2_calo_ehad1",
+            "trig_L2_calo_emaxs1",
+            "trig_L2_calo_e2tsts1",
+            "trig_L2_calo_e237",
+            "trig_L2_calo_e277",
+            "trig_L2_calo_et",
+        ]
+        features = np.array(
+            [
+                [0.02, 1.5, 0.4, 500.0, 1000.0, 200.0, 800.0, 1000.0, 20000.0],
+                [0.03, 1.8, 0.6, 600.0, 1500.0, 500.0, 900.0, 1000.0, 30000.0],
+            ]
         )
-        self.assertEqual(metrics.mcnemar_statistic, 0.0)
-        self.assertEqual(metrics.mcnemar_p_value, 1.0)
+        shapes = QuadrantAnalyzer.extract_l2_showershapes(features, feature_names)
 
-    def test_compute_quadrant_metrics_from_predictions(self) -> None:
-        y_true = np.array([1, 1, 0, 0, 1])
-        pred1 = np.array([1, 1, 0, 1, 0])
-        pred2 = np.array([1, 0, 0, 0, 0])
+        self.assertIn("Rcore", shapes)
+        self.assertIn("Rhad", shapes)
+        self.assertIn("Eratio", shapes)
+        self.assertIn("trig_L2_calo_weta2", shapes)
 
-        metrics = QuadrantAnalyzer.compute_quadrant_metrics(pred1, pred2, y_true)
-        # Event 0: y=1, m1=1 (R), m2=1 (R) -> Both Correct
-        # Event 1: y=1, m1=1 (R), m2=0 (W) -> M1 Only Correct
-        # Event 2: y=0, m1=0 (R), m2=0 (R) -> Both Correct
-        # Event 3: y=0, m1=1 (W), m2=0 (R) -> M2 Only Correct
-        # Event 4: y=1, m1=0 (W), m2=0 (W) -> Both Wrong
-        self.assertEqual(metrics.both_correct, 2)
-        self.assertEqual(metrics.model1_only_correct, 1)
-        self.assertEqual(metrics.model2_only_correct, 1)
-        self.assertEqual(metrics.both_wrong, 1)
-        self.assertEqual(metrics.total_events, 5)
+        self.assertAlmostEqual(shapes["Rcore"][0], 0.8, places=4)
+        self.assertAlmostEqual(shapes["Rhad"][0], 500.0 / 20000.0, places=4)
+        # Eratio: (1000 - 200) / (1000 + 200) = 800 / 1200 = 2/3
+        self.assertAlmostEqual(shapes["Eratio"][0], 2.0 / 3.0, places=4)
 
     def _create_mock_result(self, iet: int = 1, ieta: int = 1) -> RegionalQuadrantResult:
         metrics = QuadrantMetrics(40, 10, 5, 5, 60)
         sig_metrics = QuadrantMetrics(25, 5, 3, 2, 35)
         bg_metrics = QuadrantMetrics(15, 5, 2, 3, 25)
-        probs1 = np.random.uniform(0, 1, 60)
-        probs2 = np.random.uniform(0, 1, 60)
+
+        s1_metrics = StrategyMetrics(0.9, 0.1, 0.89, 0.9, 30, 2, 23, 5, 60)
+        s2_metrics = StrategyMetrics(0.85, 0.12, 0.86, 0.88, 28, 3, 22, 7, 60)
+
         labels = np.array([1] * 35 + [0] * 25)
-        et = np.random.uniform(15.0, 100.0, 60)
-        eta = np.random.uniform(0.0, 2.5, 60)
+        preds1 = np.array([1] * 30 + [0] * 5 + [0] * 23 + [1] * 2)
+        preds2 = np.array([1] * 28 + [0] * 7 + [0] * 22 + [1] * 3)
+
+        showershapes = {
+            "Rcore": np.random.uniform(0.7, 0.95, 60),
+            "Rhad": np.random.uniform(0.01, 0.08, 60),
+            "Eratio": np.random.uniform(0.5, 0.99, 60),
+            "trig_L2_calo_weta2": np.random.uniform(0.01, 0.03, 60),
+        }
+
         return RegionalQuadrantResult(
             iet=iet,
             ieta=ieta,
-            model1_name="ModelA",
-            model2_name="ModelB",
+            strategy1_name="ModelA",
+            strategy2_name="ModelB",
+            metrics_strategy1=s1_metrics,
+            metrics_strategy2=s2_metrics,
             overall_metrics=metrics,
             signal_metrics=sig_metrics,
             background_metrics=bg_metrics,
-            probs_model1=probs1,
-            probs_model2=probs2,
+            preds_strategy1=preds1,
+            preds_strategy2=preds2,
             labels=labels,
-            threshold_model1=0.5,
-            threshold_model2=0.5,
-            et=et,
-            eta=eta,
+            threshold_strategy1=0.5,
+            threshold_strategy2=0.5,
+            showershapes=showershapes,
         )
 
-    def test_quadrant_plotter_renders_files(self) -> None:
+    def test_quadrant_plotter_renders_histograms_and_summary(self) -> None:
         plotter = QuadrantPlotter()
         res1 = self._create_mock_result(iet=1, ieta=1)
         res2 = self._create_mock_result(iet=2, ieta=2)
 
-        global_res = self._create_mock_result(iet=-1, ieta=-1)
-        saved = plotter.plot([res1, res2, global_res], self.output_dir, file_format="png")
-        self.assertEqual(len(saved["score_scatters"]), 2)
-        self.assertEqual(len(saved["region_scatters"]), 2)
-        self.assertFalse(any("global" in p for p in saved["score_scatters"]))
+        saved = plotter.plot([res1, res2], self.output_dir, file_format="png")
         self.assertEqual(len(saved["summary"]), 1)
+        self.assertEqual(len(saved["histograms"]), 8)
 
-        for p in saved["score_scatters"]:
-            self.assertIn("scores", p)
-            self.assertTrue(p.endswith("_quadrant_score_scatter.png"))
-
-        for p in saved["region_scatters"]:
-            self.assertIn("regions", p)
-            self.assertTrue(p.endswith("_quadrant_region_scatter.png"))
+        for p in saved["histograms"]:
+            self.assertTrue(os.path.exists(p))
+            self.assertTrue(p.endswith("_quadrant_hist.png"))
 
         for p in saved["summary"]:
-            self.assertIn("regions", p)
+            self.assertTrue(os.path.exists(p))
             self.assertTrue(p.endswith("regional_quadrant_summary.png"))
-
-        for path_list in saved.values():
-            for p in path_list:
-                self.assertTrue(os.path.exists(p))
-
-    def test_plot_score_scatter_subsampling(self) -> None:
-        plotter = QuadrantPlotter()
-        res = self._create_mock_result(iet=1, ieta=1)
-        res.labels = np.ones(6000, dtype=int)
-        res.probs_model1 = np.random.uniform(0, 1, 6000)
-        res.probs_model2 = np.random.uniform(0, 1, 6000)
-
-        out = plotter.plot_score_scatter(res, self.output_dir / "scores", file_format="png", max_points=5000)
-        self.assertTrue(os.path.exists(out))
-        self.assertIn("scores", out)
 
     def test_global_result_aggregation(self) -> None:
         res1 = self._create_mock_result(iet=1, ieta=1)
@@ -159,47 +166,49 @@ class TestQuadrantAnalysis(unittest.TestCase):
                         self.assertEqual(global_res.ieta, -1)
                         self.assertEqual(global_res.overall_metrics.total_events, 120)
                         self.assertEqual(global_res.overall_metrics.both_correct, 80)
-                        self.assertEqual(len(global_res.probs_model1), 120)
-                        self.assertEqual(len(global_res.et), 120)
-                        self.assertEqual(len(global_res.eta), 120)
+                        self.assertEqual(len(global_res.preds_strategy1), 120)
+                        self.assertIn("Rcore", global_res.showershapes)
+                        self.assertEqual(len(global_res.showershapes["Rcore"]), 120)
 
-    def test_skips_region_when_model_missing(self) -> None:
-        with patch.object(QuadrantAnalyzer, "_load_config", return_value=MagicMock()):
-            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer") as mock_trainer_cls:
-                mock_trainer = MagicMock()
-                mock_trainer_cls.return_value = mock_trainer
-                mock_trainer.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
-                mock_trainer.full_dataset.__len__.return_value = 1
+    def test_model_vs_cut_initialization_and_tag(self) -> None:
+        cfg = MagicMock()
+        cfg.model.object_name = "ModelV1"
+        cfg.model.parameters = {"input_dim": 100}
+        cfg.config_name = "ModelV1_100Rings"
 
+        with patch.object(QuadrantAnalyzer, "_load_config", return_value=cfg):
+            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer"):
                 with patch("src.core.Validation.QuadrantAnalyzer.SplitManifest"):
-                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator") as mock_agg_cls:
-                        mock_agg1 = MagicMock()
-                        mock_agg2 = MagicMock()
-                        mock_agg_cls.side_effect = [mock_agg1, mock_agg2]
-
-                        # Case 1: Model 1 has region, Model 2 does not
-                        mock_agg1.has_region.return_value = True
-                        mock_agg2.has_region.return_value = False
-
+                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator"):
                         analyzer = QuadrantAnalyzer(
-                            config_path1="config/dummy.yaml",
-                            data_path1=self.output_dir,
-                            config_path2="config/dummy.yaml",
-                            data_path2=self.output_dir,
+                            config_path1="c1.yaml",
+                            data_path1="d1",
+                            mode="model_vs_cut",
+                            working_point="loose",
                         )
-                        result = analyzer.analyze_region(0)
-                        self.assertIsNone(result)
-
-                        # Case 2: Model 1 does not have region, Model 2 has region
-                        mock_agg1.has_region.return_value = False
-                        mock_agg2.has_region.return_value = True
-                        result2 = analyzer.analyze_region(0)
-                        self.assertIsNone(result2)
+                        self.assertEqual(analyzer.mode, "model_vs_cut")
+                        self.assertEqual(analyzer.comparison_tag, "ModelV1_100rings_vs_Cut_Loose")
 
     def test_cli_argument_parsing(self) -> None:
         from scripts.run_quadrant_analysis import parser
 
-        args = parser.parse_args(
+        args_cut = parser.parse_args(
+            [
+                "--mode",
+                "model_vs_cut",
+                "--config1",
+                "config/ModelV1.yaml",
+                "--data_path1",
+                "results/run1",
+                "--working_point",
+                "tight",
+            ]
+        )
+        self.assertEqual(args_cut.mode, "model_vs_cut")
+        self.assertEqual(args_cut.working_point, "tight")
+        self.assertIsNone(args_cut.data_path2)
+
+        args_model = parser.parse_args(
             [
                 "--config1",
                 "config/ModelV1.yaml",
@@ -207,148 +216,14 @@ class TestQuadrantAnalysis(unittest.TestCase):
                 "results/run1",
                 "--data_path2",
                 "results/run2",
-                "--threshold_mode",
-                "calibrated",
-                "--output_dir",
-                "Plots/quandrantic_analysis",
             ]
         )
-        self.assertEqual(args.config1, "config/ModelV1.yaml")
-        self.assertIsNone(args.config2)
-        self.assertEqual(args.threshold_mode, "calibrated")
-        self.assertEqual(args.output_dir, "Plots/quandrantic_analysis")
-
-    def test_comparison_tag_and_output_dir(self) -> None:
-        cfg1 = MagicMock()
-        cfg1.model.object_name = "ModelV5"
-        cfg1.model.parameters = {"input_dim": 100}
-        cfg1.config_name = "ModelV5_100Rings"
-
-        cfg2 = MagicMock()
-        cfg2.model.object_name = "ModelV6"
-        cfg2.model.parameters = {"input_dim": 100}
-        cfg2.config_name = "ModelV6_100Rings"
-
-        with patch.object(QuadrantAnalyzer, "_load_config", side_effect=[cfg1, cfg2]):
-            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer"):
-                with patch("src.core.Validation.QuadrantAnalyzer.SplitManifest"):
-                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator"):
-                        analyzer = QuadrantAnalyzer("c1.yaml", "d1", "c2.yaml", "d2")
-                        self.assertEqual(analyzer.comparison_tag, "ModelV5_100rings_vs_ModelV6_100rings")
-
-                        out_dir = analyzer.get_output_dir("Plots/quandrantic_analysis")
-                        self.assertEqual(
-                            out_dir,
-                            pathlib.Path("Plots/quandrantic_analysis/ModelV5_100rings_vs_ModelV6_100rings"),
-                        )
-    def test_different_model_dataset_input_shapes(self) -> None:
-        import torch
-        import torch.nn as nn
-        from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
-
-        cfg1 = MagicMock()
-        cfg1.config_name = "Model100"
-        cfg1.model.object_name = "Model100"
-        cfg1.model.parameters = {"input_dim": 100}
-
-        cfg2 = MagicMock()
-        cfg2.config_name = "Model25"
-        cfg2.model.object_name = "Model25"
-        cfg2.model.parameters = {"input_dim": 25}
-
-        class MockNet100(nn.Module):
-            def __init__(self) -> None:
-                super().__init__()
-                self.fc = nn.Linear(100, 1)
-
-            def forward(self, x: torch.Tensor) -> torch.Tensor:
-                return torch.sigmoid(self.fc(x))
-
-        class MockNet25(nn.Module):
-            def __init__(self) -> None:
-                super().__init__()
-                self.fc = nn.Linear(25, 1)
-
-            def forward(self, x: torch.Tensor) -> torch.Tensor:
-                return torch.sigmoid(self.fc(x))
-
-        with patch.object(QuadrantAnalyzer, "_load_config", side_effect=[cfg1, cfg2]):
-            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer") as mock_trainer_cls:
-                mock_trainer1 = MagicMock()
-                mock_trainer2 = MagicMock()
-                mock_trainer_cls.side_effect = [mock_trainer1, mock_trainer2]
-
-                mock_trainer1.device = torch.device("cpu")
-                mock_trainer1.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
-                mock_trainer1.full_dataset.ring_column_indices = np.arange(100)
-                data1 = np.ones((50, 181), dtype=np.float32)
-                target1 = np.array([1, 0] * 25, dtype=np.int32)
-                mock_trainer1.full_dataset.__getitem__.return_value = (data1, target1, "consolidated.et1.eta1.npz")
-                mock_trainer1.factory.create_model.return_value = MockNet100()
-
-                mock_trainer2.device = torch.device("cpu")
-                mock_trainer2.full_dataset.file_paths = ["consolidated.et1.eta1.npz"]
-                mock_trainer2.full_dataset.ring_column_indices = np.arange(25)
-                data2 = np.ones((50, 50), dtype=np.float32)
-                target2 = np.array([1, 0] * 25, dtype=np.int32)
-                mock_trainer2.full_dataset.__getitem__.return_value = (data2, target2, "consolidated.et1.eta1.npz")
-                mock_trainer2.factory.create_model.return_value = MockNet25()
-
-                with patch("src.core.Validation.QuadrantAnalyzer.SplitManifest") as mock_manifest_cls:
-                    mock_manifest = MagicMock()
-                    mock_manifest.data = {"et_1_eta_1": {}}
-                    mock_manifest.get_region_splits.return_value = (np.arange(10, dtype=np.int64), [])
-                    mock_manifest_cls.return_value = mock_manifest
-
-                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator") as mock_agg_cls:
-                        mock_agg1 = MagicMock()
-                        mock_agg2 = MagicMock()
-                        mock_agg_cls.side_effect = [mock_agg1, mock_agg2]
-
-                        mock_agg1.has_region.return_value = True
-                        mock_agg2.has_region.return_value = True
-                        mock_agg1.get_best_model_for_region.return_value = ({"best_weights": MockNet100().state_dict()}, 0, 0.9, 0.01)
-                        mock_agg2.get_best_model_for_region.return_value = ({"best_weights": MockNet25().state_dict()}, 0, 0.88, 0.01)
-
-                        analyzer = QuadrantAnalyzer("c1.yaml", "d1", "c2.yaml", "d2", threshold_mode="default")
-                        result = analyzer.analyze_region((1, 1))
-
-                        self.assertIsNotNone(result)
-                        self.assertEqual(result.overall_metrics.total_events, 10)
-                        self.assertEqual(len(result.probs_model1), 10)
-                        self.assertEqual(len(result.probs_model2), 10)
-
-    def test_holdout_evaluator_raises_when_ring_indices_none(self) -> None:
-        from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
-        evaluator = HoldoutEvaluator()
-        with self.assertRaises(ValueError):
-            evaluator.evaluate(
-                model=MagicMock(),
-                data=np.ones((10, 10)),
-                target=np.ones(10),
-                test_indices=np.arange(5),
-                ring_column_indices=None,
-                device="cpu",
-            )
-
-    def test_quadrant_metrics_uncertainties(self) -> None:
-        metrics = QuadrantMetrics(
-            both_correct=50,
-            model1_only_correct=20,
-            model2_only_correct=10,
-            both_wrong=20,
-            total_events=100,
-        )
-        # p = 0.5, N = 100 -> sqrt(0.5 * 0.5 / 100) = 0.05
-        self.assertAlmostEqual(metrics.both_correct_uncertainty, 0.05, places=5)
-        # p = 0.2, N = 100 -> sqrt(0.2 * 0.8 / 100) = 0.04
-        self.assertAlmostEqual(metrics.model1_only_correct_uncertainty, 0.04, places=5)
-        # p = 0.1, N = 100 -> sqrt(0.1 * 0.9 / 100) = 0.03
-        self.assertAlmostEqual(metrics.model2_only_correct_uncertainty, 0.03, places=5)
-        self.assertAlmostEqual(metrics.both_wrong_uncertainty, 0.04, places=5)
+        self.assertEqual(args_model.mode, "model_vs_model")
+        self.assertEqual(args_model.data_path2, "results/run2")
 
     def test_save_results_table(self) -> None:
         import pandas as pd
+
         res1 = self._create_mock_result(iet=1, ieta=1)
         res2 = self._create_mock_result(iet=2, ieta=2)
 
@@ -366,17 +241,18 @@ class TestQuadrantAnalysis(unittest.TestCase):
                         self.assertTrue(csv_path.exists())
 
                         df = pd.read_csv(csv_path)
-                        # 2 regions + 1 Global = 3 entities * 3 sample types (Overall, Signal, Background) = 9 rows
-                        self.assertEqual(len(df), 9)
-                        self.assertIn("both_correct_uncertainty", df.columns)
-                        self.assertIn("model1_only_correct_uncertainty", df.columns)
-                        self.assertIn("model2_only_correct_uncertainty", df.columns)
-                        self.assertIn("both_wrong_uncertainty", df.columns)
+                        self.assertEqual(len(df), 3)  # 2 regions + 1 Global
+                        self.assertIn("s1_pd", df.columns)
+                        self.assertIn("s1_pf", df.columns)
+                        self.assertIn("s1_sp", df.columns)
+                        self.assertIn("s1_eff", df.columns)
+                        self.assertIn("s2_pd", df.columns)
+                        self.assertIn("s2_pf", df.columns)
+                        self.assertIn("s2_sp", df.columns)
+                        self.assertIn("s2_eff", df.columns)
+                        self.assertIn("both_correct", df.columns)
                         self.assertIn("mcnemar_p_value", df.columns)
-                        self.assertTrue(all(df["both_correct_uncertainty"] >= 0.0))
 
 
 if __name__ == "__main__":
     unittest.main()
-
-

@@ -77,18 +77,23 @@ Analyze and visualize class distributions across $E_T$ and $\eta$ regions:
 conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
 ```
 
-### Quadrant Analysis (Model Comparison)
-Compare two classification models on holdout test partitions across $E_T$ and $\eta$ regions:
+### Quadrant Analysis (Model Comparison & Cut-Based Benchmark)
+Compare two classification models or a model against Athena fast photon cut-based trigger selection on holdout test partitions across $E_T$ and $\eta$ regions:
 ```bash
+# Model vs Model
 conda run -n egamma python scripts/run_quadrant_analysis.py \
+    --mode model_vs_model \
     --config1 config/NeuralRinger/ModelV1.yaml \
     --data_path1 results/<model1_results_dir> \
     --config2 config/NeuralRinger/ModelV2.yaml \
-    --data_path2 results/<model2_results_dir> \
-    [--threshold_mode calibrated|default] \
-    [--target_pd 0.9424] \
-    [--efficiencies_csv <csv_path>] \
-    [--output_dir Plots/quandrantic_analysis]
+    --data_path2 results/<model2_results_dir>
+
+# Model vs Cut-Based Selection
+conda run -n egamma python scripts/run_quadrant_analysis.py \
+    --mode model_vs_cut \
+    --config1 config/NeuralRinger/ModelV1.yaml \
+    --data_path1 results/<model1_results_dir> \
+    --working_point loose
 ```
 
 ### Batch Runs
