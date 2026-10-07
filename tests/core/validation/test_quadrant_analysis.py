@@ -38,6 +38,11 @@ class TestQuadrantAnalysis(unittest.TestCase):
         self.assertAlmostEqual(metrics.eff, 3 / 5, places=4)
         self.assertGreater(metrics.sp, 0.0)
 
+        self.assertGreater(metrics.pd_uncertainty, 0.0)
+        self.assertGreater(metrics.pf_uncertainty, 0.0)
+        self.assertGreater(metrics.eff_uncertainty, 0.0)
+        self.assertGreater(metrics.sp_uncertainty, 0.0)
+
     def test_quadrant_metrics_calculation(self) -> None:
         metrics = QuadrantMetrics(
             both_correct=50,
@@ -262,13 +267,21 @@ class TestQuadrantAnalysis(unittest.TestCase):
                         df = pd.read_csv(csv_path)
                         self.assertEqual(len(df), 3)  # 2 regions + 1 Global
                         self.assertIn("s1_pd", df.columns)
+                        self.assertIn("s1_pd_uncertainty", df.columns)
                         self.assertIn("s1_pf", df.columns)
+                        self.assertIn("s1_pf_uncertainty", df.columns)
                         self.assertIn("s1_sp", df.columns)
+                        self.assertIn("s1_sp_uncertainty", df.columns)
                         self.assertIn("s1_eff", df.columns)
+                        self.assertIn("s1_eff_uncertainty", df.columns)
                         self.assertIn("s2_pd", df.columns)
+                        self.assertIn("s2_pd_uncertainty", df.columns)
                         self.assertIn("s2_pf", df.columns)
+                        self.assertIn("s2_pf_uncertainty", df.columns)
                         self.assertIn("s2_sp", df.columns)
+                        self.assertIn("s2_sp_uncertainty", df.columns)
                         self.assertIn("s2_eff", df.columns)
+                        self.assertIn("s2_eff_uncertainty", df.columns)
                         self.assertIn("both_correct", df.columns)
                         self.assertIn("mcnemar_p_value", df.columns)
 

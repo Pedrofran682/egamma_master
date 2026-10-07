@@ -103,6 +103,40 @@ class StrategyMetrics:
         p = self.bg_eff
         return float(np.sqrt((p * (1.0 - p)) / n_bg)) if n_bg > 0 else 0.0
 
+    @property
+    def pd_uncertainty(self) -> float:
+        return self.sig_eff_uncertainty
+
+    @property
+    def pf_uncertainty(self) -> float:
+        n_bg = self.tn + self.fp
+        return float(np.sqrt((self.pf * (1.0 - self.pf)) / n_bg)) if n_bg > 0 else 0.0
+
+    @property
+    def eff_uncertainty(self) -> float:
+        return float(np.sqrt((self.eff * (1.0 - self.eff)) / self.total)) if self.total > 0 else 0.0
+
+    @property
+    def sp_uncertainty(self) -> float:
+        n_sig = self.tp + self.fn
+        n_bg = self.tn + self.fp
+        if n_sig <= 0 or n_bg <= 0 or self.sp <= 0.0:
+            return 0.0
+
+        u = self.pd
+        v = 1.0 - self.pf
+        if u <= 0.0 or v <= 0.0 or (u + v) <= 0.0:
+            return 0.0
+
+        var_u = (u * (1.0 - u)) / n_sig
+        var_v = (self.pf * (1.0 - self.pf)) / n_bg
+
+        term_u = (1.0 / (4.0 * u)) + (1.0 / (2.0 * (u + v)))
+        term_v = (1.0 / (4.0 * v)) + (1.0 / (2.0 * (u + v)))
+
+        var_sp = (self.sp ** 2) * ((term_u ** 2) * var_u + (term_v ** 2) * var_v)
+        return float(np.sqrt(max(0.0, var_sp)))
+
 
 @dataclass
 class QuadrantMetrics:
@@ -953,19 +987,27 @@ class QuadrantAnalyzer:
                     "threshold_strategy2": res.threshold_strategy2,
                     "total_events": m.total_events,
                     "s1_pd": s1.pd,
+                    "s1_pd_uncertainty": s1.pd_uncertainty,
                     "s1_sig_eff_uncertainty": s1.sig_eff_uncertainty,
                     "s1_bg_eff": s1.bg_eff,
                     "s1_bg_eff_uncertainty": s1.bg_eff_uncertainty,
                     "s1_pf": s1.pf,
-                    "s1_sp": s1.sp,
+                    "s1_pf_uncertainty": s1.pf_uncertainty,
                     "s1_eff": s1.eff,
+                    "s1_eff_uncertainty": s1.eff_uncertainty,
+                    "s1_sp": s1.sp,
+                    "s1_sp_uncertainty": s1.sp_uncertainty,
                     "s2_pd": s2.pd,
+                    "s2_pd_uncertainty": s2.pd_uncertainty,
                     "s2_sig_eff_uncertainty": s2.sig_eff_uncertainty,
                     "s2_bg_eff": s2.bg_eff,
                     "s2_bg_eff_uncertainty": s2.bg_eff_uncertainty,
                     "s2_pf": s2.pf,
-                    "s2_sp": s2.sp,
+                    "s2_pf_uncertainty": s2.pf_uncertainty,
                     "s2_eff": s2.eff,
+                    "s2_eff_uncertainty": s2.eff_uncertainty,
+                    "s2_sp": s2.sp,
+                    "s2_sp_uncertainty": s2.sp_uncertainty,
                     "both_correct": m.both_correct,
                     "both_correct_ratio": m.both_correct_ratio,
                     "both_correct_uncertainty": m.both_correct_uncertainty,
