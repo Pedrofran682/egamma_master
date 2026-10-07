@@ -63,7 +63,7 @@ def create_folder(new_folder_name: str, base_path: str = "results") -> str:
     folder_path = Path(base_path) / new_folder_name
     try:
         folder_path.mkdir(parents=True, exist_ok=True)
-        log.info(f"Folder '{folder_path}' created or already exists (using pathlib).")
+        log.info(f"Folder '{folder_path}' created or already exists.")
     except OSError as error:
         log.error(f"Error creating directory '{folder_path}': {error}")
     return str(folder_path)
