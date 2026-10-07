@@ -5,7 +5,8 @@ import pandas as pd
 
 
 class TrigFastPhotonCutMaps:
-    """ATLAS Athena TrigFastPhotonCutMaps replicating L2 fast calo photon cut thresholds."""
+    """ATLAS Athena TrigFastPhotonCutMaps replicating L2 fast calo photon cut thresholds.
+    Source: https://acode-browser1.usatlas.bnl.gov/lxr/source/athena/Trigger/TrigHypothesis/TrigEgammaHypo/python/TrigEgammaFastCutDefs.py"""
 
     ETA_BINS: List[float] = [0.0, 0.6, 0.8, 1.15, 1.37, 1.52, 1.81, 2.01, 2.37, 2.47]
 
@@ -67,7 +68,35 @@ class TrigFastPhotonCutMaps:
                 "tight": [0.809875, 0.805125, 0.786125, 0.809875, 0.703, 0.795625, 0.819375, 0.814625, 0.691125],
             }
             self.maps_cae_ratio_thr = {wp: [-999.0] * 9 for wp in ["etcut", "loose", "medium", "tight"]}
-        elif self.threshold >= 20.0:
+        elif 20.0 <= self.threshold < 30.0:
+            self.maps_had_et_thr = {
+                "etcut": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+                "loose": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+                "medium": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+                "tight": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+            }
+            self.maps_car_core_thr = {
+                "etcut": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+                "loose": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+                "medium": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+                "tight": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+            }
+            self.maps_cae_ratio_thr = {wp: [-999.0] * 9 for wp in ["etcut", "loose", "medium", "tight"]}
+        elif 30.0 <= self.threshold < 40.0:
+            self.maps_had_et_thr = {
+                "etcut": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+                "loose": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+                "medium": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+                "tight": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
+            }
+            self.maps_car_core_thr = {
+                "etcut": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+                "loose": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+                "medium": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+                "tight": [0.819375, 0.819375, 0.800375, 0.828875, 0.7125, 0.805125, 0.843125, 0.824125, 0.700625],
+            }
+            self.maps_cae_ratio_thr = {wp: [-999.0] * 9 for wp in ["etcut", "loose", "medium", "tight"]}
+        elif self.threshold >= 40.0:
             self.maps_had_et_thr = {
                 "etcut": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
                 "loose": [0.071, 0.062, 0.075, 0.060, 0.051, 0.057, 0.075, 0.072, 0.051],
@@ -83,6 +112,18 @@ class TrigFastPhotonCutMaps:
             self.maps_cae_ratio_thr = {wp: [-999.0] * 9 for wp in ["etcut", "loose", "medium", "tight"]}
         else:
             raise ValueError(f"Incorrect threshold {self.threshold}: No cuts configured.")
+
+    @property
+    def MapsHADETthr(self) -> Dict[str, List[float]]:
+        return self.maps_had_et_thr
+
+    @property
+    def MapsCARCOREthr(self) -> Dict[str, List[float]]:
+        return self.maps_car_core_thr
+
+    @property
+    def MapsCAERATIOthr(self) -> Dict[str, List[float]]:
+        return self.maps_cae_ratio_thr
 
     @classmethod
     def find_eta_bin_index(cls, abs_eta: Union[float, np.ndarray]) -> Union[int, np.ndarray]:
