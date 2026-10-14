@@ -58,64 +58,79 @@ def test_strategy_name_extraction(sample_quadrant_df: pd.DataFrame) -> None:
     assert consolidator.get_strategy_name("strategy2") == "AthenaLoose"
 
 
-def test_build_numeric_table_no_sp_propagation(sample_quadrant_df: pd.DataFrame) -> None:
+def test_build_numeric_table_percentage(sample_quadrant_df: pd.DataFrame) -> None:
     consolidator = QuadrantTableConsolidator(sample_quadrant_df)
-    df = consolidator.build_numeric_table(strategy="strategy1", include_global=True)
+    df = consolidator.build_numeric_table(strategy="strategy1", as_percentage=True, include_global=True)
 
     assert len(df) == 26
     assert np.isnan(df.loc[0, "sp_uncertainty"])
-    assert df.loc[0, "pd"] == pytest.approx(0.9400)
-    assert df.loc[0, "pd_uncertainty"] == pytest.approx(0.0020)
-    assert df.loc[0, "pf"] == pytest.approx(0.0500)
-    assert df.loc[0, "pf_uncertainty"] == pytest.approx(0.0015)
+    assert df.loc[0, "sp"] == pytest.approx(94.50)
+    assert df.loc[0, "pd"] == pytest.approx(94.00)
+    assert df.loc[0, "pd_uncertainty"] == pytest.approx(0.20)
+    assert df.loc[0, "pf"] == pytest.approx(5.00)
+    assert df.loc[0, "pf_uncertainty"] == pytest.approx(0.15)
 
 
-def test_build_latex_formatted_table_with_math_delimiters(sample_quadrant_df: pd.DataFrame) -> None:
+def test_build_et_grid_table_shape_and_columns(sample_quadrant_df: pd.DataFrame) -> None:
     consolidator = QuadrantTableConsolidator(sample_quadrant_df)
-    df = consolidator.build_latex_formatted_table(
+    grid_df = consolidator.build_et_grid_table(
         strategy="strategy1",
+        as_percentage=True,
         math_delimiters=True,
-        precision=4,
+        precision=2,
+        use_latex_labels=True,
         include_global=False,
     )
 
-    assert len(df) == 25
-    assert df.loc[0, "SP"] == "$0.9450$"
-    assert df.loc[0, "PD"] == "$0.9400 \\pm 0.0020$"
-    assert df.loc[0, "PF"] == "$0.0500 \\pm 0.0015$"
+    assert grid_df.shape == (5, 15)
+    first_col = grid_df.columns[0]
+    assert first_col[1] == "SP"
+    assert grid_df.columns[1][1] == "PF"
+    assert grid_df.columns[2][1] == "PD"
+
+    cell_sp = grid_df.iloc[0, 0]
+    cell_pf = grid_df.iloc[0, 1]
+    cell_pd = grid_df.iloc[0, 2]
+
+    assert cell_sp == "$94.50$"
+    assert cell_pf == "$5.00 \\pm 0.15$"
+    assert cell_pd == "$94.00 \\pm 0.20$"
 
 
-def test_build_latex_formatted_table_without_math_delimiters(sample_quadrant_df: pd.DataFrame) -> None:
+def test_build_et_grid_table_with_global(sample_quadrant_df: pd.DataFrame) -> None:
     consolidator = QuadrantTableConsolidator(sample_quadrant_df)
-    df = consolidator.build_latex_formatted_table(
-        strategy="strategy2",
-        math_delimiters=False,
-        precision=3,
+    grid_df = consolidator.build_et_grid_table(
+        strategy="strategy1",
+        as_percentage=True,
         include_global=True,
     )
-
-    assert len(df) == 26
-    assert df.loc[0, "SP"] == "0.935"
-    assert df.loc[0, "PD"] == "0.930 \\pm 0.003"
-    assert df.loc[0, "PF"] == "0.060 \\pm 0.002"
+    assert grid_df.shape == (6, 15)
+    assert grid_df.index[-1] == "$\\text{GLOBAL}$"
 
 
-def test_export_csv_and_to_latex(tmp_path: pathlib.Path, sample_quadrant_df: pd.DataFrame) -> None:
+def test_export_grid_csv_and_to_latex(tmp_path: pathlib.Path, sample_quadrant_df: pd.DataFrame) -> None:
     consolidator = QuadrantTableConsolidator(sample_quadrant_df)
-    df = consolidator.build_latex_formatted_table(strategy="strategy1")
+    grid_df = consolidator.build_et_grid_table(strategy="strategy1", as_percentage=True)
 
-    output_csv = tmp_path / "table.csv"
-    saved_path = consolidator.export_csv(df, output_csv)
+    output_csv = tmp_path / "grid_table.csv"
+    saved_path = consolidator.export_csv(grid_df, output_csv)
     assert saved_path.exists()
 
     loaded_df = pd.read_csv(saved_path)
-    assert len(loaded_df) == 26
-    assert "SP" in loaded_df.columns
-    assert "PD" in loaded_df.columns
-    assert "PF" in loaded_df.columns
+    assert len(loaded_df) == 6
+    assert any("SP" in c for c in loaded_df.columns)
+    assert any("PF" in c for c in loaded_df.columns)
+    assert any("PD" in c for c in loaded_df.columns)
 
-    latex_code = consolidator.to_latex_snippet(df, caption="Test Caption", label="tab:test")
+    latex_code = consolidator.to_latex_snippet(
+        grid_df,
+        caption="Regional efficiencies across ET and eta",
+        label="tab:regional_efficiencies",
+        resize_box=True,
+    )
     assert "\\begin{table}" in latex_code
-    assert "\\caption{Test Caption}" in latex_code
-    assert "\\label{tab:test}" in latex_code
+    assert "\\resizebox{\\textwidth}{!}" in latex_code
+    assert "\\multicolumn{3}{c}" in latex_code
+    assert "\\caption{Regional efficiencies across ET and eta}" in latex_code
+    assert "\\label{tab:regional_efficiencies}" in latex_code
     assert "\\end{table}" in latex_code
