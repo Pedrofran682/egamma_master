@@ -128,11 +128,11 @@ When searching for or modifying functionality, refer to the following locations:
 | **Tuning** | `src/core/Tuning/` | `GridSearchTuner.py` (tuner orchestrator), `TuningConfiguration.py` (search space & trial builder) |
 | **Callbacks** | `src/core/Callbacks/` | `SPCallbackPyTorch.py` (tracks SP index, knee point, early stopping, best weights) |
 | **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `BasePlotter.py`, `QuadrantPlotter.py` (2x2 heatmaps & score scatter), `ProfilePlotter.py`, `MetricPlotter.py`, `RegionDistributionPlotter.py` (2D heatmaps), `LegacyPlotter.py`, `Context.py` |
-| **Validation** | `src/core/Validation/` | `ModelValidator.py` (global & regional evaluation), `QuadrantAnalyzer.py` (4-quadrant model comparison), `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
+| **Validation** | `src/core/Validation/` | `ModelValidator.py`, `QuadrantAnalyzer.py`, `QuadrantTableConsolidator.py`, `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
 | **Configuration** | `src/Parser/` | `NeuralRingerTrainerConfiguration.py` (Pydantic schema), `DynamicConfiguration.py` |
 | **Utilities** | `src/utils.py` | L1-norm, metric aggregation, bin extraction, dynamic instantiation |
 | **Configs** | `config/NeuralRinger/` | YAML training specifications |
-| **Notebooks** | `notebooks/` | Interactive analysis (`validate_results.ipynb`) |
+| **Notebooks** | `notebooks/` | Interactive analysis (`validate_results.ipynb`, `consolidate_quadrant_tables.ipynb`) |
 | **Entrypoints** | `main.py`, `scripts/*.py` | CLI execution scripts (`validate_pd.py`, `plot_data_distribution.py`, `run_plots.py`, `run_roc_plots.py`, `calculate_photon_cut_efficiency.py`) |
 | **Unit Tests** | `tests/` | Pytest test cases (`test_region_distribution_plotter.py`, `test_validation.py`, etc.) |
 

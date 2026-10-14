@@ -163,6 +163,7 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
     - `HoldoutEvaluator.py`: Evaluator computing holdout metrics and predictions per region.
     - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator for regional and global evaluations with configurable calorimeter feature indices.
     - `ResultAggregator.py`: Utility aggregating `.pkl` fold outputs and querying best regional models.
+    - `QuadrantTableConsolidator.py`: Consolidates regional quadrant metrics (`SP`, `PF`, `PD` as percentages) into 2D $E_T \times |\eta|$ LaTeX grid tables and CSV exports.
   - `Callbacks/`:
     - `SPCallbackPyTorch.py`: PyTorch callback calculating ROC, SP metric, knee operating points, and early stopping.
 - **`src/Models/`**:
@@ -178,6 +179,7 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
   - YAML configuration files controlling dataset paths, model architectures, hyperparameters, and cross-validation folds.
 - **`notebooks/`**:
   - `validate_results.ipynb`: Interactive Jupyter notebook for validation inspection and plotting.
+  - `consolidate_quadrant_tables.ipynb`: Interactive Jupyter notebook consolidating quadrant metrics into 2D LaTeX grid tables.
 - **`scripts/`**:
   - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `runner.sh`).
 - **`tests/`**:

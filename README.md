@@ -61,6 +61,7 @@ egamma_master/
 - `HoldoutEvaluator`: Computes accuracy, TPR, TNR, FPR, FNR, and establishes target $P_D$ cut thresholds.
 - `ResultAggregator`: Discovers and groups fold/repeat statistics from serialized result archives.
 - `EfficiencyPlotter`: Plots binned signal detection efficiency curves across $E_T$ and $\eta$ distributions.
+- `QuadrantTableConsolidator`: Consolidates regional quadrant results (`SP`, `PF`, `PD` with uncertainties as percentages) into 2D $E_T \times |\eta|$ grid tables formatted for LaTeX and CSV export.
 
 ### 5. Hyperparameter Tuning (`src/core/Tuning/`)
 - `GridSearchTuner`: Orchestrates cross-validation grid search exploration across optimizer parameters and loss formulations.
@@ -422,6 +423,25 @@ Outputs are automatically placed inside a dedicated model comparison folder unde
 - `--output_dir <path>`: Base output directory (the comparison subfolder is automatically appended inside; default: `Plots/quandrantic_analysis`).
 - `--file_format {pdf,png}`: Output graphic format (default: `pdf`).
 
+### Tabular Consolidation & LaTeX Generation (`notebooks/consolidate_quadrant_tables.ipynb`)
+
+After generating `quadrant_results.csv` with `scripts/run_quadrant_analysis.py`, use `notebooks/consolidate_quadrant_tables.ipynb` or `QuadrantTableConsolidator` to produce publication-ready LaTeX tables and CSV exports:
+
+- Consolidates performance for a chosen strategy (`strategy1` or `strategy2`) across the 25 kinematic regions ($5\,E_T \times 5\,\eta$) and `GLOBAL`.
+- Multiplies values and uncertainties by 100 to report percentages (`as_percentage=True`).
+- Formats each $E_T$ energy interval with 3 internal sub-columns: `SP`, `PF`, and `PD` with LaTeX math mode (`$val \pm unc$`).
+- Automatically formats MultiIndex columns with `\multicolumn{3}{c}{...}` and wraps wide tables with `\resizebox{\textwidth}{!}{...}` for document margins.
+- Preserves missing SP uncertainties without artificial propagation.
+
+```python
+from src.core.Validation.QuadrantTableConsolidator import QuadrantTableConsolidator
+
+consolidator = QuadrantTableConsolidator("Plots/quandrantic_analysis/quadrant_results.csv")
+grid_df = consolidator.build_et_grid_table(strategy="strategy1", as_percentage=True, precision=2)
+consolidator.export_csv(grid_df, "Plots/quandrantic_analysis/consolidated_grid_latex.csv")
+latex_code = consolidator.to_latex_snippet(grid_df, caption="Regional Performance", label="tab:perf")
+```
+
 ## Development Guidelines & Refactoring Focus
 - **OOP First**: Pure Object-Oriented design across trainers, datasets, evaluators, and models.
 - **Minimal Commentary**: Self-documenting, concise Python code.
@@ -443,6 +463,7 @@ conda run -n egamma pytest tests/test_fast_photon_cut_evaluator.py -v
 Run the Quadrant Analysis test suite specifically:
 ```bash
 conda run -n egamma pytest tests/core/validation/test_quadrant_analysis.py -v
+conda run -n egamma pytest tests/core/validation/test_quadrant_table_consolidator.py -v
 ```
 Run the Hyperparameter Tuning test suite specifically:
 ```bash
