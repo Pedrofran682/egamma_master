@@ -127,10 +127,12 @@ def test_export_grid_csv_and_to_latex(tmp_path: pathlib.Path, sample_quadrant_df
         caption="Regional efficiencies across ET and eta",
         label="tab:regional_efficiencies",
         resize_box=True,
+        interval_pipe=True,
     )
     assert "\\begin{table}" in latex_code
     assert "\\resizebox{\\textwidth}{!}" in latex_code
-    assert "\\multicolumn{3}{c}" in latex_code
+    assert "\\begin{tabular}{l | ccc | ccc | ccc | ccc | ccc}" in latex_code
+    assert "\\multicolumn{3}{c|}" in latex_code
     assert "\\caption{Regional efficiencies across ET and eta}" in latex_code
     assert "\\label{tab:regional_efficiencies}" in latex_code
     assert "\\end{table}" in latex_code

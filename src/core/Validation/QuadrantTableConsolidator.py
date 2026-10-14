@@ -326,6 +326,7 @@ class QuadrantTableConsolidator:
         caption: Optional[str] = None,
         label: Optional[str] = None,
         resize_box: bool = True,
+        interval_pipe: bool = True,
     ) -> str:
         """Converts formatted DataFrame to a LaTeX tabular snippet.
 
@@ -334,6 +335,7 @@ class QuadrantTableConsolidator:
             caption: Optional table caption.
             label: Optional table reference label.
             resize_box: Whether to wrap wide tables with resizebox.
+            interval_pipe: Whether to place vertical pipes between energy intervals.
 
         Returns:
             String containing the formatted LaTeX code block.
@@ -342,14 +344,31 @@ class QuadrantTableConsolidator:
 
         if isinstance(display_df.columns, pd.MultiIndex):
             num_cols = len(display_df.columns)
-            col_format = "l " + " ".join(["ccc"] * (num_cols // 3))
+            num_intervals = num_cols // 3
+            if interval_pipe:
+                col_format = "l | " + " | ".join(["ccc"] * num_intervals)
+                multicolumn_format = "c|"
+            else:
+                col_format = "l " + " ".join(["ccc"] * num_intervals)
+                multicolumn_format = "c"
+
             latex_body = display_df.to_latex(
                 index=True,
                 escape=False,
                 multicolumn=True,
-                multicolumn_format="c",
+                multicolumn_format=multicolumn_format,
                 column_format=col_format,
             )
+
+            if interval_pipe:
+                lines = latex_body.splitlines()
+                for idx, line in enumerate(lines):
+                    if "\\multicolumn" in line:
+                        r_idx = line.rfind("{c|}")
+                        if r_idx != -1:
+                            lines[idx] = line[:r_idx] + "{c}" + line[r_idx + 4:]
+                        break
+                latex_body = "\n".join(lines) + "\n"
         else:
             if "iet" in display_df.columns and "ieta" in display_df.columns:
                 display_df["Region"] = display_df.apply(
