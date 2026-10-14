@@ -29,6 +29,7 @@ class ResultsRecorder:
         best_pd: float,
         best_weights: Any,
         history: Dict[str, Any],
+        parameters: Dict[str, Any] | None = None,
     ) -> None:
         """Appends metrics and model checkpoint state for a completed fold run.
 
@@ -41,6 +42,7 @@ class ResultsRecorder:
             best_pd: Probability of detection at optimal SP knee point.
             best_weights: Best model state_dict weights.
             history: Training history dictionary containing loss/acc progressions.
+            parameters: Optional dictionary of hyperparameters for this run.
         """
         self.records.append(
             {
@@ -52,6 +54,7 @@ class ResultsRecorder:
                 "best_pd_value": best_pd,
                 "best_weights": best_weights,
                 "history": history,
+                "parameters": parameters or {},
             }
         )
 

@@ -8,12 +8,14 @@
 ```
 egamma_master/
 ├── config/                  # YAML configurations for Neural Ringer model training runs
-│   └── NeuralRinger/        # Model configuration files (e.g. ModelV1.yaml, ModelV5.yaml)
+│   ├── NeuralRinger/        # Model configuration files (e.g. ModelV1.yaml, ModelV5.yaml)
+│   └── tuning/              # Hyperparameter search space configurations
 ├── src/                     # Core Object-Oriented source code
 │   ├── core/
 │   │   ├── Callbacks/       # Custom PyTorch training callbacks (e.g. SPCallbackPyTorch)
 │   │   ├── Datasets/        # PyTorch / NumPy dataset wrappers & SplitManifest
 │   │   ├── Trainers/        # Modular training components (Factory, FoldTrainer, ResultsRecorder)
+│   │   ├── Tuning/          # Hyperparameter tuning engine (GridSearchTuner, TuningConfiguration)
 │   │   ├── Plotting/        # Modular plotting engine (PlotManager, MetricPlotter, ProfilePlotter)
 │   │   └── Validation/      # Holdout evaluation & model validation pipeline
 │   ├── Models/              # Neural network architecture definitions
@@ -60,7 +62,11 @@ egamma_master/
 - `ResultAggregator`: Discovers and groups fold/repeat statistics from serialized result archives.
 - `EfficiencyPlotter`: Plots binned signal detection efficiency curves across $E_T$ and $\eta$ distributions.
 
-### 5. Dynamic Configuration (`src/Parser/`)
+### 5. Hyperparameter Tuning (`src/core/Tuning/`)
+- `GridSearchTuner`: Orchestrates cross-validation grid search exploration across optimizer parameters and loss formulations.
+- `TuningConfiguration`: Pydantic schema deserializing tuning search spaces, applying regional overrides, and synthesizing discrete trial configurations.
+
+### 6. Dynamic Configuration (`src/Parser/`)
 - Type-validated YAML configuration deserialization via Pydantic (`NeuralRingerTrainerConfiguration`).
 
 ## Data Preparation Pipeline
@@ -133,18 +139,25 @@ Each training run is defined in a YAML configuration file. Key parameters includ
 Execute model training via `main.py`:
 
 ```bash
+# Standard training run (creates results/<config_name>/)
 conda run -n egamma python main.py --config config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml
+
+# Training enforcing exact pre-existing cross-validation partitions
+conda run -n egamma python main.py \
+  --config config/NeuralRinger/ModelV5_HighBatch_newExtraction_20_regions_100Rings.yaml \
+  --split_manifest results/<baseline_run>/split_manifest.json
 ```
 
 **Training Execution Lifecycle**:
 1. **Config Validation**: Validates the YAML file against the Pydantic `NeuralRingerTrainerConfiguration` schema.
-2. **Deterministic Data Partitioning**: `SplitManifest` reads or creates deterministic K-Fold cross-validation splits persisted in `split_manifest.json`.
+2. **Deterministic Data Partitioning**: `SplitManifest` reads pre-existing splits if `--split_manifest` is provided, or creates and persists deterministic K-Fold splits in `split_manifest.json`.
 3. **Cross-Validation Training**: For each kinematic region, fold, and repeat initialization:
    - Data is loaded and ring features are normalized ($L_1$-norm) via `EgammaNpzDataset`.
    - `FoldTrainer` executes the training loop with early stopping.
    - `SPCallbackPyTorch` evaluates the ROC curve, tracks the $SP$ metric ($SP = \sqrt{\sqrt{P_D \times (1 - P_F)} \times \frac{P_D + (1 - P_F)}{2}}$), and computes the optimal operating knee point.
-4. **Serialization & Checkpoints**: `ResultsRecorder` writes model weights, metrics, and training histories:
-   - Checkpoints & results: `results/<config_name>_id<timestamp>/`
+4. **Serialization & Checkpoints**: `ResultsRecorder` writes model weights, metrics, training histories, and active hyperparameter definitions:
+   - Checkpoints & results: `results/<config_name>/` (named directly after the YAML `config_name`)
+   - Result records: Each `.pkl` DataFrame row contains fold metrics along with the `parameters` dictionary (`optimizer`, `lr`, `loss`, `batch_size`).
    - Detailed execution log: `log/TrainerRunner_<timestamp>.log`
 
 ### 3. Post-Training Evaluation & Visualization
@@ -205,6 +218,81 @@ After training completes, analyze performance and generate plots:
 For running multiple sequential training runs, configure and execute `scripts/runner.sh`:
 ```bash
 bash scripts/runner.sh
+```
+
+## Hyperparameter Tuning Workflow
+
+Perform grid search exploration across optimizer parameters (e.g., `lr`, `weight_decay`, `momentum`) and loss functions using `scripts/run_hyperparameter_tuning.py`.
+
+The tuning engine:
+- Generates discrete parameter trials by computing the Cartesian product of hyperparameter lists.
+- Enforces identical cross-validation splits across all trials by reusing a shared `split_manifest.json`.
+- Directs trial outputs into dedicated subfolders (`results/<config_name>/<trial_tag>/`) to avoid filename collisions.
+- Embeds the active `parameters` metadata dictionary directly into each fold result `.pkl` DataFrame row.
+
+### 1. Defining a Tuning Configuration (`config/tuning/`)
+
+Example configuration file (`config/tuning/ModelV6_50Rings_region1_1_tuning.yaml`):
+
+```yaml
+base_config: "config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_50Rings.yaml"
+
+overrides:
+  et_range_idx: [1]
+  eta_range_idx: [1]
+
+search_space:
+  loss_functions:
+    - module: "torch.nn"
+      object_name: "BCELoss"
+
+  optimizers:
+    - module: "torch.optim"
+      object_name: "Adam"
+      parameters:
+        lr: [0.0005, 0.001, 0.005, 0.01]
+        weight_decay: [0.01, 0.001]
+
+    - module: "torch.optim"
+      object_name: "AdamW"
+      parameters:
+        lr: [0.0005, 0.001, 0.005]
+        weight_decay: [0.001, 0.01]
+```
+
+### 2. Launching Tuning
+
+```bash
+# Execute tuning across declared parameter sets
+conda run -n egamma python scripts/run_hyperparameter_tuning.py \
+  --tuning_config config/tuning/ModelV6_50Rings_region1_1_tuning.yaml
+
+# Enforce exact pre-existing cross-validation splits
+conda run -n egamma python scripts/run_hyperparameter_tuning.py \
+  --tuning_config config/tuning/ModelV6_50Rings_region1_1_tuning.yaml \
+  --split_manifest results/<baseline_run>/split_manifest.json
+
+# Fast pipeline validation mode (epochs=2, 1 repeat)
+conda run -n egamma python scripts/run_hyperparameter_tuning.py \
+  --tuning_config config/tuning/ModelV6_50Rings_region1_1_tuning.yaml \
+  --debug
+```
+
+### 3. CLI Options
+- `--tuning_config <path>`: Path to YAML hyperparameter tuning configuration (required).
+- `--output_dir <path>`: Optional destination root directory (defaults to `results/<config_name>/`).
+- `--split_manifest <path>`: Optional path to pre-existing `split_manifest.json` ensuring identical cross-validation folds.
+- `--debug`: Fast debug mode executing 2 epochs and 1 initialization per fold.
+
+### 4. Inspecting Trial Parameters in Result Archives
+
+Each serialized `.pkl` result file contains a dedicated `parameters` column containing the hyperparameter configuration:
+
+```python
+import pandas as pd
+
+df = pd.read_pickle("results/ModelV6_HighBatch_newExtraction_20_regions_50Rings/trial_001_Adam_lr0.001_BCELoss/repeat0.fold_idx0.iet1.ieta1.pkl")
+print(df[["best_sp_value", "parameters"]])
 ```
 
 ## Regional Class Distribution Analysis
@@ -355,6 +443,10 @@ conda run -n egamma pytest tests/test_fast_photon_cut_evaluator.py -v
 Run the Quadrant Analysis test suite specifically:
 ```bash
 conda run -n egamma pytest tests/core/validation/test_quadrant_analysis.py -v
+```
+Run the Hyperparameter Tuning test suite specifically:
+```bash
+conda run -n egamma pytest tests/core/tuning/test_grid_search_tuner.py -v
 ```
 Run the Data Preparation test suites:
 ```bash

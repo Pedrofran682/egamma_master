@@ -77,11 +77,7 @@ class NeuralRingerTrainer(BaseTrainer):
     def run(self) -> None:
         """Runs training across all specified transverse energy (ET) and pseudorapidity (eta) regions."""
         if self.config.results_folder_path is None:
-            folder_name = "config_name{config_name}_id{id}".format(
-                config_name=self.config.config_name,
-                id=datetime.now().strftime("%Y%m%d%H%M%S"),
-            )
-            self.results_folder_path = str(create_folder(folder_name))
+            self.results_folder_path = str(create_folder(self.config.config_name))
         else:
             self.results_folder_path = str(self.config.results_folder_path)
             os.makedirs(self.results_folder_path, exist_ok=True)
@@ -114,7 +110,9 @@ class NeuralRingerTrainer(BaseTrainer):
             Source file path of the processed region dataset.
         """
         data, target, path = self.full_dataset[index]
-        manifest_path = os.path.join(self.results_folder_path, "split_manifest.json")
+        manifest_path = self.config.split_manifest_path or os.path.join(
+            self.results_folder_path, "split_manifest.json"
+        )
         manifest = SplitManifest(manifest_path)
         region_key = f"et_{int(self.et)}_eta_{int(self.eta)}"
 
@@ -158,6 +156,17 @@ class NeuralRingerTrainer(BaseTrainer):
                 )
 
                 if results["best_weights"] is not None:
+                    hyperparameters = {
+                        "optimizer": self.config.optimizer_function.object_name,
+                        "optimizer_params": {
+                            k: v
+                            for k, v in self.config.optimizer_function.parameters.items()
+                            if k != "params"
+                        },
+                        "loss": self.config.loss_function.object_name,
+                        "loss_params": self.config.loss_function.parameters,
+                        "batch_size": self.config.batch_size,
+                    }
                     self.recorder.record(
                         repeat + 1,
                         path,
@@ -167,6 +176,7 @@ class NeuralRingerTrainer(BaseTrainer):
                         results["best_pd_value"],
                         results["best_weights"],
                         results["history"],
+                        parameters=hyperparameters,
                     )
 
                 self.recorder.save(

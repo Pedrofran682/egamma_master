@@ -39,6 +39,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         help="Optional path to output results directory to resume or store outputs.",
     )
+    parser.add_argument(
+        "--split_manifest",
+        required=False,
+        default=None,
+        type=str,
+        help="Optional path to pre-existing split_manifest.json to enforce exact cross-validation splits.",
+    )
     return parser
 
 
@@ -52,6 +59,8 @@ def main(args: argparse.Namespace) -> None:
         yaml_data = yaml.safe_load(file)
         if args.results_path is not None:
             yaml_data["results_folder_path"] = args.results_path
+        if args.split_manifest is not None:
+            yaml_data["split_manifest_path"] = args.split_manifest
         config_instance = NeuralRingerTrainerConfiguration.model_validate(yaml_data)
         trainer = NeuralRingerTrainer(
             config_instance,

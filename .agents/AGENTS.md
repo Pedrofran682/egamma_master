@@ -110,6 +110,14 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     [--output_dir Plots/quandrantic_analysis_cut]
 ```
 
+### 7. Hyperparameter Tuning
+Run grid search tuning over optimizers and hyperparameters for a target model configuration:
+```bash
+conda run -n egamma python scripts/run_hyperparameter_tuning.py \
+    --tuning_config config/tuning/ModelV6_50Rings_region1_1_tuning.yaml \
+    [--output_dir results/tuning_modelv6] \
+    [--debug]
+```
 
 ---
 
@@ -122,6 +130,7 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     - `BaseResultAggregator.py`: Abstract base class for result aggregation and model discovery.
     - `BaseEvaluator.py`: Abstract base class for holdout evaluation.
     - `BasePlotter.py`: Abstract base classes `BasePlotter` and `BaseMetricPlotter`.
+    - `BaseHyperparameterTuner.py`: Abstract base class for hyperparameter search orchestrators.
   - `Datasets/`:
     - `EgammaNpzDataset.py`: Custom PyTorch Dataset reading `.npz` calorimeter ring data; exposes `feature_names`.
     - `EgammaNpzDatasetNoTargetOrigin.py`: Dataset variant omitting target origin extraction.
@@ -131,6 +140,9 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     - `FoldTrainer.py`: Isolated single-fold train/validation loop with early stopping.
     - `TrainingFactory.py`: Factory for data loaders, optimizers, loss functions, and model weights.
     - `ResultsRecorder.py`: Serializer for fold metrics, best weights, and histories.
+  - `Tuning/`:
+    - `GridSearchTuner.py`: Orchestrator executing hyperparameter search trials and summarizing ranked outcomes.
+    - `TuningConfiguration.py`: Pydantic schema validating tuning configuration YAML and building discrete trial configurations.
   - `Plotting/`:
     - `PlotManager.py`: Coordinator dispatching plotting routines.
     - `BasePlotter.py`: Abstract base class for all plotters.

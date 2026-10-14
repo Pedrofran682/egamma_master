@@ -40,6 +40,7 @@ class NeuralRingerTrainerConfiguration(BaseModel):
     num_workers: int = Field(default=0, description="DataLoader worker subprocesses.")
     debug: bool = Field(default=False, description="Debug mode flag.")
     results_folder_path: Optional[str] = Field(default=None, description="Output folder path.")
+    split_manifest_path: Optional[str] = Field(default=None, description="Path to pre-existing split manifest JSON.")
     balance_data: bool = Field(default=True, description="Enable class weighting sampler.")
     loss_function: DynamicConfiguration = Field(..., description="Loss function config.")
     optimizer_function: DynamicConfiguration = Field(..., description="Optimizer config.")

@@ -163,6 +163,18 @@ class TestInterfaces(unittest.TestCase):
         self.assertTrue(issubclass(EgammaNpzDataset, BaseEgammaDataset))
         self.assertTrue(issubclass(EgammaNpzDatasetNoTargetOrigin, BaseEgammaDataset))
 
+    def test_base_hyperparameter_tuner_cannot_be_instantiated_directly(self) -> None:
+        from src.core.Interfaces import BaseHyperparameterTuner
+
+        with self.assertRaises(TypeError):
+            BaseHyperparameterTuner()
+
+    def test_grid_search_tuner_inherits_from_base_hyperparameter_tuner(self) -> None:
+        from src.core.Interfaces import BaseHyperparameterTuner
+        from src.core.Tuning import GridSearchTuner
+
+        self.assertTrue(issubclass(GridSearchTuner, BaseHyperparameterTuner))
+
 
 if __name__ == "__main__":
     unittest.main()

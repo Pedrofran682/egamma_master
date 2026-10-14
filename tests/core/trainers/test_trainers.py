@@ -47,6 +47,7 @@ class TestTrainers(unittest.TestCase):
             best_pd=0.98,
             best_weights={"fc.weight": torch.tensor([1.0])},
             history={"train_loss": [0.5, 0.3]},
+            parameters={"lr": 0.01, "optimizer": "Adam"},
         )
 
         saved_file = recorder.save(self.temp_dir.name, et=0, eta=0, repeat=1, fold_idx=0)
@@ -56,6 +57,7 @@ class TestTrainers(unittest.TestCase):
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["best_sp_value"], 0.95)
         self.assertEqual(df.iloc[0]["reapet"], 1)
+        self.assertEqual(df.iloc[0]["parameters"], {"lr": 0.01, "optimizer": "Adam"})
 
         recorder.clear()
         self.assertEqual(len(recorder.records), 0)

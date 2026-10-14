@@ -1,0 +1,23 @@
+base_config: "config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_50Rings.yaml"
+
+overrides:
+  et_range_idx: [1]
+  eta_range_idx: [1]
+
+search_space:
+  loss_functions:
+    - module: "torch.nn"
+      object_name: "BCELoss"
+
+  optimizers:
+    - module: "torch.optim"
+      object_name: "Adam"
+      parameters:
+        lr: [0.0005, 0.001, 0.005, 0.01]
+        weight_decay: [0.01, 0.001]
+
+    - module: "torch.optim"
+      object_name: "AdamW"
+      parameters:
+        lr: [0.0005, 0.001, 0.005]
+        weight_decay: [0.001, 0.01]

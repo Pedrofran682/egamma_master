@@ -96,6 +96,15 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     --working_point loose
 ```
 
+### Hyperparameter Tuning
+Run grid search tuning over optimizers and parameters for a target model configuration:
+```bash
+conda run -n egamma python scripts/run_hyperparameter_tuning.py \
+    --tuning_config config/tuning/ModelV6_50Rings_region1_1_tuning.yaml \
+    [--output_dir results/tuning_modelv6] \
+    [--debug]
+```
+
 ### Batch Runs
 Run batch sequential trainings via bash runner:
 ```bash
@@ -113,9 +122,10 @@ When searching for or modifying functionality, refer to the following locations:
 | **Model Registry** | `src/Models/ModelRegistry.py` | Auto-discovers all `nn.Module` classes in `src/Models/egamma/` by class name |
 | **Model Architectures** | `src/Models/egamma/*.py` | Individual models (`ModelV1` through `ModelV6`, `Run2_ModelV1`, `Run2_ModelV1_2`) |
 | **Model Factory** | `src/Models/Models.py` | `get_model(tag, input_dim)` delegating to `ModelRegistry` |
-| **Interfaces** | `src/core/Interfaces/` | Abstract base classes (`BaseEgammaDataset`, `BaseTrainer`, `BaseResultAggregator`, `BaseEvaluator`, `BasePlotter`, `BaseMetricPlotter`) |
+| **Interfaces** | `src/core/Interfaces/` | Abstract base classes (`BaseEgammaDataset`, `BaseTrainer`, `BaseResultAggregator`, `BaseEvaluator`, `BasePlotter`, `BaseMetricPlotter`, `BaseHyperparameterTuner`) |
 | **Dataset & Splits** | `src/core/Datasets/` | `EgammaNpzDataset.py` (reads `.npz` rings, exposes `feature_names`), `EgammaNpzDatasetNoTargetOrigin.py`, `SplitManifest.py` (K-fold split persistence with logging) |
 | **Trainers** | `src/core/Trainers/` | `NeuralRingerTrainer.py` (coordinator), `FoldTrainer.py` (single fold), `TrainingFactory.py`, `ResultsRecorder.py` |
+| **Tuning** | `src/core/Tuning/` | `GridSearchTuner.py` (tuner orchestrator), `TuningConfiguration.py` (search space & trial builder) |
 | **Callbacks** | `src/core/Callbacks/` | `SPCallbackPyTorch.py` (tracks SP index, knee point, early stopping, best weights) |
 | **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `BasePlotter.py`, `QuadrantPlotter.py` (2x2 heatmaps & score scatter), `ProfilePlotter.py`, `MetricPlotter.py`, `RegionDistributionPlotter.py` (2D heatmaps), `LegacyPlotter.py`, `Context.py` |
 | **Validation** | `src/core/Validation/` | `ModelValidator.py` (global & regional evaluation), `QuadrantAnalyzer.py` (4-quadrant model comparison), `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
