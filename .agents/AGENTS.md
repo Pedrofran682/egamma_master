@@ -24,6 +24,10 @@
    - **Ask for user confirmation before EVERY architectural, structural, or design decision.**
    - Present proposed class designs, directory changes, or patterns with concise options, and wait for explicit user input before editing files.
 
+5. **Conda Environment (`egamma`)**:
+   - Always use the `egamma` Conda environment for all tool executions, Python scripts, CLI tasks, and tests.
+   - Run commands using `conda run -n egamma <command>` or direct binaries `/home/pmourafr/anaconda3/envs/egamma/bin/python` and `/home/pmourafr/anaconda3/envs/egamma/bin/pytest`. Never execute commands using the system or base Python.
+
 ---
 
 ## Environment & Execution Guidelines (WSL / Conda)
