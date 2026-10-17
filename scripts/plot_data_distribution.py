@@ -41,6 +41,24 @@ parser.add_argument(
     choices=["pdf", "png"],
     help="File format for generated figures (default: pdf).",
 )
+parser.add_argument(
+    "--et",
+    "--iet",
+    dest="et",
+    required=False,
+    default=None,
+    type=int,
+    help="Filter to specific ET bin index.",
+)
+parser.add_argument(
+    "--eta",
+    "--ieta",
+    dest="eta",
+    required=False,
+    default=None,
+    type=int,
+    help="Filter to specific eta bin index.",
+)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -53,6 +71,8 @@ def main(args: argparse.Namespace) -> None:
         config_path=args.config,
         data_path=args.data_path,
         output_dir=args.output_dir,
+        target_et=args.et,
+        target_eta=args.eta,
     )
     analyzer.run(file_format=args.format)
 

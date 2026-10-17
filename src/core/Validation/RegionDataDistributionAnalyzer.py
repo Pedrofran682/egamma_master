@@ -32,6 +32,8 @@ class RegionDataDistributionAnalyzer:
         config_path: str,
         data_path: Optional[str] = None,
         output_dir: Optional[str] = None,
+        target_et: Optional[int] = None,
+        target_eta: Optional[int] = None,
     ) -> None:
         """Initializes RegionDataDistributionAnalyzer.
 
@@ -39,12 +41,16 @@ class RegionDataDistributionAnalyzer:
             config_path: Path to configuration YAML file.
             data_path: Optional override for the dataset NPZ directory path.
             output_dir: Destination folder path for generated plots and data.
+            target_et: Optional ET bin index filter.
+            target_eta: Optional eta bin index filter.
         """
         self.config_path: pathlib.Path = pathlib.Path(config_path)
         self.config: NeuralRingerTrainerConfiguration = self._load_config(config_path)
         self.data_path: Optional[pathlib.Path] = pathlib.Path(data_path) if data_path else None
         self.output_dir: pathlib.Path = self._resolve_output_dir(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.target_et: Optional[int] = target_et
+        self.target_eta: Optional[int] = target_eta
         self.dataset: BaseEgammaDataset = self._initialize_dataset()
         self.plotter: RegionDistributionPlotter = RegionDistributionPlotter()
 
@@ -103,6 +109,11 @@ class RegionDataDistributionAnalyzer:
         for file_path in target_file_paths:
             try:
                 transverse_energy_bin, pseudorapidity_bin = get_et_eta(file_path)
+                if self.target_et is not None and int(transverse_energy_bin) != self.target_et:
+                    continue
+                if self.target_eta is not None and int(pseudorapidity_bin) != self.target_eta:
+                    continue
+
                 with np.load(file_path, allow_pickle=True) as sample_archive:
                     _, sample_labels = self.dataset.filter_events(sample_archive)
 

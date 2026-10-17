@@ -244,6 +244,42 @@ class TestQuadrantAnalysis(unittest.TestCase):
         )
         self.assertEqual(args_model.mode, "model_vs_model")
         self.assertEqual(args_model.data_path2, "results/run2")
+        self.assertIsNone(args_model.et)
+        self.assertIsNone(args_model.eta)
+
+        args_region = parser.parse_args(
+            [
+                "--config1",
+                "config/ModelV1.yaml",
+                "--data_path1",
+                "results/run1",
+                "--data_path2",
+                "results/run2",
+                "--et",
+                "3",
+                "--eta",
+                "4",
+            ]
+        )
+        self.assertEqual(args_region.et, 3)
+        self.assertEqual(args_region.eta, 4)
+
+        args_alias = parser.parse_args(
+            [
+                "--config1",
+                "config/ModelV1.yaml",
+                "--data_path1",
+                "results/run1",
+                "--data_path2",
+                "results/run2",
+                "--iet",
+                "1",
+                "--ieta",
+                "2",
+            ]
+        )
+        self.assertEqual(args_alias.et, 1)
+        self.assertEqual(args_alias.eta, 2)
 
     def test_save_results_table(self) -> None:
         import pandas as pd

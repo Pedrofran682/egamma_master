@@ -38,6 +38,24 @@ parser.add_argument(
     type=str,
     help="Custom path to output plots (defaults to Plots/<results_folder_name>).",
 )
+parser.add_argument(
+    "--et",
+    "--iet",
+    dest="et",
+    required=False,
+    default=None,
+    type=int,
+    help="Filter to specific ET bin index.",
+)
+parser.add_argument(
+    "--eta",
+    "--ieta",
+    dest="eta",
+    required=False,
+    default=None,
+    type=int,
+    help="Filter to specific eta bin index.",
+)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -52,6 +70,8 @@ def main(args: argparse.Namespace) -> None:
         efficiencies_csv=args.efficiencies_csv,
         default_target_pd=args.target_pd,
         output_dir=args.output_dir,
+        target_et=args.et,
+        target_eta=args.eta,
     )
     validator.run()
 

@@ -172,6 +172,21 @@ class TestMetricPlotter(unittest.TestCase):
         )
         self.assertTrue(runner.output_dir.exists())
 
+    def test_plotter_runner_region_filtering(self) -> None:
+        from scripts.run_plots import parser as plot_parser
+
+        parsed = plot_parser.parse_args(["results/test", "--et", "2", "--eta", "3"])
+        self.assertEqual(parsed.et, 2)
+        self.assertEqual(parsed.eta, 3)
+
+        parsed_alias = plot_parser.parse_args(["results/test", "--iet", "1", "--ieta", "4"])
+        self.assertEqual(parsed_alias.et, 1)
+        self.assertEqual(parsed_alias.eta, 4)
+
+        runner = PlotterRunner("results/test", target_et=2, target_eta=3)
+        self.assertEqual(runner.target_et, 2)
+        self.assertEqual(runner.target_eta, 3)
+
     def test_roc_plot_runner_output_dirs(self) -> None:
         runner_base = RocPlotRunner(results_path="results/")
         self.assertEqual(str(runner_base.output_dir), "Plots/ROC_Grid")
@@ -183,10 +198,21 @@ class TestMetricPlotter(unittest.TestCase):
 
         custom_out = os.path.join(self.temp_dir.name, "CustomROC")
         runner_custom = RocPlotRunner(
-            results_path="results/", output_dir=custom_out
+            results_path="results/", output_dir=custom_out, target_et=1, target_eta=2
         )
         self.assertEqual(str(runner_custom.output_dir), custom_out)
         self.assertTrue(runner_custom.output_dir.exists())
+        self.assertEqual(runner_custom.target_et, 1)
+        self.assertEqual(runner_custom.target_eta, 2)
+
+        from scripts.run_roc_plots import parser as roc_parser
+
+        parsed = roc_parser.parse_args(["--results_path", "results/", "--et", "1", "--eta", "2"])
+        self.assertEqual(parsed.et, 1)
+        self.assertEqual(parsed.eta, 2)
+        parsed_alias = roc_parser.parse_args(["--results_path", "results/", "--iet", "3", "--ieta", "4"])
+        self.assertEqual(parsed_alias.et, 3)
+        self.assertEqual(parsed_alias.eta, 4)
 
     def test_boxplot_sp_plotter_with_dataframe(self) -> None:
         plotter = BoxplotSPPlotter()

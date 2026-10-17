@@ -145,6 +145,20 @@ class TestValidation(unittest.TestCase):
         )
         self.assertIsNone(parsed_defaults.efficiencies_csv)
         self.assertAlmostEqual(parsed_defaults.target_pd, 0.9424)
+        self.assertIsNone(parsed_defaults.et)
+        self.assertIsNone(parsed_defaults.eta)
+
+        parsed_regions = validate_pd_module.parser.parse_args(
+            ["--config", "conf.yaml", "--data_path", "results/test", "--et", "2", "--eta", "3"]
+        )
+        self.assertEqual(parsed_regions.et, 2)
+        self.assertEqual(parsed_regions.eta, 3)
+
+        parsed_alias = validate_pd_module.parser.parse_args(
+            ["--config", "conf.yaml", "--data_path", "results/test", "--iet", "1", "--ieta", "4"]
+        )
+        self.assertEqual(parsed_alias.et, 1)
+        self.assertEqual(parsed_alias.eta, 4)
 
     def test_plot_regional_efficiency(self):
         evaluator = HoldoutEvaluator(default_target_pd=0.90)

@@ -42,6 +42,24 @@ parser.add_argument(
     required=False,
     help="Target directory for plots (defaults to Plots/<target_name>).",
 )
+parser.add_argument(
+    "--et",
+    "--iet",
+    dest="et",
+    type=int,
+    default=None,
+    required=False,
+    help="Filter to specific ET bin index.",
+)
+parser.add_argument(
+    "--eta",
+    "--ieta",
+    dest="eta",
+    type=int,
+    default=None,
+    required=False,
+    help="Filter to specific eta bin index.",
+)
 
 
 class RocPlotRunner:
@@ -52,6 +70,8 @@ class RocPlotRunner:
         results_path: str,
         folders: Optional[List[str]] = None,
         output_dir: Optional[str] = None,
+        target_et: Optional[int] = None,
+        target_eta: Optional[int] = None,
     ) -> None:
         """Initialize the RocPlotRunner instance.
 
@@ -59,8 +79,12 @@ class RocPlotRunner:
             results_path: Base directory where result files are located.
             folders: List of specific result folders to scan and aggregate.
             output_dir: Target directory for plots (defaults to Plots/<target_name>).
+            target_et: Optional ET bin index filter.
+            target_eta: Optional eta bin index filter.
         """
         self.results_path: Path = Path(results_path)
+        self.target_et: Optional[int] = target_et
+        self.target_eta: Optional[int] = target_eta
         self.folders: List[str] = folders or [
             "results/modelV5.dim0.5.folds10_id20251126183757",
             "results/modelV4.dim0.5.folds10_id20251125151554",
@@ -91,6 +115,11 @@ class RocPlotRunner:
         df["et"] = df.apply(extract_et, axis=1)
         df["eta"] = df.apply(extract_eta, axis=1)
 
+        if self.target_et is not None:
+            df = df[df["et"] == self.target_et]
+        if self.target_eta is not None:
+            df = df[df["eta"] == self.target_eta]
+
         dummy_context = RegionPlotContext(
             iet=0,
             ieta=0,
@@ -109,5 +138,7 @@ if __name__ == "__main__":
     runner = RocPlotRunner(
         results_path=args.results_path,
         output_dir=args.output_dir,
+        target_et=args.et,
+        target_eta=args.eta,
     )
     runner.run()

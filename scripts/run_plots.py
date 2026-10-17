@@ -36,6 +36,24 @@ parser.add_argument("--percentage", default=None, type=float, required=False)
 parser.add_argument("--plot_ringer", action="store_true")
 parser.add_argument("--config", default=None, type=str, required=False)
 parser.add_argument("--output_dir", default=None, type=str, required=False)
+parser.add_argument(
+    "--et",
+    "--iet",
+    dest="et",
+    default=None,
+    type=int,
+    required=False,
+    help="Filter to specific ET bin index.",
+)
+parser.add_argument(
+    "--eta",
+    "--ieta",
+    dest="eta",
+    default=None,
+    type=int,
+    required=False,
+    help="Filter to specific eta bin index.",
+)
 parser.add_argument("--debug", action="store_true")
 
 
@@ -48,6 +66,8 @@ class PlotterRunner:
         drive_path: str = "data/",
         output_dir: Optional[str] = None,
         config_path: Optional[str] = None,
+        target_et: Optional[int] = None,
+        target_eta: Optional[int] = None,
     ) -> None:
         """Initialize the PlotterRunner instance.
 
@@ -56,9 +76,13 @@ class PlotterRunner:
             drive_path: Directory path where raw dataset files are stored.
             output_dir: Target directory for plots (defaults to Plots/<results_folder_name>).
             config_path: Optional path to YAML configuration file.
+            target_et: Optional ET bin index filter.
+            target_eta: Optional eta bin index filter.
         """
         self.results_path: Path = Path(results_path)
         self.drive_path: str = drive_path
+        self.target_et: Optional[int] = target_et
+        self.target_eta: Optional[int] = target_eta
         self.plot_manager: PlotManager = PlotManager()
 
         if output_dir:
@@ -89,8 +113,13 @@ class PlotterRunner:
         profile_plotter = ProfileMeanEnergyPlotter()
 
         for index, file_name in enumerate(data_files):
-            data, target, _ = dataset[index]
             et, eta = get_et_eta(file_name)
+            if self.target_et is not None and int(et) != self.target_et:
+                continue
+            if self.target_eta is not None and int(eta) != self.target_eta:
+                continue
+
+            data, target, _ = dataset[index]
             context = RegionPlotContext(
                 iet=int(et),
                 ieta=int(eta),
@@ -145,6 +174,10 @@ class PlotterRunner:
                     f"Could not extract et/eta from file {self.results_path}. Skipping."
                 )
                 return
+            if self.target_et is not None and int(et) != self.target_et:
+                return
+            if self.target_eta is not None and int(eta) != self.target_eta:
+                return
             self.plot_manager.run_metrics_from_file(
                 str(self.results_path), folder_path, int(et), int(eta)
             )
@@ -166,6 +199,10 @@ class PlotterRunner:
                 continue
 
             iet, ieta = int(match.group(1)), int(match.group(2))
+            if self.target_et is not None and iet != self.target_et:
+                continue
+            if self.target_eta is not None and ieta != self.target_eta:
+                continue
 
             if (
                 df_region is None
@@ -189,5 +226,7 @@ if __name__ == "__main__":
         drive_path=args.drive_path,
         output_dir=args.output_dir,
         config_path=args.config,
+        target_et=args.et,
+        target_eta=args.eta,
     )
     runner.execute(plot_ringer=args.plot_ringer, percentage=args.percentage)

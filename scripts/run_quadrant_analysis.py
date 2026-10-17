@@ -108,6 +108,24 @@ parser.add_argument(
     type=str,
     help="Output CSV filename for tabular results and uncertainties (default: quadrant_results.csv).",
 )
+parser.add_argument(
+    "--et",
+    "--iet",
+    dest="et",
+    required=False,
+    default=None,
+    type=int,
+    help="Filter to specific ET bin index.",
+)
+parser.add_argument(
+    "--eta",
+    "--ieta",
+    dest="eta",
+    required=False,
+    default=None,
+    type=int,
+    help="Filter to specific eta bin index.",
+)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -134,6 +152,8 @@ def main(args: argparse.Namespace) -> None:
         default_target_pd=args.target_pd,
         mode=args.mode,
         working_point=args.working_point,
+        target_et=args.et,
+        target_eta=args.eta,
     )
     output_dir = analyzer.get_output_dir(args.output_dir)
 

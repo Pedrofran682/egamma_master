@@ -322,6 +322,8 @@ conda run -n egamma python scripts/plot_data_distribution.py \
 - `--data_path <path>`: Optional path to directory containing consolidated `.npz` files (overrides config `drive_path`).
 - `--output_dir <path>`: Custom destination path for figures and CSV (default: `Plots/<config_name>/DataDistribution/`).
 - `--format {pdf,png}`: Image format for generated figures (default: `pdf`).
+- `--et <int>` (or `--iet`): Optional ET bin index filter to evaluate a single ET bin.
+- `--eta <int>` (or `--ieta`): Optional eta bin index filter to evaluate a single eta bin.
 
 ## Fast Photon Trigger Cut Efficiency Calculation
 
@@ -352,7 +354,10 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py \
 - `--data_path <path>`: Path to a single `.npz` file or a directory of files.
 - `--pattern <glob>`: File glob pattern when `--data_path` is a directory (default: `*.npz`).
 - `--working_points loose medium tight`: Space-separated working points to evaluate (default: `loose medium tight`).
-- `--output_csv <path>`: Output CSV path for region efficiencies compatible with `ModelValidator` (default: `efficiencies_by_region.csv`).
+- `--output_dir <path>`: Optional destination directory for output summary files (default: current directory).
+- `--output_csv <path>`: Output CSV filename or path for region efficiencies compatible with `ModelValidator` (default: `efficiencies_by_region.csv`).
+- `--et <int>` (or `--iet`): Optional ET bin index filter to evaluate a single ET bin.
+- `--eta <int>` (or `--ieta`): Optional eta bin index filter to evaluate a single eta bin.
 
 ## Quadrant Analysis (Model Comparison)
 
@@ -422,6 +427,8 @@ Outputs are automatically placed inside a dedicated model comparison folder unde
 - `--efficiencies_csv <path>`: Optional path to reference operating point CSV table.
 - `--output_dir <path>`: Base output directory (the comparison subfolder is automatically appended inside; default: `Plots/quandrantic_analysis`).
 - `--file_format {pdf,png}`: Output graphic format (default: `pdf`).
+- `--et <int>` (or `--iet`): Optional ET bin index filter to evaluate a single ET bin.
+- `--eta <int>` (or `--ieta`): Optional eta bin index filter to evaluate a single eta bin.
 
 ### Tabular Consolidation & LaTeX Generation (`notebooks/consolidate_quadrant_tables.ipynb`)
 

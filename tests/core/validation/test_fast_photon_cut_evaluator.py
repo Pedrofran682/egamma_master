@@ -93,6 +93,23 @@ class TestFastPhotonCutEvaluator(unittest.TestCase):
         df_loaded = pd.read_csv(csv_out)
         self.assertEqual(len(df_loaded), len(df_results))
 
+    def test_cli_argument_parsing(self) -> None:
+        from scripts.calculate_photon_cut_efficiency import parse_args
+
+        args_default = parse_args([])
+        self.assertIsNone(args_default.output_dir)
+        self.assertEqual(args_default.output_csv, "efficiencies_by_region.csv")
+
+        args_custom = parse_args(["--output_dir", "Plots/test_dir", "--output_csv", "custom.csv", "--et", "1", "--eta", "2"])
+        self.assertEqual(args_custom.output_dir, "Plots/test_dir")
+        self.assertEqual(args_custom.output_csv, "custom.csv")
+        self.assertEqual(args_custom.et, 1)
+        self.assertEqual(args_custom.eta, 2)
+
+        args_alias = parse_args(["--iet", "3", "--ieta", "4"])
+        self.assertEqual(args_alias.et, 3)
+        self.assertEqual(args_alias.eta, 4)
+
 
 if __name__ == "__main__":
     unittest.main()

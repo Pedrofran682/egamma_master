@@ -196,6 +196,25 @@ class TestRegionDataDistributionAnalyzer(unittest.TestCase):
         grid_image = output_dir / "data_distribution_2d_grid.png"
         self.assertTrue(grid_image.exists())
 
+        analyzer_filtered = RegionDataDistributionAnalyzer(
+            config_path=str(self.config_path),
+            data_path=str(self.data_dir),
+            output_dir=str(output_dir),
+            target_et=1,
+            target_eta=2,
+        )
+        filtered_df = analyzer_filtered.collect_distribution()
+        self.assertEqual(len(filtered_df), 1)
+        self.assertEqual(filtered_df.iloc[0]["eta"], 2)
+
+        from scripts.plot_data_distribution import parser as dist_parser
+        parsed = dist_parser.parse_args(["--config", "cfg.yaml", "--et", "1", "--eta", "2"])
+        self.assertEqual(parsed.et, 1)
+        self.assertEqual(parsed.eta, 2)
+        parsed_alias = dist_parser.parse_args(["--config", "cfg.yaml", "--iet", "3", "--ieta", "4"])
+        self.assertEqual(parsed_alias.et, 3)
+        self.assertEqual(parsed_alias.eta, 4)
+
     def test_dataset_feature_names_property(self) -> None:
         from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
         from src.core.Datasets.EgammaNpzDatasetNoTargetOrigin import EgammaNpzDatasetNoTargetOrigin

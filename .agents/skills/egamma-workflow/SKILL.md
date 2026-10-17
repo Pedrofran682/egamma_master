@@ -68,7 +68,7 @@ conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/M
 ```
 Calculate ATLAS baseline fast photon cut efficiencies:
 ```bash
-conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_path data/consolidated/consolidated.et2.eta2.npz --threshold 20.0
+conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_path data/consolidated/consolidated.et2.eta2.npz [--output_dir <dir>]
 ```
 
 ### Regional Data Distribution Analysis

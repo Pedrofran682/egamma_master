@@ -50,6 +50,8 @@ class ModelValidator:
         efficiencies_csv: str | pathlib.Path | None = None,
         default_target_pd: float = 0.9424,
         output_dir: str | pathlib.Path | None = None,
+        target_et: int | None = None,
+        target_eta: int | None = None,
     ) -> None:
         """Initializes the ModelValidator pipeline.
 
@@ -59,10 +61,14 @@ class ModelValidator:
             efficiencies_csv: Optional path to reference operating point CSV table.
             default_target_pd: Fallback target signal efficiency (default 0.9424).
             output_dir: Optional destination directory for plots (defaults to Plots/<results_folder_name>).
+            target_et: Optional ET bin index filter.
+            target_eta: Optional eta bin index filter.
         """
         self.config_path: pathlib.Path = pathlib.Path(config_path)
         self.config_instance: NeuralRingerTrainerConfiguration = self._load_config(config_path)
         self.data_path: pathlib.Path = pathlib.Path(data_path)
+        self.target_et: int | None = target_et
+        self.target_eta: int | None = target_eta
         self.manifest_path: pathlib.Path = self.data_path / "split_manifest.json"
         self.manifest: SplitManifest = SplitManifest(str(self.manifest_path))
         if output_dir is not None:
@@ -160,6 +166,11 @@ class ModelValidator:
         for index in range(len(self.trainer.full_dataset)):
             data_path = self.trainer.full_dataset.file_paths[index]
             iet, ieta = get_et_eta(data_path)
+
+            if self.target_et is not None and iet != self.target_et:
+                continue
+            if self.target_eta is not None and ieta != self.target_eta:
+                continue
 
             if not self.config_instance.is_region_allowed(iet, ieta):
                 continue

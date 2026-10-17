@@ -2,7 +2,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -10,13 +10,17 @@ from src.core.Validation.FastPhotonCutEvaluator import (
     FastPhotonCutEvaluator,
     UserKinematicGrid,
 )
+from src.utils import get_et_eta
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """Parses command line arguments.
+
+    Args:
+        args: Optional sequence of argument strings. Defaults to sys.argv[1:].
 
     Returns:
         argparse.Namespace with parsed options.
@@ -43,12 +47,34 @@ def parse_args() -> argparse.Namespace:
         help="List of operating points to evaluate (default: loose medium tight).",
     )
     parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=None,
+        help="Destination directory for output files (default: None, saves to current directory or path in --output_csv).",
+    )
+    parser.add_argument(
         "--output_csv",
         type=str,
         default="efficiencies_by_region.csv",
         help="Path to save region summary CSV for ModelValidator (default: efficiencies_by_region.csv).",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--et",
+        "--iet",
+        dest="et",
+        type=int,
+        default=None,
+        help="Filter to specific ET bin index.",
+    )
+    parser.add_argument(
+        "--eta",
+        "--ieta",
+        dest="eta",
+        type=int,
+        default=None,
+        help="Filter to specific eta bin index.",
+    )
+    return parser.parse_args(args)
 
 
 def display_results_table(df_results: "pd.DataFrame", working_points: List[str]) -> None:
@@ -100,6 +126,20 @@ def main() -> None:
         log.error(f"No NPZ files found in: {data_target}")
         sys.exit(1)
 
+    if args.et is not None or args.eta is not None:
+        filtered_files = []
+        for fp in file_paths:
+            fet, feta = get_et_eta(str(fp))
+            if fet is not None and feta is not None:
+                if args.et is not None and int(fet) != args.et:
+                    continue
+                if args.eta is not None and int(feta) != args.eta:
+                    continue
+            filtered_files.append(fp)
+        file_paths = filtered_files
+        if not file_paths:
+            log.warning(f"No files matched region filter et={args.et}, eta={args.eta}.")
+
     log.info(f"Discovered {len(file_paths)} file(s) to process.")
     grid = UserKinematicGrid()
     evaluator = FastPhotonCutEvaluator(grid=grid)
@@ -107,10 +147,21 @@ def main() -> None:
     log.info("Processing files sequentially and accumulating region statistics...")
     df_results = evaluator.evaluate_files(file_paths, working_points=args.working_points)
 
+    if args.et is not None:
+        df_results = df_results[df_results["et_bin"] == args.et]
+    if args.eta is not None:
+        df_results = df_results[df_results["eta_bin"] == args.eta]
+
     display_results_table(df_results, args.working_points)
 
-    evaluator.export_reference_csv(df_results, args.output_csv)
-    log.info(f"Exported reference table to: {args.output_csv}")
+    output_csv_path = Path(args.output_csv)
+    if args.output_dir is not None:
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output_csv_path = out_dir / output_csv_path.name
+
+    evaluator.export_reference_csv(df_results, output_csv_path)
+    log.info(f"Exported reference table to: {output_csv_path}")
 
 
 if __name__ == "__main__":

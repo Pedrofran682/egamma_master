@@ -366,6 +366,8 @@ class QuadrantAnalyzer:
         default_target_pd: float = 0.9424,
         mode: str = "model_vs_model",
         working_point: str = "loose",
+        target_et: int | None = None,
+        target_eta: int | None = None,
     ) -> None:
         """Initializes QuadrantAnalyzer with configurations and strategy options.
 
@@ -380,11 +382,15 @@ class QuadrantAnalyzer:
             default_target_pd: Target signal detection efficiency.
             mode: Comparison mode ('model_vs_model' or 'model_vs_cut').
             working_point: ATLAS cut working point ('loose', 'medium', 'tight') for model_vs_cut.
+            target_et: Optional ET bin index filter.
+            target_eta: Optional eta bin index filter.
         """
         self.mode: str = mode
         self.working_point: str = working_point
         self.threshold_mode: str = threshold_mode
         self.default_target_pd: float = default_target_pd
+        self.target_et: int | None = target_et
+        self.target_eta: int | None = target_eta
 
         self.config1: NeuralRingerTrainerConfiguration = self._load_config(config_path1)
         self.data_path1: pathlib.Path = pathlib.Path(data_path1)
@@ -823,6 +829,11 @@ class QuadrantAnalyzer:
         for index in range(total_dataset_regions):
             data_path = self.trainer1.full_dataset.file_paths[index]
             iet, ieta = get_et_eta(data_path)
+
+            if self.target_et is not None and iet != self.target_et:
+                continue
+            if self.target_eta is not None and ieta != self.target_eta:
+                continue
 
             if not self.config1.is_region_allowed(iet, ieta):
                 log.info(f"[iet{iet}.ieta{ieta}] Skipped: excluded by region filters.")
