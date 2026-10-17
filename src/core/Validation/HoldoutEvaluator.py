@@ -108,6 +108,34 @@ class HoldoutEvaluationResult:
         """False alarm probability at target PD threshold (backward-compatible alias)."""
         return self.false_alarm_probability
 
+    @property
+    def pd(self) -> float:
+        """Probability of detection (signal efficiency) under calibrated cut."""
+        mask = self.holdout_labels == 1
+        return float(np.mean(self.predictions_calibrated_cut[mask] == 1)) if np.any(mask) else 0.0
+
+    @property
+    def threshold(self) -> float:
+        """Calibrated decision threshold."""
+        return self.calibrated_decision_threshold
+
+    @property
+    def sp(self) -> float:
+        """SP index under calibrated cut."""
+        pd_val = self.pd
+        pf_val = self.false_alarm_probability
+        if pd_val >= 0.0 and pf_val <= 1.0:
+            return float(np.sqrt(np.sqrt(pd_val * (1.0 - pf_val)) * (0.5 * (pd_val + (1.0 - pf_val)))))
+        return 0.0
+
+    @property
+    def auc(self) -> float:
+        """Area under ROC curve computed from predicted probabilities."""
+        from sklearn.metrics import roc_auc_score
+        if len(np.unique(self.holdout_labels)) > 1:
+            return float(roc_auc_score(self.holdout_labels, self.predicted_probabilities))
+        return 0.0
+
 
 class HoldoutEvaluator(BaseEvaluator):
     """Performs inference and operating point threshold calculations on holdout data.
