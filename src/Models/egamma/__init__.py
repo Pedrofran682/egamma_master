@@ -15,6 +15,7 @@ __all__ = [
     "ModelV4",
     "ModelV5",
     "ModelV6",
+    "ModelV7",
     "Run2_ModelV1",
     "Run2_ModelV1_2",
 ]
