@@ -3,6 +3,9 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 
+import mplhep as mh
+mh.style.use("ATLAS")
+
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluationResult
 
 
@@ -13,6 +16,7 @@ class EfficiencyPlotter:
         et_index: Feature column index for transverse energy.
         eta_index: Feature column index for pseudorapidity.
         et_cutoff: Kinematic cutoff in MeV (e.g. 150000 MeV for 150 GeV).
+        transparent: Whether saved figures should have a transparent background.
     """
 
     def __init__(
@@ -20,6 +24,7 @@ class EfficiencyPlotter:
         et_index: int,
         eta_index: int,
         et_cutoff: float = 150000.0,
+        transparent: bool = False,
     ) -> None:
         """Initializes EfficiencyPlotter with column indices and energy cutoff.
 
@@ -27,10 +32,13 @@ class EfficiencyPlotter:
             et_index: Column index for transverse energy.
             eta_index: Column index for pseudorapidity.
             et_cutoff: Upper cutoff for transverse energy in MeV.
+            transparent: Whether saved figures should have a transparent background (default: False).
         """
+        mh.style.use("ATLAS")
         self.et_index: int = et_index
         self.eta_index: int = eta_index
         self.et_cutoff: float = et_cutoff
+        self.transparent: bool = transparent
 
     def plot_efficiency_vs_feature(
         self,
@@ -102,7 +110,7 @@ class EfficiencyPlotter:
         plt.grid(True, linestyle="--", alpha=0.5)
         plt.legend(fontsize=11)
 
-        plt.savefig(file_path, format="png", transparent=True, bbox_inches="tight")
+        plt.savefig(file_path, format="png", transparent=self.transparent, bbox_inches="tight")
         plt.close(figure)
 
     def plot_regional_efficiency(

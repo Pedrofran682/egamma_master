@@ -172,6 +172,7 @@ class TestValidation(unittest.TestCase):
             target_pd=0.90,
         )
         plotter = EfficiencyPlotter(et_index=1, eta_index=2)
+        self.assertFalse(plotter.transparent)
         out_dir = pathlib.Path(self.temp_dir.name) / "RegionPlots"
         out_dir.mkdir(parents=True, exist_ok=True)
         plotter.plot_regional_efficiency(
