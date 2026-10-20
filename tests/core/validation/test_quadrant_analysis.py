@@ -141,6 +141,7 @@ class TestQuadrantAnalysis(unittest.TestCase):
 
     def test_quadrant_plotter_renders_histograms_and_summary(self) -> None:
         plotter = QuadrantPlotter()
+        self.assertFalse(plotter.transparent)
         res1 = self._create_mock_result(iet=1, ieta=1)
         res2 = self._create_mock_result(iet=2, ieta=2)
         global_res = self._create_mock_result(iet=-1, ieta=-1)

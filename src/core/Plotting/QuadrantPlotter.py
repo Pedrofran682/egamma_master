@@ -36,16 +36,20 @@ class QuadrantPlotter(BasePlotter):
         self,
         et_intervals: Optional[Dict[int, str]] = None,
         eta_intervals: Optional[Dict[int, str]] = None,
+        transparent: bool = False,
     ) -> None:
         """Initializes QuadrantPlotter with optional kinematic label intervals.
 
         Args:
             et_intervals: Optional dictionary mapping ET bin indices to physical intervals.
             eta_intervals: Optional dictionary mapping eta bin indices to physical intervals.
+            transparent: Whether saved figures should have a transparent background (default: False).
         """
         super().__init__(name="QuadrantPlotter")
+        mh.style.use("ATLAS")
         self.et_intervals: Dict[int, str] = et_intervals or DEFAULT_ET_INTERVALS
         self.eta_intervals: Dict[int, str] = eta_intervals or DEFAULT_ETA_INTERVALS
+        self.transparent: bool = transparent
 
     def _get_region_label(self, iet: int, ieta: int) -> str:
         if iet < 0 or ieta < 0:
@@ -157,7 +161,14 @@ class QuadrantPlotter(BasePlotter):
         plt.tight_layout()
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_{var_name}_quadrant_hist.{file_format}"
-        return self.save_figure(fig, output_dir, "ShowershapeHistograms", filename, file_format=file_format)
+        return self.save_figure(
+            fig,
+            output_dir,
+            "ShowershapeHistograms",
+            filename,
+            file_format=file_format,
+            transparent=self.transparent,
+        )
 
     @staticmethod
     def _compute_binned_efficiency(
@@ -354,7 +365,14 @@ class QuadrantPlotter(BasePlotter):
 
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_efficiency_vs_{var_name}.{file_format}"
-        return self.save_figure(fig, output_dir, "EfficiencyCurves", filename, file_format=file_format)
+        return self.save_figure(
+            fig,
+            output_dir,
+            "EfficiencyCurves",
+            filename,
+            file_format=file_format,
+            transparent=self.transparent,
+        )
 
     def plot_regional_summary(
         self,
@@ -409,7 +427,14 @@ class QuadrantPlotter(BasePlotter):
 
         plt.tight_layout()
         filename = f"regional_quadrant_summary.{file_format}"
-        return self.save_figure(fig, output_dir, "Summary", filename, file_format=file_format)
+        return self.save_figure(
+            fig,
+            output_dir,
+            "Summary",
+            filename,
+            file_format=file_format,
+            transparent=self.transparent,
+        )
 
     def plot_regional_class_efficiencies(
         self,
@@ -511,7 +536,14 @@ class QuadrantPlotter(BasePlotter):
         )
         plt.tight_layout()
         filename = f"regional_class_efficiencies.{file_format}"
-        return self.save_figure(fig, output_dir, "Summary", filename, file_format=file_format)
+        return self.save_figure(
+            fig,
+            output_dir,
+            "Summary",
+            filename,
+            file_format=file_format,
+            transparent=self.transparent,
+        )
 
     def plot(
         self,
