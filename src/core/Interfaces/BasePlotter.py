@@ -50,7 +50,7 @@ class BasePlotter(ABC):
         filename: str,
         file_format: str = "pdf",
         dpi: int = 300,
-        transparent: bool = True,
+        transparent: bool = False,
     ) -> str:
         """Saves a Matplotlib figure safely and frees graphic resources from memory.
 
@@ -61,7 +61,7 @@ class BasePlotter(ABC):
             filename: Output filename including extension.
             file_format: Graphic format ('pdf', 'png').
             dpi: Dots per inch resolution.
-            transparent: Whether figure background should be transparent.
+            transparent: Whether figure background should be transparent (default: False).
 
         Returns:
             Absolute file path where the figure was saved.
@@ -76,6 +76,7 @@ class BasePlotter(ABC):
                 save_path,
                 format=file_format,
                 dpi=dpi,
+                facecolor="white",
                 transparent=transparent,
                 bbox_inches="tight",
             )

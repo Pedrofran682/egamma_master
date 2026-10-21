@@ -36,20 +36,17 @@ class QuadrantPlotter(BasePlotter):
         self,
         et_intervals: Optional[Dict[int, str]] = None,
         eta_intervals: Optional[Dict[int, str]] = None,
-        transparent: bool = False,
     ) -> None:
         """Initializes QuadrantPlotter with optional kinematic label intervals.
 
         Args:
             et_intervals: Optional dictionary mapping ET bin indices to physical intervals.
             eta_intervals: Optional dictionary mapping eta bin indices to physical intervals.
-            transparent: Whether saved figures should have a transparent background (default: False).
         """
         super().__init__(name="QuadrantPlotter")
         mh.style.use("ATLAS")
         self.et_intervals: Dict[int, str] = et_intervals or DEFAULT_ET_INTERVALS
         self.eta_intervals: Dict[int, str] = eta_intervals or DEFAULT_ETA_INTERVALS
-        self.transparent: bool = transparent
 
     def _get_region_label(self, iet: int, ieta: int) -> str:
         if iet < 0 or ieta < 0:
@@ -113,6 +110,7 @@ class QuadrantPlotter(BasePlotter):
             q_high += 1.0
         bins = np.linspace(q_low, q_high, nbins + 1)
 
+        mh.style.use("ATLAS")
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         region_str = self._get_region_label(result.iet, result.ieta)
         var_display = VARIABLE_LABELS.get(var_name, var_name)
@@ -167,7 +165,6 @@ class QuadrantPlotter(BasePlotter):
             "ShowershapeHistograms",
             filename,
             file_format=file_format,
-            transparent=self.transparent,
         )
 
     @staticmethod
@@ -287,6 +284,7 @@ class QuadrantPlotter(BasePlotter):
         if len(s1_sig_x) == 0 and len(s2_sig_x) == 0:
             return None
 
+        mh.style.use("ATLAS")
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         region_str = self._get_region_label(result.iet, result.ieta)
         var_label = r"Transverse Energy $E_T$ [GeV] ($E_T < 150$ GeV)" if var_name == "et" else r"Pseudorapidity $\eta$"
@@ -371,7 +369,6 @@ class QuadrantPlotter(BasePlotter):
             "EfficiencyCurves",
             filename,
             file_format=file_format,
-            transparent=self.transparent,
         )
 
     def plot_regional_summary(
@@ -404,6 +401,7 @@ class QuadrantPlotter(BasePlotter):
         both_wrong = np.array([r.overall_metrics.both_wrong_ratio for r in filtered_results])
 
         fig_width = max(12, len(regions) * 1.6)
+        mh.style.use("ATLAS")
         fig, ax = plt.subplots(figsize=(fig_width, 6.5))
         x = np.arange(len(regions))
         bar_width = 0.20
@@ -433,7 +431,6 @@ class QuadrantPlotter(BasePlotter):
             "Summary",
             filename,
             file_format=file_format,
-            transparent=self.transparent,
         )
 
     def plot_regional_class_efficiencies(
@@ -471,6 +468,7 @@ class QuadrantPlotter(BasePlotter):
         s2_bg_err = np.array([r.metrics_strategy2.bg_eff_uncertainty for r in filtered_results])
 
         fig_width = max(14, len(regions) * 1.8)
+        mh.style.use("ATLAS")
         fig, axes = plt.subplots(1, 2, figsize=(fig_width, 6.5))
         x = np.arange(len(regions))
         bar_width = 0.35
@@ -542,7 +540,6 @@ class QuadrantPlotter(BasePlotter):
             "Summary",
             filename,
             file_format=file_format,
-            transparent=self.transparent,
         )
 
     def plot(
