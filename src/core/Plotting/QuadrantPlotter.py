@@ -165,6 +165,7 @@ class QuadrantPlotter(BasePlotter):
             "ShowershapeHistograms",
             filename,
             file_format=file_format,
+            transparent=False,
         )
 
     @staticmethod
@@ -369,6 +370,7 @@ class QuadrantPlotter(BasePlotter):
             "EfficiencyCurves",
             filename,
             file_format=file_format,
+            transparent=False
         )
 
     def plot_regional_summary(
@@ -431,6 +433,7 @@ class QuadrantPlotter(BasePlotter):
             "Summary",
             filename,
             file_format=file_format,
+            transparent=False
         )
 
     def plot_regional_class_efficiencies(
@@ -540,6 +543,7 @@ class QuadrantPlotter(BasePlotter):
             "Summary",
             filename,
             file_format=file_format,
+            transparent=False
         )
 
     def plot(
