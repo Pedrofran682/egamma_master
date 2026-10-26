@@ -9,7 +9,7 @@ Plots/*
 __pycache__/
 *.py[codz]
 *$py.class
-notebooks/SingleRegionValidation/
+notebooks/SingleRegionValidation*/
 notebooks/plots/feature_distributions
 notebooks/plots/
 # C extensions
