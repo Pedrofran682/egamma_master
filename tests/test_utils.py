@@ -4,6 +4,8 @@ import pandas as pd
 import pytest
 
 from src.utils import (
+    compute_js_divergence_with_uncertainty,
+    compute_kl_divergence_with_uncertainty,
     compute_ks_test_with_uncertainty,
     compute_wasserstein_with_uncertainty,
     extract_feature_values,
@@ -65,4 +67,29 @@ def test_compute_wasserstein_with_uncertainty():
 
     assert w_dist > 0.0
     assert w_unc >= 0.0
+
+
+def test_compute_kl_divergence_with_uncertainty():
+    rng = np.random.default_rng(42)
+    sample_ref = rng.normal(0.0, 1.0, size=200)
+    sample_eval = rng.normal(0.0, 1.0, size=200)
+
+    kl_stat, kl_unc = compute_kl_divergence_with_uncertainty(
+        sample_ref, sample_eval, bins=20, n_bootstraps=15, random_seed=42
+    )
+    assert kl_stat >= 0.0
+    assert kl_unc >= 0.0
+
+
+def test_compute_js_divergence_with_uncertainty():
+    rng = np.random.default_rng(42)
+    sample_ref = rng.normal(0.0, 1.0, size=200)
+    sample_eval = rng.normal(1.0, 1.0, size=200)
+
+    js_stat, js_unc = compute_js_divergence_with_uncertainty(
+        sample_ref, sample_eval, bins=20, n_bootstraps=15, random_seed=42
+    )
+    assert 0.0 <= js_stat <= 1.0
+    assert js_unc >= 0.0
+
 

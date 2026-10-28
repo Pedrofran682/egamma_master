@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+from scipy import special, stats
 import torch
 from torch.utils.data import WeightedRandomSampler
 
@@ -501,3 +501,142 @@ def compute_wasserstein_with_uncertainty(
         w_boot[b] = stats.wasserstein_distance(b_ref, b_eval)
     w_unc = float(np.std(w_boot, ddof=1))
     return w_dist, w_unc
+
+
+def _estimate_empirical_pmf(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    bins: Union[int, np.ndarray] = 35,
+    epsilon: float = 1e-7,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Discretizes continuous samples onto common support with Laplace/epsilon smoothing."""
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+
+    if isinstance(bins, int):
+        all_vals = np.concatenate([sample_ref, sample_eval])
+        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+        if low >= high:
+            low -= 1.0
+            high += 1.0
+        bin_edges = np.linspace(low, high, bins + 1)
+    else:
+        bin_edges = np.asarray(bins, dtype=float)
+
+    c_ref, _ = np.histogram(sample_ref, bins=bin_edges)
+    c_eval, _ = np.histogram(sample_eval, bins=bin_edges)
+
+    p = (c_ref + epsilon) / (c_ref.sum() + epsilon * len(c_ref))
+    q = (c_eval + epsilon) / (c_eval.sum() + epsilon * len(c_eval))
+    return p, q
+
+
+def compute_kl_divergence_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    bins: Union[int, np.ndarray] = 35,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+    epsilon: float = 1e-7,
+) -> Tuple[float, float]:
+    """Computes discrete Kullback-Leibler divergence D_KL(P || Q) and bootstrap uncertainty.
+
+    Args:
+        sample_ref: Reference distribution sample P.
+        sample_eval: Evaluated model selection sample Q.
+        bins: Number of bins or explicit bin edges.
+        n_bootstraps: Number of bootstrap iterations.
+        random_seed: Random seed for reproducibility.
+        epsilon: Regularization smoothing constant to avoid log(0).
+
+    Returns:
+        Tuple of (kl_divergence, kl_uncertainty).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0
+
+    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=bins, epsilon=epsilon)
+    kl_stat = float(np.sum(special.rel_entr(p, q)))
+
+    if isinstance(bins, int):
+        all_vals = np.concatenate([sample_ref, sample_eval])
+        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+        if low >= high:
+            low -= 1.0
+            high += 1.0
+        fixed_bin_edges = np.linspace(low, high, bins + 1)
+    else:
+        fixed_bin_edges = bins
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    kl_boot = np.empty(n_bootstraps, dtype=float)
+
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        bp, bq = _estimate_empirical_pmf(b_ref, b_eval, bins=fixed_bin_edges, epsilon=epsilon)
+        kl_boot[b] = float(np.sum(special.rel_entr(bp, bq)))
+
+    kl_unc = float(np.std(kl_boot, ddof=1))
+    return kl_stat, kl_unc
+
+
+def compute_js_divergence_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    bins: Union[int, np.ndarray] = 35,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+    epsilon: float = 1e-7,
+) -> Tuple[float, float]:
+    """Computes symmetric Jensen-Shannon divergence in [0, 1] and bootstrap uncertainty.
+
+    Args:
+        sample_ref: Reference distribution sample P.
+        sample_eval: Evaluated model selection sample Q.
+        bins: Number of bins or explicit bin edges.
+        n_bootstraps: Number of bootstrap iterations.
+        random_seed: Random seed for reproducibility.
+        epsilon: Regularization smoothing constant.
+
+    Returns:
+        Tuple of (js_divergence, js_uncertainty).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0
+
+    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=bins, epsilon=epsilon)
+    m = 0.5 * (p + q)
+    js_stat = float((0.5 * np.sum(special.rel_entr(p, m)) + 0.5 * np.sum(special.rel_entr(q, m))) / np.log(2))
+
+    if isinstance(bins, int):
+        all_vals = np.concatenate([sample_ref, sample_eval])
+        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+        if low >= high:
+            low -= 1.0
+            high += 1.0
+        fixed_bin_edges = np.linspace(low, high, bins + 1)
+    else:
+        fixed_bin_edges = bins
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    js_boot = np.empty(n_bootstraps, dtype=float)
+
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        bp, bq = _estimate_empirical_pmf(b_ref, b_eval, bins=fixed_bin_edges, epsilon=epsilon)
+        bm = 0.5 * (bp + bq)
+        js_val = (0.5 * np.sum(special.rel_entr(bp, bm)) + 0.5 * np.sum(special.rel_entr(bq, bm))) / np.log(2)
+        js_boot[b] = float(js_val)
+
+    js_unc = float(np.std(js_boot, ddof=1))
+    return js_stat, js_unc
