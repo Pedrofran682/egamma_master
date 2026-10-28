@@ -25,5 +25,5 @@
 
 
 # # Model v8
-python main.py --config config/NeuralRinger/ModelV8_HighBatch_newExtraction_20_regions_100Rings.yaml
-python main.py --config config/NeuralRinger/ModelV8_HighBatch_newExtraction_20_regions_50Rings.yaml
+python main.py --config config/NeuralRinger/ModelV8_HighBatch_newExtraction_20_regions_100Rings.yaml --split_manifest split_manifest.json
+python main.py --config config/NeuralRinger/ModelV8_HighBatch_newExtraction_20_regions_50Rings.yaml --split_manifest split_manifest.json

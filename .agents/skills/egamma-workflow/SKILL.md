@@ -41,11 +41,11 @@ conda run -n egamma pytest tests/core/validation/test_quadrant_analysis.py -v
 ```
 
 ### Running Model Training
-Train neural ringer models with cross-validation using a YAML config:
+Train neural ringer models with cross-validation using a YAML config and a split manifest (`split_manifest.json` under `./results` or `None` to auto-generate inside the run folder):
 ```bash
-conda run -n egamma python main.py --config config/NeuralRinger/ModelV1.yaml
+conda run -n egamma python main.py --config config/NeuralRinger/ModelV1.yaml --split_manifest split_manifest.json
 ```
-Output results and checkpoints are stored in `results/` and execution logs in `log/`.
+Output results and checkpoints are stored in `results/config_name<Name>_id<YYYYMMDDHHMMSS>/` and execution logs in `log/`.
 
 ### Plotting
 - **Metric and ROC curves**:

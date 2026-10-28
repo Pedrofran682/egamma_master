@@ -52,10 +52,11 @@ conda run -n egamma pytest tests/models/test_model_registry.py -v
 ```
 
 ### 2. Training Models
-Launch NeuralRinger training using a YAML configuration:
+Launch NeuralRinger training using a YAML configuration and a split manifest (`split_manifest.json` under `./results` or `None` to auto-generate inside the run folder):
 ```bash
-conda run -n egamma python main.py --config config/NeuralRinger/ModelV1.yaml
+conda run -n egamma python main.py --config config/NeuralRinger/ModelV1.yaml --split_manifest split_manifest.json
 ```
+Output folders in `results/` are timestamped automatically (`config_name<Name>_id<YYYYMMDDHHMMSS>`).
 
 ### 3. Plotting & Analysis
 - **Metric & ROC Curves**:

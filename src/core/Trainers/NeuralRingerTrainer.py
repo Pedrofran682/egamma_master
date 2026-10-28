@@ -77,7 +77,9 @@ class NeuralRingerTrainer(BaseTrainer):
     def run(self) -> None:
         """Runs training across all specified transverse energy (ET) and pseudorapidity (eta) regions."""
         if self.config.results_folder_path is None:
-            self.results_folder_path = str(create_folder(self.config.config_name))
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            folder_name = f"config_name{self.config.config_name}_id{timestamp}"
+            self.results_folder_path = str(create_folder(folder_name))
         else:
             self.results_folder_path = str(self.config.results_folder_path)
             os.makedirs(self.results_folder_path, exist_ok=True)

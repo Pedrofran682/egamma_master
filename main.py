@@ -3,6 +3,7 @@ import logging
 import os
 from datetime import datetime
 from logging.config import fileConfig
+from pathlib import Path
 
 import yaml
 
@@ -41,10 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--split_manifest",
-        required=False,
-        default=None,
+        required=True,
         type=str,
-        help="Optional path to pre-existing split_manifest.json to enforce exact cross-validation splits.",
+        help="Path or filename of split manifest in ./results (pass 'None' to create inside output folder).",
     )
     return parser
 
@@ -59,8 +59,13 @@ def main(args: argparse.Namespace) -> None:
         yaml_data = yaml.safe_load(file)
         if args.results_path is not None:
             yaml_data["results_folder_path"] = args.results_path
-        if args.split_manifest is not None:
-            yaml_data["split_manifest_path"] = args.split_manifest
+        if args.split_manifest is not None and args.split_manifest.strip().lower() not in ["none", ""]:
+            manifest_path = Path(args.split_manifest)
+            if not manifest_path.is_absolute() and len(manifest_path.parts) == 1:
+                manifest_path = Path("results") / manifest_path
+            yaml_data["split_manifest_path"] = str(manifest_path)
+        else:
+            yaml_data["split_manifest_path"] = None
         config_instance = NeuralRingerTrainerConfiguration.model_validate(yaml_data)
         trainer = NeuralRingerTrainer(
             config_instance,
