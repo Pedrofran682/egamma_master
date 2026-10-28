@@ -184,7 +184,7 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
 - **`src/Models/`**:
   - `ModelRegistry.py`: Auto-discovery registry. Automatically scans `src/Models/egamma/` and registers all `nn.Module` subclasses by their exact class name.
   - `Models.py`: Factory method `get_model(tag, input_dim)` delegating to `ModelRegistry.create()`.
-  - `egamma/`: Individual architecture definitions (`ModelV1.py`, `ModelV2.py`, ..., `ModelV6.py`, `Run2_ModelV1.py`, `Run2_ModelV1_2.py`).
+  - `egamma/`: Individual architecture definitions (`ModelV1.py`, `ModelV2.py`, ..., `ModelV10.py`, `Run2_ModelV1.py`, `Run2_ModelV1_2.py`).
 - **`src/Parser/`**:
   - `NeuralRingerTrainerConfiguration.py`: Pydantic V2 configuration models validating YAML schemas.
   - `DynamicConfiguration.py`: Dynamic class resolution from module and object strings.
