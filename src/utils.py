@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 import torch
 from torch.utils.data import WeightedRandomSampler
 
@@ -365,3 +366,138 @@ def get_class_weight(target: Union[np.ndarray, torch.Tensor]) -> WeightedRandomS
         len(samples_weight_tensor),
         generator=number_generator,
     )
+
+
+def save_table(
+    table: pd.DataFrame,
+    directory: Union[str, Path],
+    region_key: str,
+    name: str,
+) -> Path:
+    """Persists a results table as CSV with a region-prefixed filename.
+
+    Args:
+        table: DataFrame to persist.
+        directory: Destination folder (created if missing).
+        region_key: Kinematic region identifier used as filename prefix.
+        name: Descriptive table name.
+
+    Returns:
+        Path of the written CSV file.
+    """
+    dir_path = Path(directory)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    csv_path = dir_path / f"{region_key}_{name}.csv"
+    table.to_csv(csv_path, index=False)
+    log.info(f"Saved table: {csv_path}")
+    return csv_path
+
+
+def extract_feature_values(
+    features: np.ndarray,
+    names: np.ndarray,
+    feat_name: str,
+) -> np.ndarray:
+    """Extracts raw feature column or calculates derived physics variables like Eratio.
+
+    Args:
+        features: Event feature matrix of shape (N, D).
+        names: Column feature names array of shape (D,).
+        feat_name: Target variable name.
+
+    Returns:
+        1D numpy array of values.
+    """
+    name_to_idx = {name.strip(): i for i, name in enumerate(names)}
+
+    if feat_name.lower() in ["eratio", "eration", "l2_eratio"]:
+        if "trig_L2_calo_emaxs1" in name_to_idx and "trig_L2_calo_e2tsts1" in name_to_idx:
+            emaxs1 = features[:, name_to_idx["trig_L2_calo_emaxs1"]]
+            e2tsts1 = features[:, name_to_idx["trig_L2_calo_e2tsts1"]]
+            denom = emaxs1 + e2tsts1
+            safe_denom = np.where(denom != 0.0, denom, 1.0)
+            return np.where(denom != 0.0, (emaxs1 - e2tsts1) / safe_denom, 0.0)
+        raise KeyError("Cannot compute Eratio: 'trig_L2_calo_emaxs1' and 'trig_L2_calo_e2tsts1' not found.")
+
+    if feat_name in name_to_idx:
+        return features[:, name_to_idx[feat_name]]
+
+    for name, idx in name_to_idx.items():
+        if feat_name.lower() == name.lower():
+            return features[:, idx]
+
+    raise KeyError(f"Feature '{feat_name}' not found in dataset columns.")
+
+
+def compute_ks_test_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+) -> Tuple[float, float, float]:
+    """Computes two-sample Kolmogorov-Smirnov statistic D, bootstrap uncertainty, and p-value.
+
+    Args:
+        sample_ref: Reference distribution sample.
+        sample_eval: Evaluated model-selected sample.
+        n_bootstraps: Number of bootstrap iterations for uncertainty estimation.
+        random_seed: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (ks_statistic, ks_uncertainty, p_value).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0, 1.0
+
+    ks_res = stats.ks_2samp(sample_ref, sample_eval)
+    d_stat = float(ks_res.statistic)
+    p_val = float(ks_res.pvalue)
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    d_boot = np.empty(n_bootstraps, dtype=float)
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        d_boot[b] = stats.ks_2samp(b_ref, b_eval, method="asymp").statistic
+    d_unc = float(np.std(d_boot, ddof=1))
+    return d_stat, d_unc, p_val
+
+
+def compute_wasserstein_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+) -> Tuple[float, float]:
+    """Computes first Wasserstein distance and bootstrap uncertainty.
+
+    Args:
+        sample_ref: Reference distribution sample.
+        sample_eval: Evaluated model-selected sample.
+        n_bootstraps: Number of bootstrap iterations for uncertainty estimation.
+        random_seed: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (wasserstein_distance, wasserstein_uncertainty).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0
+
+    w_dist = float(stats.wasserstein_distance(sample_ref, sample_eval))
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    w_boot = np.empty(n_bootstraps, dtype=float)
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        w_boot[b] = stats.wasserstein_distance(b_ref, b_eval)
+    w_unc = float(np.std(w_boot, ddof=1))
+    return w_dist, w_unc
