@@ -7,8 +7,8 @@ num_workers: 4
 debug: false
 balance_data: False
 
-
-et_range_idx: [0,1,2,3,4]
+mo
+et_range_idx: [1]
 eta_range_idx: [1]
 
 loss_function:
