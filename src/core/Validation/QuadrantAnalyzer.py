@@ -368,6 +368,8 @@ class QuadrantAnalyzer:
         working_point: str = "loose",
         target_et: int | None = None,
         target_eta: int | None = None,
+        strategy1_alias: str | None = None,
+        strategy2_alias: str | None = None,
     ) -> None:
         """Initializes QuadrantAnalyzer with configurations and strategy options.
 
@@ -391,6 +393,8 @@ class QuadrantAnalyzer:
         self.default_target_pd: float = default_target_pd
         self.target_et: int | None = target_et
         self.target_eta: int | None = target_eta
+        self.strategy1_alias: str | None = strategy1_alias
+        self.strategy2_alias: str | None = strategy2_alias
 
         self.config1: NeuralRingerTrainerConfiguration = self._load_config(config_path1)
         self.data_path1: pathlib.Path = pathlib.Path(data_path1)
@@ -712,9 +716,11 @@ class QuadrantAnalyzer:
             preds2 = pass_cut.astype(int)
             probs2 = None
             th2 = athena_threshold
-            strategy2_name = f"Athena Cut ({self.working_point.capitalize()})"
+            default_strat2 = f"Athena Cut ({self.working_point.capitalize()})"
+            strategy2_name = self.strategy2_alias or default_strat2
+            strat1_name = self.strategy1_alias or self.config1.config_name
             log.info(
-                f"[{region_tag}] Evaluating: {self.config1.config_name} (SP={mean_sp1:.4f}±{std_sp1:.4f}) vs "
+                f"[{region_tag}] Evaluating: {strat1_name} (SP={mean_sp1:.4f}±{std_sp1:.4f}) vs "
                 f"{strategy2_name} (Thr={athena_threshold} GeV) on {len(test_indices):,} test events"
             )
         else:
@@ -748,9 +754,10 @@ class QuadrantAnalyzer:
                 preds2 = res2.predictions_default_threshold
                 th2 = 0.5
 
-            strategy2_name = self.config2.config_name
+            strategy2_name = self.strategy2_alias or self.config2.config_name
+            strat1_name = self.strategy1_alias or self.config1.config_name
             log.info(
-                f"[{region_tag}] Evaluating: {self.config1.config_name} (Rep {best_rep1}, SP={mean_sp1:.4f}±{std_sp1:.4f}) vs "
+                f"[{region_tag}] Evaluating: {strat1_name} (Rep {best_rep1}, SP={mean_sp1:.4f}±{std_sp1:.4f}) vs "
                 f"{strategy2_name} (Rep {best_rep2}, SP={mean_sp2:.4f}±{std_sp2:.4f}) on {len(test_indices):,} test events"
             )
 
@@ -785,10 +792,11 @@ class QuadrantAnalyzer:
             f"McNemar p={overall_metrics.mcnemar_p_value:.3e}"
         )
 
+        strat1_name = self.strategy1_alias or self.config1.config_name
         return RegionalQuadrantResult(
             iet=iet,
             ieta=ieta,
-            strategy1_name=self.config1.config_name,
+            strategy1_name=strat1_name,
             strategy2_name=strategy2_name,
             metrics_strategy1=metrics1,
             metrics_strategy2=metrics2,

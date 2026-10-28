@@ -321,6 +321,21 @@ class TestQuadrantAnalysis(unittest.TestCase):
                         self.assertIn("both_correct", df.columns)
                         self.assertIn("mcnemar_p_value", df.columns)
 
+    def test_strategy_alias_assignment(self):
+        with patch.object(QuadrantAnalyzer, "_load_config", return_value=MagicMock()):
+            with patch("src.core.Validation.QuadrantAnalyzer.NeuralRingerTrainer"):
+                with patch("src.core.Validation.QuadrantAnalyzer.SplitManifest"):
+                    with patch("src.core.Validation.QuadrantAnalyzer.ResultAggregator"):
+                        analyzer = QuadrantAnalyzer(
+                            config_path1="dummy.yaml",
+                            data_path1=self.output_dir,
+                            mode="model_vs_cut",
+                            strategy1_alias="My Model V6",
+                            strategy2_alias="Athena Baseline",
+                        )
+                        self.assertEqual(analyzer.strategy1_alias, "My Model V6")
+                        self.assertEqual(analyzer.strategy2_alias, "Athena Baseline")
+
 
 if __name__ == "__main__":
     unittest.main()
