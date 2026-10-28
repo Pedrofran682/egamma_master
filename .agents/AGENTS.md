@@ -123,6 +123,17 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
     [--debug]
 ```
 
+### 8. Pileup Sensitivity Analysis
+Evaluate classifier stability, efficiency vs. $\langle\mu\rangle$, observable drifts, and $N_{\text{PV}}$ vertex calibration:
+```bash
+conda run -n egamma python scripts/run_pileup_analysis.py \
+    --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
+    --results_path results/<model_results_dir> \
+    --target_et 1 --target_eta 1 \
+    [--output_dir Plots/pileup_analysis] \
+    [--format png|pdf]
+```
+
 ---
 
 ## Codebase Map & File Discovery
@@ -151,6 +162,8 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
     - `PlotManager.py`: Coordinator dispatching plotting routines.
     - `BasePlotter.py`: Abstract base class for all plotters.
     - `QuadrantPlotter.py`: 2x2 contingency matrix heatmaps, score scatter partitions, and regional summaries for quadrant analysis.
+    - `FeatureDistributionPlotter.py`: 2-panel feature distributions with synchronized selection ratio subplots ($N_{\text{sel}} / N_{\text{true}}$) and overview grid generator.
+    - `PileupPlotter.py`: 2-panel efficiency vs. $\langle\mu\rangle$ curves with ratio panel, shower shape & ring profile drift vs $\langle\mu\rangle$, and 2D $N_{\text{PV}}$ vs $\langle\mu\rangle$ density correlation heatmap.
     - `ProfilePlotter.py`: Mean energy ring profile plots.
     - `MetricPlotter.py`: Training loss, SP, and ROC curve plotters.
     - `RegionDistributionPlotter.py`: 2D heatmap generator for event and class distributions across $E_T$ and $\eta$ bins.
@@ -158,7 +171,9 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
     - `Context.py`: Dataclasses encapsulating plotting state (`RegionPlotContext`, `FoldPlotContext`).
   - `Validation/`:
     - `ModelValidator.py`: End-to-end evaluation pipeline comparing neural models against baseline threshold cuts, evaluating both regional and global efficiency curves.
-    - `QuadrantAnalyzer.py`: Holdout test evaluator comparing two models into 4 performance quadrants per region and globally.
+    - `QuadrantAnalyzer.py`: Holdout test evaluator comparing two models into 4 performance quadrants per region and globally (supports `strategy1_alias` and `strategy2_alias`).
+    - `DistributionComparator.py`: Statistical distance engine computing Kolmogorov-Smirnov ($D$), Wasserstein ($W_1$), Kullback-Leibler ($D_{\text{KL}}$), and Jensen-Shannon ($D_{\text{JS}}$) divergences with bootstrap uncertainties across True Data, Athena Cut, and Model vs Model baselines.
+    - `PileupAnalyzer.py`: Statistical computation of detection efficiency & fake rate vs $\langle\mu\rangle$ with binomial uncertainties, observable mean drift ($\text{SEM}$), and primary vertex calibration fit ($N_{\text{PV}} = a\langle\mu\rangle + b$).
     - `RegionDataDistributionAnalyzer.py`: Scans and tabulates class distributions (signal, background, total) across $E_T$ and $\eta$ regions into structured records and DataFrames.
     - `HoldoutEvaluator.py`: Evaluator computing holdout metrics and predictions per region.
     - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator for regional and global evaluations with configurable calorimeter feature indices.
@@ -174,14 +189,15 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
   - `NeuralRingerTrainerConfiguration.py`: Pydantic V2 configuration models validating YAML schemas.
   - `DynamicConfiguration.py`: Dynamic class resolution from module and object strings.
 - **`src/utils.py`**:
-  - Reusable mathematical functions (`norm1`), model weight loaders (`get_best_sp_model`), filesystem helpers (`create_folder`), and string parsers (`get_et_eta`).
+  - Reusable mathematical functions (`norm1`), statistical distance metrics (`compute_ks_test_with_uncertainty`, `compute_wasserstein_with_uncertainty`, `compute_kl_divergence_with_uncertainty`, `compute_js_divergence_with_uncertainty`), feature column extractors (`extract_feature_values`), table serializers (`save_table`), model weight loaders (`get_best_sp_model`), filesystem helpers (`create_folder`), and string parsers (`get_et_eta`).
 - **`config/NeuralRinger/`**:
   - YAML configuration files controlling dataset paths, model architectures, hyperparameters, and cross-validation folds.
 - **`notebooks/`**:
+  - `single_region_full_validation.ipynb`: Comprehensive single-region validation pipeline featuring operational response curves, quadrant analysis with alias support, 2-panel feature distribution ratios, multi-reference statistical distance tables, and pileup sensitivity suite.
   - `validate_results.ipynb`: Interactive Jupyter notebook for validation inspection and plotting.
   - `consolidate_quadrant_tables.ipynb`: Interactive Jupyter notebook consolidating quadrant metrics into 2D LaTeX grid tables.
 - **`scripts/`**:
-  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `runner.sh`).
+  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `run_pileup_analysis.py`, `runner.sh`).
 - **`tests/`**:
   - Organized to mirror `src/`:
     - `core/datasets/`: Manifest, consolidation, and ROOT generator tests.
