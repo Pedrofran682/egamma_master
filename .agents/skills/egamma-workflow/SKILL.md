@@ -38,6 +38,7 @@ conda run -n egamma pytest tests/core/trainers/test_trainers.py -v
 conda run -n egamma pytest tests/models/test_model_registry.py -v
 conda run -n egamma pytest tests/core/validation/test_validation.py -v
 conda run -n egamma pytest tests/core/validation/test_quadrant_analysis.py -v
+conda run -n egamma pytest tests/core/validation/test_distance_metrics_etl.py -v
 ```
 
 ### Running Model Training
@@ -139,13 +140,13 @@ When searching for or modifying functionality, refer to the following locations:
 | **Tuning** | `src/core/Tuning/` | `GridSearchTuner.py` (tuner orchestrator), `TuningConfiguration.py` (search space & trial builder) |
 | **Callbacks** | `src/core/Callbacks/` | `SPCallbackPyTorch.py` (tracks SP index, knee point, early stopping, best weights) |
 | **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `BasePlotter.py`, `QuadrantPlotter.py` (2x2 heatmaps & score scatter), `FeatureDistributionPlotter.py` (2-panel distribution & ratio subplots), `PileupPlotter.py` (efficiency vs $\mu$ & 2D NPV heatmaps), `ProfilePlotter.py`, `MetricPlotter.py`, `RegionDistributionPlotter.py` (2D heatmaps), `LegacyPlotter.py`, `Context.py` |
-| **Validation** | `src/core/Validation/` | `ModelValidator.py`, `QuadrantAnalyzer.py` (supports aliases), `DistributionComparator.py` (KS, Wasserstein, KL & JS divergences), `PileupAnalyzer.py` ($\mu$ efficiency & vertex fit), `QuadrantTableConsolidator.py`, `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
+| **Validation** | `src/core/Validation/` | `ModelValidator.py`, `QuadrantAnalyzer.py` (supports aliases), `DistributionComparator.py` (KS, Wasserstein, KL & JS divergences), `DistanceMetricsETL.py` (validation distance metrics ETL consolidator), `PileupAnalyzer.py` ($\mu$ efficiency & vertex fit), `QuadrantTableConsolidator.py`, `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
 | **Configuration** | `src/Parser/` | `NeuralRingerTrainerConfiguration.py` (Pydantic schema), `DynamicConfiguration.py` |
 | **Utilities** | `src/utils.py` | L1-norm, metric aggregation, bin extraction, dynamic instantiation, statistical divergences (KS, Wasserstein, KL, JS), feature column extraction, CSV serialization |
 | **Configs** | `config/NeuralRinger/` | YAML training specifications |
-| **Notebooks** | `notebooks/` | Interactive analysis (`single_region_full_validation.ipynb`, `validate_results.ipynb`, `consolidate_quadrant_tables.ipynb`) |
+| **Notebooks** | `notebooks/` | Interactive analysis (`single_region_full_validation.ipynb`, `validate_results.ipynb`, `consolidate_quadrant_tables.ipynb`, `analyse_distance_metrics.ipynb`) |
 | **Entrypoints** | `main.py`, `scripts/*.py` | CLI execution scripts (`validate_pd.py`, `plot_data_distribution.py`, `run_plots.py`, `run_roc_plots.py`, `calculate_photon_cut_efficiency.py`, `run_pileup_analysis.py`) |
-| **Unit Tests** | `tests/` | Pytest test cases (`test_utils.py`, `test_distribution_comparator.py`, `test_feature_distribution_plotter.py`, `test_pileup.py`, `test_validation.py`, etc.) |
+| **Unit Tests** | `tests/` | Pytest test cases (`test_utils.py`, `test_distribution_comparator.py`, `test_feature_distribution_plotter.py`, `test_distance_metrics_etl.py`, `test_pileup.py`, `test_validation.py`, etc.) |
 
 ---
 

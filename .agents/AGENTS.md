@@ -180,6 +180,7 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
     - `EfficiencyPlotter.py`: Detection efficiency and fake rate curve generator for regional and global evaluations with configurable calorimeter feature indices.
     - `ResultAggregator.py`: Utility aggregating `.pkl` fold outputs and querying best regional models.
     - `QuadrantTableConsolidator.py`: Consolidates regional quadrant metrics (`SP`, `PF`, `PD` as percentages) into 2D $E_T \times |\eta|$ LaTeX grid tables and CSV exports.
+    - `DistanceMetricsETL.py`: ETL processor discovering, parsing (`ET`, `ETA`, `ExecutionFolder`), and consolidating `*distance_metrics_*.csv` tables across validation execution runs into unified DataFrames.
   - `Callbacks/`:
     - `SPCallbackPyTorch.py`: PyTorch callback calculating ROC, SP metric, knee operating points, and early stopping.
 - **`src/Models/`**:
@@ -197,6 +198,7 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
   - `single_region_full_validation.ipynb`: Comprehensive single-region validation pipeline featuring operational response curves, quadrant analysis with alias support, 2-panel feature distribution ratios, multi-reference statistical distance tables, and pileup sensitivity suite.
   - `validate_results.ipynb`: Interactive Jupyter notebook for validation inspection and plotting.
   - `consolidate_quadrant_tables.ipynb`: Interactive Jupyter notebook consolidating quadrant metrics into 2D LaTeX grid tables.
+  - `analyse_distance_metrics.ipynb`: Interactive Jupyter notebook executing `DistanceMetricsETL` to aggregate, summarize, query, and export distance metrics across validation runs.
 - **`scripts/`**:
   - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `run_pileup_analysis.py`, `runner.sh`).
 - **`tests/`**:
@@ -204,7 +206,7 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
     - `core/datasets/`: Manifest, consolidation, and ROOT generator tests.
     - `core/trainers/`: Training loop and factory tests.
     - `core/plotting/`: Metric, regional distribution, and quadrant plotting tests.
-    - `core/validation/`: Benchmark cut, validation pipeline, and quadrant analysis tests.
+    - `core/validation/`: Benchmark cut, validation pipeline, quadrant analysis, and distance metrics ETL tests.
     - `models/`: Auto-discovery and model registry tests.
     - `parser/`: Dynamic configuration and schema parsing tests.
     - `integration/`: End-to-end training pipeline, CLI entrypoint, and process lifecycle tests.
