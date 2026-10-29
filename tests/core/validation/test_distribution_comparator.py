@@ -54,8 +54,16 @@ def test_distribution_comparator_compare_strategies():
         is_signal=True,
     )
     assert len(df_true) == 2
+    assert "KS Distance (D)" in df_true.columns
+    assert "KS Uncertainty" in df_true.columns
+    assert "Wasserstein Distance" in df_true.columns
+    assert "Wasserstein Uncertainty" in df_true.columns
     assert "KL Divergence" in df_true.columns
+    assert "KL Uncertainty" in df_true.columns
     assert "JS Divergence" in df_true.columns
+    assert "JS Uncertainty" in df_true.columns
+    assert isinstance(df_true.iloc[0]["KS Distance (D)"], float)
+    assert isinstance(df_true.iloc[0]["KS Uncertainty"], float)
 
     # 2. Compare vs Athena Cut
     df_athena = comparator.compare_strategies(
