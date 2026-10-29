@@ -24,7 +24,7 @@
 
 
 
-python main.py --config config/NeuralRinger/ModelV9_HighBatch_100Rings.yaml --split_manifest results/split_manifest.json
+# python main.py --config config/NeuralRinger/ModelV9_HighBatch_100Rings.yaml --split_manifest results/split_manifest.json
 python main.py --config config/NeuralRinger/ModelV9_HighBatch_50Rings.yaml --split_manifest results/split_manifest.json
 
 python main.py --config config/NeuralRinger/ModelV10_HighBatch_100Rings.yaml --split_manifest results/split_manifest.json
