@@ -62,6 +62,7 @@ class QuadrantPlotter(BasePlotter):
         output_dir: str | pathlib.Path,
         file_format: str = "pdf",
         nbins: int = 40,
+        log_y: bool = False,
     ) -> Optional[str]:
         """Renders 1D histogram of a shower shape variable partitioned by the 4 quadrant categories.
 
@@ -71,6 +72,7 @@ class QuadrantPlotter(BasePlotter):
             output_dir: Destination directory.
             file_format: Graphic format ('pdf' or 'png').
             nbins: Number of histogram bins.
+            log_y: Whether to use logarithmic scale for the main histogram Y axis.
 
         Returns:
             Saved figure path or None if variable is missing.
@@ -109,9 +111,16 @@ class QuadrantPlotter(BasePlotter):
             q_low -= 1.0
             q_high += 1.0
         bins = np.linspace(q_low, q_high, nbins + 1)
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
         mh.style.use("ATLAS")
-        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        fig, axes = plt.subplots(
+            2,
+            2,
+            figsize=(16, 7.5),
+            sharex="col",
+            gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08, "wspace": 0.18},
+        )
         region_str = self._get_region_label(result.iet, result.ieta)
         var_display = VARIABLE_LABELS.get(var_name, var_name)
 
@@ -121,19 +130,36 @@ class QuadrantPlotter(BasePlotter):
             weight="bold",
         )
 
-        sample_masks = [
-            ("Signal (Photons)", labels == 1, axes[0]),
-            ("Background (Fakes)", labels == 0, axes[1]),
+        sample_configs = [
+            ("Signal (Photons)", labels == 1, axes[0, 0], axes[1, 0], "True Signal"),
+            ("Background (Fakes)", labels == 0, axes[0, 1], axes[1, 1], "True Background"),
         ]
 
-        for sample_title, s_mask, ax in sample_masks:
-            ax.set_title(sample_title, fontsize=12, weight="bold")
+        for sample_title, s_mask, ax_main, ax_res, true_label in sample_configs:
+            ax_main.set_title(sample_title, fontsize=12, weight="bold")
+            val_true = values[s_mask & finite_mask]
+            n_true = len(val_true)
+            counts_true, _ = np.histogram(val_true, bins=bins)
+
+            if n_true > 0:
+                ax_main.plot(
+                    bin_centers,
+                    counts_true,
+                    "o",
+                    color="black",
+                    markersize=4,
+                    zorder=5,
+                    label=f"{true_label} (N={n_true:,})",
+                )
+
             for cat_name, color in palette.items():
                 cat_mask = s_mask & (categories == cat_name) & finite_mask
                 cat_vals = values[cat_mask]
                 count = len(cat_vals)
+
                 if count > 0:
-                    ax.hist(
+                    counts_cat, _ = np.histogram(cat_vals, bins=bins)
+                    ax_main.hist(
                         cat_vals,
                         bins=bins,
                         histtype="step",
@@ -141,7 +167,7 @@ class QuadrantPlotter(BasePlotter):
                         color=color,
                         label=f"{cat_name} (N={count:,})",
                     )
-                    ax.hist(
+                    ax_main.hist(
                         cat_vals,
                         bins=bins,
                         histtype="stepfilled",
@@ -149,14 +175,49 @@ class QuadrantPlotter(BasePlotter):
                         color=color,
                     )
                 else:
-                    ax.plot([], [], color=color, label=f"{cat_name} (N=0)")
+                    counts_cat = np.zeros_like(counts_true)
+                    ax_main.plot([], [], color=color, label=f"{cat_name} (N=0)")
 
-            ax.set_xlabel(var_display, fontsize=11)
-            ax.set_ylabel("Events", fontsize=11)
-            ax.grid(True, linestyle=":", alpha=0.5)
-            ax.legend(loc="upper right", framealpha=0.9, fontsize=9)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    ratio = np.where(counts_true > 0, counts_cat / counts_true, np.nan)
+                    ratio_err = np.where(
+                        counts_true > 0,
+                        np.sqrt(np.clip(ratio * (1.0 - ratio) / counts_true, 0.0, None)),
+                        0.0,
+                    )
 
-        plt.tight_layout()
+                ax_res.errorbar(
+                    bin_centers,
+                    ratio,
+                    yerr=ratio_err,
+                    fmt="o",
+                    color=color,
+                    markerfacecolor=color,
+                    markeredgecolor=color,
+                    linestyle="-",
+                    linewidth=1.2,
+                    markersize=3.5,
+                    capsize=1.5,
+                )
+
+            ax_main.set_ylabel("Events", fontsize=11)
+            ax_main.grid(True, linestyle=":", alpha=0.5)
+            ax_main.legend(loc="upper right", framealpha=0.9, fontsize=9)
+
+            if log_y:
+                ax_main.set_yscale("log")
+                ax_main.set_ylim(bottom=0.5)
+
+            ax_res.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
+            ax_res.set_ylabel(r"$N_{\mathrm{cat}} / N_{\mathrm{true}}$", fontsize=9)
+            ax_res.set_xlabel(var_display, fontsize=11)
+            ax_res.set_ylim(-0.05, 1.15)
+            ax_res.grid(True, linestyle=":", alpha=0.5)
+
+        fig.align_ylabels([axes[0, 0], axes[1, 0]])
+        fig.align_ylabels([axes[0, 1], axes[1, 1]])
+        fig.subplots_adjust(top=0.90, bottom=0.09, left=0.07, right=0.98)
+
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_{var_name}_quadrant_hist.{file_format}"
         return self.save_figure(
@@ -551,6 +612,7 @@ class QuadrantPlotter(BasePlotter):
         results: List[RegionalQuadrantResult],
         output_dir: str | pathlib.Path,
         file_format: str = "pdf",
+        log_y: bool = False,
         **kwargs: object,
     ) -> Dict[str, List[str]]:
         """Coordinates rendering of shower shape histograms, efficiency curves, and regional summaries.
@@ -559,6 +621,8 @@ class QuadrantPlotter(BasePlotter):
             results: List of RegionalQuadrantResult instances.
             output_dir: Base output directory.
             file_format: Format ('pdf' or 'png').
+            log_y: Whether to use logarithmic scale on histogram Y axis.
+            **kwargs: Extra rendering options.
 
         Returns:
             Dictionary mapping plot categories to lists of saved file paths.
@@ -593,6 +657,7 @@ class QuadrantPlotter(BasePlotter):
                     var_name=var_name,
                     output_dir=region_hist_dir,
                     file_format=file_format,
+                    log_y=log_y,
                 )
                 if path:
                     saved_paths["histograms"].append(path)

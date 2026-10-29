@@ -102,6 +102,12 @@ parser.add_argument(
     help="Graphic output format ('pdf' or 'png', default: 'pdf').",
 )
 parser.add_argument(
+    "--log_y",
+    action="store_true",
+    default=False,
+    help="Use logarithmic scale on Y axis for quadrant shower shape histograms.",
+)
+parser.add_argument(
     "--csv_filename",
     required=False,
     default="quadrant_results.csv",
@@ -239,6 +245,7 @@ def main(args: argparse.Namespace) -> None:
         results=plot_results,
         output_dir=output_dir,
         file_format=args.file_format,
+        log_y=args.log_y,
     )
 
     total_figures = sum(len(paths) for paths in saved_paths.values())
