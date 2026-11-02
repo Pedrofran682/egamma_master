@@ -162,3 +162,52 @@ class DistanceMetricsETL:
         )
         return summary
 
+    @staticmethod
+    def evaluate_distribution_equivalence(
+        df: pd.DataFrame,
+        alpha_p_value: float = 0.05,
+        ks_effect_threshold: float = 0.02,
+        kl_threshold: float = 0.01,
+        js_threshold: float = 0.01,
+        sigma_factor: float = 2.0,
+    ) -> pd.DataFrame:
+        """Evaluates equivalence for KS, Wasserstein, KL, and JS metric pairs.
+
+        Args:
+            df: DataFrame containing statistical distance metrics and uncertainties.
+            alpha_p_value: Significance level for KS test p-value.
+            ks_effect_threshold: Maximum KS distance for functional equivalence.
+            kl_threshold: Maximum KL divergence for functional equivalence.
+            js_threshold: Maximum JS divergence for functional equivalence.
+            sigma_factor: Multiplier for bootstrap uncertainties.
+
+        Returns:
+            DataFrame copy enriched with boolean equivalence columns for each metric.
+        """
+        enriched = df.copy()
+
+        if "KS Distance (D)" in enriched.columns and "KS Uncertainty" in enriched.columns:
+            p_val = enriched["p-value"] if "p-value" in enriched.columns else 0.0
+            ks_stat = enriched["KS Distance (D)"]
+            ks_unc = enriched["KS Uncertainty"]
+            enriched["KS_Equivalent"] = (p_val >= alpha_p_value) | (
+                (ks_stat <= sigma_factor * ks_unc) & (ks_stat < ks_effect_threshold)
+            )
+
+        if "Wasserstein Distance" in enriched.columns and "Wasserstein Uncertainty" in enriched.columns:
+            w_dist = enriched["Wasserstein Distance"]
+            w_unc = enriched["Wasserstein Uncertainty"]
+            enriched["Wasserstein_Equivalent"] = w_dist <= sigma_factor * w_unc
+
+        if "KL Divergence" in enriched.columns and "KL Uncertainty" in enriched.columns:
+            kl_div = enriched["KL Divergence"]
+            kl_unc = enriched["KL Uncertainty"]
+            enriched["KL_Equivalent"] = (kl_div <= sigma_factor * kl_unc) | (kl_div < kl_threshold)
+
+        if "JS Divergence" in enriched.columns and "JS Uncertainty" in enriched.columns:
+            js_div = enriched["JS Divergence"]
+            js_unc = enriched["JS Uncertainty"]
+            enriched["JS_Equivalent"] = (js_div <= sigma_factor * js_unc) | (js_div < js_threshold)
+
+        return enriched
+

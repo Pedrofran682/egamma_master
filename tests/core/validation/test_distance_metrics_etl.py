@@ -81,3 +81,29 @@ def test_etl_pipeline(temp_validation_dir: pathlib.Path):
     assert not summary.empty
     assert len(summary) == 2
 
+
+def test_evaluate_distribution_equivalence():
+    test_df = pd.DataFrame({
+        "KS Distance (D)": [0.01, 0.25],
+        "KS Uncertainty": [0.008, 0.005],
+        "p-value": [0.10, 1e-10],
+        "Wasserstein Distance": [0.01, 0.20],
+        "Wasserstein Uncertainty": [0.008, 0.005],
+        "KL Divergence": [0.005, 0.15],
+        "KL Uncertainty": [0.003, 0.008],
+        "JS Divergence": [0.002, 0.08],
+        "JS Uncertainty": [0.001, 0.004],
+    })
+
+    result = DistanceMetricsETL.evaluate_distribution_equivalence(test_df)
+
+    assert "KS_Equivalent" in result.columns
+    assert "Wasserstein_Equivalent" in result.columns
+    assert "KL_Equivalent" in result.columns
+    assert "JS_Equivalent" in result.columns
+
+    assert result["KS_Equivalent"].tolist() == [True, False]
+    assert result["Wasserstein_Equivalent"].tolist() == [True, False]
+    assert result["KL_Equivalent"].tolist() == [True, False]
+    assert result["JS_Equivalent"].tolist() == [True, False]
+
