@@ -107,3 +107,27 @@ def test_evaluate_distribution_equivalence():
     assert result["KL_Equivalent"].tolist() == [True, False]
     assert result["JS_Equivalent"].tolist() == [True, False]
 
+
+def test_format_latex_table():
+    test_df = pd.DataFrame({
+        "Feature": ["trig_L2_calo_et"],
+        "Comparison": ["Model1 vs Model2"],
+        "KS Distance (D)": [0.0123],
+        "KS Uncertainty": [0.0045],
+        "Wasserstein Distance": [0.0678],
+        "Wasserstein Uncertainty": [0.0091],
+        "KL Divergence": [0.0022],
+        "KL Uncertainty": [0.0008],
+        "JS Divergence": [0.0011],
+        "JS Uncertainty": [0.0004],
+    })
+
+    formatted_df, latex_str = DistanceMetricsETL.format_latex_table(test_df, precision=4)
+
+    assert "Feature" in formatted_df.columns
+    assert "Comparison" in formatted_df.columns
+    assert formatted_df["Feature"].iloc[0] == r"trig\_L2\_calo\_et"
+    assert formatted_df["KS Distance ($D$)"].iloc[0] == r"$0.0123 \pm 0.0045$"
+    assert r"\begin{tabular}" in latex_str
+    assert r"$0.0123 \pm 0.0045$" in latex_str
+

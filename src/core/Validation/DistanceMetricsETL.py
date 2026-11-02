@@ -211,3 +211,49 @@ class DistanceMetricsETL:
 
         return enriched
 
+    @staticmethod
+    def format_latex_table(
+        df: pd.DataFrame,
+        precision: int = 4,
+        features: Optional[List[str]] = None,
+        comparisons: Optional[List[str]] = None,
+    ) -> Tuple[pd.DataFrame, str]:
+        """Formats distance metrics and uncertainties into a LaTeX table representation.
+
+        Args:
+            df: DataFrame containing Feature, Comparison, and metric/uncertainty pairs.
+            precision: Decimal precision for floating point numbers.
+            features: Optional filter for specific feature names.
+            comparisons: Optional filter for specific comparison strings.
+
+        Returns:
+            Tuple of (formatted_dataframe, latex_table_string).
+        """
+        filtered = df.copy()
+        if features is not None:
+            filtered = filtered[filtered["Feature"].isin(features)]
+        if comparisons is not None:
+            filtered = filtered[filtered["Comparison"].isin(comparisons)]
+
+        formatted = pd.DataFrame()
+        formatted["Feature"] = filtered["Feature"].apply(lambda s: str(s).replace("_", r"\_"))
+        formatted["Comparison"] = filtered["Comparison"].apply(lambda s: str(s).replace("_", r"\_"))
+
+        metric_specs = [
+            ("KS Distance ($D$)", "KS Distance (D)", "KS Uncertainty"),
+            ("Wasserstein ($W_1$)", "Wasserstein Distance", "Wasserstein Uncertainty"),
+            ("KL Divergence", "KL Divergence", "KL Uncertainty"),
+            ("JS Divergence", "JS Divergence", "JS Uncertainty"),
+        ]
+
+        for col_name, val_col, unc_col in metric_specs:
+            if val_col in filtered.columns and unc_col in filtered.columns:
+                formatted[col_name] = [
+                    f"${val:.{precision}f} \\pm {unc:.{precision}f}$"
+                    for val, unc in zip(filtered[val_col], filtered[unc_col])
+                ]
+
+        latex_str = formatted.to_latex(index=False, escape=False, column_format="l l c c c c")
+        return formatted, latex_str
+
+
