@@ -9,6 +9,11 @@ from .FastPhotonCutEvaluator import (
     RegionEfficiencyAccumulator,
 )
 from .RegionDataDistributionAnalyzer import RegionDataDistributionAnalyzer
+from .PileupThresholdCalibrator import (
+    PileupThresholdCalibrator,
+    OperatingPointCalibration,
+    Pileup2DDistribution,
+)
 
 __all__ = [
     "ResultAggregator",
@@ -21,4 +26,7 @@ __all__ = [
     "UserKinematicGrid",
     "RegionEfficiencyAccumulator",
     "RegionDataDistributionAnalyzer",
+    "PileupThresholdCalibrator",
+    "OperatingPointCalibration",
+    "Pileup2DDistribution",
 ]

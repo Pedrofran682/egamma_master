@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
@@ -42,6 +43,7 @@ class HoldoutEvaluationResult:
     signal_cutoff_percentile: float
     calibrated_decision_threshold: float
     false_alarm_probability: float
+    predicted_logits: Optional[np.ndarray] = None
 
     @property
     def x_holdout_full(self) -> np.ndarray:
@@ -67,6 +69,15 @@ class HoldoutEvaluationResult:
     def probs(self) -> np.ndarray:
         """Continuous model output probability scores (backward-compatible alias)."""
         return self.predicted_probabilities
+
+    @property
+    def logits(self) -> np.ndarray:
+        """Continuous model pre-sigmoid logit scores."""
+        if self.predicted_logits is not None:
+            return self.predicted_logits
+        eps = 1e-7
+        p_clamped = np.clip(self.predicted_probabilities, eps, 1.0 - eps)
+        return np.log(p_clamped / (1.0 - p_clamped))
 
     @property
     def global_acc(self) -> float:
@@ -219,6 +230,10 @@ class HoldoutEvaluator(BaseEvaluator):
 
             predictions_calibrated_cut = (predicted_probabilities > calibrated_decision_threshold).astype(int)
 
+            eps = 1e-7
+            p_clamped = np.clip(predicted_probabilities, eps, 1.0 - eps)
+            predicted_logits = np.log(p_clamped / (1.0 - p_clamped))
+
         return HoldoutEvaluationResult(
             holdout_features_full=holdout_features_full,
             holdout_labels=holdout_labels,
@@ -233,4 +248,29 @@ class HoldoutEvaluator(BaseEvaluator):
             signal_cutoff_percentile=signal_cutoff_percentile,
             calibrated_decision_threshold=calibrated_decision_threshold,
             false_alarm_probability=false_alarm_probability,
+            predicted_logits=predicted_logits,
         )
+
+    @staticmethod
+    def predict_logits(
+        model: nn.Module,
+        features: np.ndarray,
+        device: torch.device,
+    ) -> np.ndarray:
+        """Computes raw logit scores for arbitrary input features.
+
+        Args:
+            model: PyTorch model.
+            features: Input ring features array (N, D).
+            device: Computation device.
+
+        Returns:
+            1D array of pre-sigmoid logit scores.
+        """
+        model.eval()
+        with torch.no_grad():
+            tensor_x = torch.from_numpy(features).float().to(device)
+            probabilities = model(tensor_x).detach().cpu().numpy().flatten()
+            eps = 1e-7
+            p_clamped = np.clip(probabilities, eps, 1.0 - eps)
+            return np.log(p_clamped / (1.0 - p_clamped))

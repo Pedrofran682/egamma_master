@@ -303,6 +303,127 @@ class PileupPlotter(BasePlotter):
 
         return fig
 
+    def plot_2d_threshold_calibration(
+        self,
+        distribution: Any,
+        calibrations: List[Any],
+        title: str = "",
+        region_label: str = "",
+        output_path: Optional[pathlib.Path] = None,
+        file_format: str = "pdf",
+        cmap: str = "Blues",
+    ) -> plt.Figure:
+        """Renders 2D discriminant density heatmap with slice thresholds and fitted linear cuts.
+
+        Args:
+            distribution: Pileup2DDistribution or dict containing 2D histogram arrays.
+            calibrations: List of OperatingPointCalibration instances.
+            title: Main title string.
+            region_label: Kinematic region descriptor.
+            output_path: Destination path for figure export.
+            file_format: File format extension.
+            cmap: Colormap for 2D density mesh.
+
+        Returns:
+            Matplotlib Figure instance.
+        """
+        fig, ax = plt.subplots(figsize=(9, 6.5))
+
+        hist = (
+            distribution.hist2d_counts.T
+            if hasattr(distribution, "hist2d_counts")
+            else distribution["hist2d_counts"].T
+        )
+        xedges = (
+            distribution.hist2d_xedges
+            if hasattr(distribution, "hist2d_xedges")
+            else distribution["hist2d_xedges"]
+        )
+        yedges = (
+            distribution.hist2d_yedges
+            if hasattr(distribution, "hist2d_yedges")
+            else distribution["hist2d_yedges"]
+        )
+
+        mesh = ax.pcolormesh(
+            xedges,
+            yedges,
+            np.ma.masked_where(hist == 0, hist),
+            cmap=cmap,
+            shading="auto",
+        )
+        cbar = fig.colorbar(mesh, ax=ax, pad=0.02)
+        cbar.set_label("Signal Events / Bin")
+
+        palette = [
+            ("tab:red", "o", "-"),
+            ("tab:orange", "s", "--"),
+            ("tab:green", "^", "-."),
+            ("darkblue", "d", ":"),
+        ]
+
+        x_fit = np.linspace(xedges[0], xedges[-1], 150)
+
+        for idx, cal in enumerate(calibrations):
+            color, marker, style = palette[idx % len(palette)]
+            name = getattr(cal, "working_point_name", f"WP_{idx}")
+            slope = getattr(cal, "slope", 0.0)
+            intercept = getattr(cal, "intercept", 0.0)
+            r2 = getattr(cal, "r_squared", 0.0)
+            target_pd = getattr(cal, "target_pd", 0.0)
+
+            centers = getattr(cal, "mu_bin_centers", np.array([]))
+            thresholds = getattr(cal, "slice_thresholds", np.array([]))
+            errors = getattr(cal, "slice_threshold_errors", np.array([]))
+
+            ax.errorbar(
+                centers,
+                thresholds,
+                yerr=errors,
+                fmt=marker,
+                color=color,
+                markerfacecolor=color,
+                markeredgecolor="black",
+                markeredgewidth=0.8,
+                linestyle="none",
+                markersize=5,
+                capsize=2,
+                label=f"{name} ($P_D = {target_pd*100:.1f}\\%$)",
+                zorder=4,
+            )
+
+            y_fit = slope * x_fit + intercept
+            sign = "+" if intercept >= 0 else "-"
+            fit_text = f"{name} Fit: $T(\\langle\\mu\\rangle) = {slope:.3f}\\langle\\mu\\rangle {sign} {abs(intercept):.3f}$ ($R^2 = {r2:.2f}$)"
+            ax.plot(
+                x_fit,
+                y_fit,
+                color=color,
+                linestyle=style,
+                linewidth=1.8,
+                label=fit_text,
+                zorder=5,
+            )
+
+        full_title = r"Discriminant $y_{\text{NN}}$ vs. $\langle\mu\rangle$ Threshold Calibration"
+        if region_label:
+            full_title += f" ({region_label})"
+        if title:
+            full_title = f"{title} - {full_title}"
+
+        ax.set_title(full_title, pad=12)
+        ax.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
+        ax.set_ylabel(r"Neural Discriminant $y_{\text{NN}}$ (Logit)")
+        ax.grid(True, linestyle=":", alpha=0.5)
+        ax.legend(frameon=True, fontsize=8, loc="upper right")
+        fig.tight_layout()
+
+        if output_path is not None:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(output_path, format=file_format, bbox_inches="tight")
+
+        return fig
+
     def plot(self, context: Any, **kwargs: Any) -> Any:
         """Executes rendering conforming to BasePlotter interface.
 
