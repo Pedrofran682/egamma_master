@@ -131,6 +131,9 @@ class SplitManifest:
         Raises:
             KeyError: If the region key is not present in the manifest.
         """
+        if self.exists() and not self.data:
+            self.load()
+
         if region_key not in self.data:
             raise KeyError(f"Region key {region_key} not found in split manifest.")
 
