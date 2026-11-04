@@ -13,6 +13,7 @@ notebooks/SingleRegionValidation*/
 notebooks/TrueDataPlots/
 notebooks/plots/feature_distributions
 notebooks/plots/
+notebooks/PileupCalibration_*/
 # C extensions
 *.so
 
