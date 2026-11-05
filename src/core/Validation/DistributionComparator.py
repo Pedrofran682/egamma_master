@@ -14,15 +14,31 @@ from src.utils import (
 class DistributionComparator:
     """Evaluates statistical distance metrics (KS, Wasserstein, KL, and JS divergences) across selections."""
 
-    def __init__(self, n_bootstraps: int = 100, random_seed: int = 42) -> None:
-        """Initializes the comparator with bootstrap parameters.
+    def __init__(
+        self,
+        n_bootstraps: int = 100,
+        random_seed: int = 42,
+        compute_ks: bool = True,
+        compute_wasserstein: bool = True,
+        compute_kl: bool = True,
+        compute_js: bool = True,
+    ) -> None:
+        """Initializes the comparator with bootstrap parameters and metric flags.
 
         Args:
             n_bootstraps: Number of bootstrap resamples for uncertainty estimation.
             random_seed: Seed for pseudo-random number generator.
+            compute_ks: Whether to compute Kolmogorov-Smirnov distance with uncertainty.
+            compute_wasserstein: Whether to compute Wasserstein distance with uncertainty.
+            compute_kl: Whether to compute Kullback-Leibler divergence with uncertainty.
+            compute_js: Whether to compute Jensen-Shannon divergence with uncertainty.
         """
         self.n_bootstraps = n_bootstraps
         self.random_seed = random_seed
+        self.compute_ks = compute_ks
+        self.compute_wasserstein = compute_wasserstein
+        self.compute_kl = compute_kl
+        self.compute_js = compute_js
 
     def compare_samples(
         self,
@@ -40,44 +56,51 @@ class DistributionComparator:
         Returns:
             Dictionary containing metrics, uncertainties, and p-value.
         """
-        ks_stat, ks_unc, p_val = compute_ks_test_with_uncertainty(
-            sample_ref,
-            sample_eval,
-            n_bootstraps=self.n_bootstraps,
-            random_seed=self.random_seed,
-        )
-        w_dist, w_unc = compute_wasserstein_with_uncertainty(
-            sample_ref,
-            sample_eval,
-            n_bootstraps=self.n_bootstraps,
-            random_seed=self.random_seed,
-        )
-        kl_div, kl_unc = compute_kl_divergence_with_uncertainty(
-            sample_ref,
-            sample_eval,
-            bins=bins,
-            n_bootstraps=self.n_bootstraps,
-            random_seed=self.random_seed,
-        )
-        js_div, js_unc = compute_js_divergence_with_uncertainty(
-            sample_ref,
-            sample_eval,
-            bins=bins,
-            n_bootstraps=self.n_bootstraps,
-            random_seed=self.random_seed,
-        )
+        result: Dict[str, Any] = {}
+        if self.compute_ks:
+            ks_stat, ks_unc, p_val = compute_ks_test_with_uncertainty(
+                sample_ref,
+                sample_eval,
+                n_bootstraps=self.n_bootstraps,
+                random_seed=self.random_seed,
+            )
+            result["ks_stat"] = ks_stat
+            result["ks_unc"] = ks_unc
+            result["p_value"] = p_val
 
-        return {
-            "ks_stat": ks_stat,
-            "ks_unc": ks_unc,
-            "p_value": p_val,
-            "wasserstein_dist": w_dist,
-            "wasserstein_unc": w_unc,
-            "kl_div": kl_div,
-            "kl_unc": kl_unc,
-            "js_div": js_div,
-            "js_unc": js_unc,
-        }
+        if self.compute_wasserstein:
+            w_dist, w_unc = compute_wasserstein_with_uncertainty(
+                sample_ref,
+                sample_eval,
+                n_bootstraps=self.n_bootstraps,
+                random_seed=self.random_seed,
+            )
+            result["wasserstein_dist"] = w_dist
+            result["wasserstein_unc"] = w_unc
+
+        if self.compute_kl:
+            kl_div, kl_unc = compute_kl_divergence_with_uncertainty(
+                sample_ref,
+                sample_eval,
+                bins=bins,
+                n_bootstraps=self.n_bootstraps,
+                random_seed=self.random_seed,
+            )
+            result["kl_div"] = kl_div
+            result["kl_unc"] = kl_unc
+
+        if self.compute_js:
+            js_div, js_unc = compute_js_divergence_with_uncertainty(
+                sample_ref,
+                sample_eval,
+                bins=bins,
+                n_bootstraps=self.n_bootstraps,
+                random_seed=self.random_seed,
+            )
+            result["js_div"] = js_div
+            result["js_unc"] = js_unc
+
+        return result
 
     def compare_strategies(
         self,
@@ -128,23 +151,37 @@ class DistributionComparator:
                 sample_eval = class_vals[(preds[class_mask] == 1) & np.isfinite(class_vals)]
                 metrics = self.compare_samples(sample_ref, sample_eval, bins=bins)
 
-                records.append({
+                record: Dict[str, Any] = {
                     "Feature": feat_name,
                     "Reference": ref_label,
                     "Strategy": strat_name,
                     "Comparison": f"{strat_name} vs {ref_label}",
                     "Ref Count": len(sample_ref),
                     "Selected Count": len(sample_eval),
-                    "KS Distance (D)": metrics["ks_stat"],
-                    "KS Uncertainty": metrics["ks_unc"],
-                    "Wasserstein Distance": metrics["wasserstein_dist"],
-                    "Wasserstein Uncertainty": metrics["wasserstein_unc"],
-                    "KL Divergence": metrics["kl_div"],
-                    "KL Uncertainty": metrics["kl_unc"],
-                    "JS Divergence": metrics["js_div"],
-                    "JS Uncertainty": metrics["js_unc"],
-                    "p-value": metrics["p_value"],
-                    "Distribution Equality": "Consistent (p ≥ 0.05)" if metrics["p_value"] >= 0.05 else "Distinct (p < 0.05)",
-                })
+                }
+
+                if self.compute_ks:
+                    record["KS Distance (D)"] = metrics.get("ks_stat", np.nan)
+                    record["KS Uncertainty"] = metrics.get("ks_unc", np.nan)
+
+                if self.compute_wasserstein:
+                    record["Wasserstein Distance"] = metrics.get("wasserstein_dist", np.nan)
+                    record["Wasserstein Uncertainty"] = metrics.get("wasserstein_unc", np.nan)
+
+                if self.compute_kl:
+                    record["KL Divergence"] = metrics.get("kl_div", np.nan)
+                    record["KL Uncertainty"] = metrics.get("kl_unc", np.nan)
+
+                if self.compute_js:
+                    record["JS Divergence"] = metrics.get("js_div", np.nan)
+                    record["JS Uncertainty"] = metrics.get("js_unc", np.nan)
+
+                if self.compute_ks and "p_value" in metrics:
+                    record["p-value"] = metrics["p_value"]
+                    record["Distribution Equality"] = (
+                        "Consistent (p ≥ 0.05)" if metrics["p_value"] >= 0.05 else "Distinct (p < 0.05)"
+                    )
+
+                records.append(record)
 
         return pd.DataFrame(records) if records else pd.DataFrame()

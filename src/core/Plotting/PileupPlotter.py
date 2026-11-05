@@ -25,8 +25,9 @@ class PileupPlotter(BasePlotter):
         is_signal: bool = True,
         output_path: Optional[pathlib.Path] = None,
         file_format: str = "pdf",
+        show_ratio: bool = True,
     ) -> plt.Figure:
-        """Renders 2-panel efficiency or fake rate vs avgmu with bottom ratio to reference.
+        """Renders efficiency or fake rate vs avgmu with optional bottom ratio to reference.
 
         Args:
             models_data: List of dictionaries with keys: label, bin_centers, efficiencies,
@@ -36,17 +37,22 @@ class PileupPlotter(BasePlotter):
             is_signal: True for detection efficiency (PD), False for fake rate (PF).
             output_path: Destination path for figure export.
             file_format: File format extension.
+            show_ratio: Whether to include bottom ratio panel to reference.
 
         Returns:
             Matplotlib Figure instance.
         """
-        fig, (ax_main, ax_ratio) = plt.subplots(
-            2,
-            1,
-            figsize=(8, 6.5),
-            sharex=True,
-            gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08},
-        )
+        if show_ratio:
+            fig, (ax_main, ax_ratio) = plt.subplots(
+                2,
+                1,
+                figsize=(8, 6.5),
+                sharex=True,
+                gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08},
+            )
+        else:
+            fig, ax_main = plt.subplots(figsize=(8, 5.5))
+            ax_ratio = None
 
         ref_model = next((m for m in models_data if m.get("is_reference", False)), models_data[0])
         ref_eff = ref_model["efficiencies"]
@@ -93,43 +99,42 @@ class PileupPlotter(BasePlotter):
                     label=label,
                 )
 
-            with np.errstate(divide="ignore", invalid="ignore"):
-                ratio = np.where(ref_eff > 0.0, eff / ref_eff, np.nan)
-                rel_err_m = np.where(eff > 0.0, err / eff, 0.0)
-                rel_err_ref = np.where(ref_eff > 0.0, ref_err / ref_eff, 0.0)
-                ratio_err = ratio * np.sqrt(rel_err_m**2 + rel_err_ref**2)
+            if show_ratio and ax_ratio is not None:
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    ratio = np.where(ref_eff > 0.0, eff / ref_eff, np.nan)
+                    rel_err_m = np.where(eff > 0.0, err / eff, 0.0)
+                    rel_err_ref = np.where(ref_eff > 0.0, ref_err / ref_eff, 0.0)
+                    ratio_err = ratio * np.sqrt(rel_err_m**2 + rel_err_ref**2)
 
-            if is_ml:
-                ax_ratio.errorbar(
-                    centers,
-                    ratio,
-                    yerr=ratio_err,
-                    fmt=marker,
-                    color=color,
-                    markerfacecolor=color,
-                    markeredgecolor=color,
-                    linestyle="-",
-                    linewidth=1.2,
-                    markersize=4,
-                    capsize=2,
-                )
-            else:
-                ax_ratio.errorbar(
-                    centers,
-                    ratio,
-                    yerr=ratio_err,
-                    fmt=marker,
-                    color=color,
-                    markerfacecolor="none",
-                    markeredgecolor=color,
-                    markeredgewidth=1.5,
-                    linestyle="--",
-                    linewidth=1.2,
-                    markersize=5,
-                    capsize=2,
-                )
-
-        ax_ratio.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
+                if is_ml:
+                    ax_ratio.errorbar(
+                        centers,
+                        ratio,
+                        yerr=ratio_err,
+                        fmt=marker,
+                        color=color,
+                        markerfacecolor=color,
+                        markeredgecolor=color,
+                        linestyle="-",
+                        linewidth=1.2,
+                        markersize=4,
+                        capsize=2,
+                    )
+                else:
+                    ax_ratio.errorbar(
+                        centers,
+                        ratio,
+                        yerr=ratio_err,
+                        fmt=marker,
+                        color=color,
+                        markerfacecolor="none",
+                        markeredgecolor=color,
+                        markeredgewidth=1.5,
+                        linestyle="--",
+                        linewidth=1.2,
+                        markersize=5,
+                        capsize=2,
+                    )
 
         metric_name = "Signal Efficiency ($P_D$)" if is_signal else "Background Fake Rate ($P_F$)"
         full_title = f"{metric_name} vs. $\\langle\\mu\\rangle$"
@@ -143,13 +148,16 @@ class PileupPlotter(BasePlotter):
         ax_main.grid(True, linestyle=":", alpha=0.5)
         ax_main.legend(frameon=True, fontsize=9, loc="best")
 
-        ref_label = ref_model.get("label", "Ref")
-        ax_ratio.set_ylabel(f"Ratio to\n{ref_label}", fontsize=8)
-        ax_ratio.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
-        ax_ratio.grid(True, linestyle=":", alpha=0.5)
-        ax_ratio.set_ylim(0.85, 1.15)
-
-        fig.align_ylabels([ax_main, ax_ratio])
+        if show_ratio and ax_ratio is not None:
+            ax_ratio.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
+            ref_label = ref_model.get("label", "Ref")
+            ax_ratio.set_ylabel(f"Ratio to\n{ref_label}", fontsize=8)
+            ax_ratio.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
+            ax_ratio.grid(True, linestyle=":", alpha=0.5)
+            ax_ratio.set_ylim(0.85, 1.15)
+            fig.align_ylabels([ax_main, ax_ratio])
+        else:
+            ax_main.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
 
         if output_path is not None:
             output_path.parent.mkdir(parents=True, exist_ok=True)
