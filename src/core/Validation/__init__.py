@@ -14,6 +14,7 @@ from .PileupThresholdCalibrator import (
     OperatingPointCalibration,
     Pileup2DDistribution,
 )
+from .RegionalOperatingPointsConsolidator import RegionalOperatingPointsConsolidator
 
 __all__ = [
     "ResultAggregator",
@@ -29,4 +30,5 @@ __all__ = [
     "PileupThresholdCalibrator",
     "OperatingPointCalibration",
     "Pileup2DDistribution",
+    "RegionalOperatingPointsConsolidator",
 ]
