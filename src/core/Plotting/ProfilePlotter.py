@@ -113,15 +113,17 @@ class ProfileMeanEnergyPlotter(BasePlotter):
                 color=color,
             )
 
-        ax.set_xlabel("Rings", fontsize=13)
+        ax.set_xlabel("Calorimeter Ring Index", fontsize=13)
         ax.set_ylabel("Normalized Energy", fontsize=13)
 
-        ticks_loc = np.linspace(0, n_rings, 10, dtype=int)
+        ticks_step = 10 if n_rings >= 50 else 5
+        ticks_loc = np.arange(0, n_rings + 1, ticks_step)
         ax.set_xticks(ticks_loc)
-        ax.set_xticklabels([str(i + 1) for i in ticks_loc], fontsize=11)
+        ax.set_xticklabels([str(i) for i in ticks_loc], fontsize=11)
         ax.tick_params(axis="y", labelsize=11)
 
-        ax.set_ylim(-0.05, y_max * 1.5)
+        ax.set_xlim(-1, n_rings + 1)
+        ax.set_ylim(-0.02, y_max * 1.5)
         ax.grid(True, linestyle="--", alpha=0.6)
         ax.legend(fontsize=10, loc="upper right")
         ax.set_title(plot_title, fontsize=14)
