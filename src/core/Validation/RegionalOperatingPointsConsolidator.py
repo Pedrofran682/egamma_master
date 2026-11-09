@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import torch
+import yaml
 
 from src.core.Datasets.SplitManifest import SplitManifest
 from src.core.Trainers.NeuralRingerTrainer import NeuralRingerTrainer
@@ -17,7 +18,6 @@ from src.core.Validation.PileupAnalyzer import PileupAnalyzer
 from src.core.Validation.PileupThresholdCalibrator import PileupThresholdCalibrator
 from src.core.Validation.QuadrantAnalyzer import StrategyMetrics
 from src.core.Validation.ResultAggregator import ResultAggregator
-from src.Parser.DynamicConfiguration import DynamicConfiguration
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 from src.utils import get_et_eta
 
@@ -83,12 +83,24 @@ class RegionalOperatingPointsConsolidator:
         self.bins_mu: int = bins_mu
         self.n_bootstraps_pileup: int = n_bootstraps_pileup
 
-        self.config: NeuralRingerTrainerConfiguration = DynamicConfiguration.from_yaml(
-            str(self.config_path), NeuralRingerTrainerConfiguration
-        )
+        if isinstance(config_path, NeuralRingerTrainerConfiguration):
+            self.config = config_path
+            self.config_path = Path("in_memory_config")
+        else:
+            self.config_path = Path(config_path)
+            self.config = self._load_config(self.config_path)
+
         self.trainer: NeuralRingerTrainer = NeuralRingerTrainer(self.config)
 
-        resolved_manifest = manifest_path or (self.results_path.parent / "split_manifest.json")
+        if manifest_path is not None:
+            resolved_manifest = Path(manifest_path)
+        elif (self.results_path / "split_manifest.json").exists():
+            resolved_manifest = self.results_path / "split_manifest.json"
+        elif (self.results_path.parent / "split_manifest.json").exists():
+            resolved_manifest = self.results_path.parent / "split_manifest.json"
+        else:
+            resolved_manifest = self.results_path / "split_manifest.json"
+
         self.manifest: SplitManifest = SplitManifest(str(resolved_manifest))
         self.aggregator: ResultAggregator = ResultAggregator(self.results_path)
 
@@ -119,6 +131,12 @@ class RegionalOperatingPointsConsolidator:
     def records(self) -> List[Dict[str, Any]]:
         """Returns the list of extracted regional evaluation records."""
         return self._records
+
+    @staticmethod
+    def _load_config(config_path: Union[str, Path]) -> NeuralRingerTrainerConfiguration:
+        with open(config_path, "r") as f:
+            yaml_data = yaml.safe_load(f)
+        return NeuralRingerTrainerConfiguration.model_validate(yaml_data)
 
     def _get_target_pd_for_region(self, iet: int, ieta: int) -> float:
         if self.reference_eff_df is not None:
@@ -439,7 +457,7 @@ class RegionalOperatingPointsConsolidator:
         Returns:
             Formatted LaTeX table block string.
         """
-        df = grid_table or self.build_grid_table(
+        df = grid_table if grid_table is not None else self.build_grid_table(
             as_percentage=as_percentage,
             precision=precision,
             decimal_comma=decimal_comma,
