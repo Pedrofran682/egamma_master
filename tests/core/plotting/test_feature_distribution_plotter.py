@@ -97,6 +97,7 @@ def test_plot_and_export_all(tmp_path, sample_feature_plot_data):
     )
 
     assert fig is not None
+    assert "Holdout Jet Leakage in Signal Selection" in fig._suptitle.get_text()
     assert (export_dir / "Reta_background_selection.png").exists()
     assert (export_dir / "Rhad_background_selection.png").exists()
 

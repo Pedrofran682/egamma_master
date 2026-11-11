@@ -151,7 +151,7 @@ class FeatureDistributionPlotter(BasePlotter):
         else:
             ax_res.set_ylim(bottom=0.0)
 
-        prefix = "Signal" if is_signal else "Background"
+        prefix = "Signal" if is_signal else "Jet Leak in Signal"
         title_suffix = f" ({region_key})" if region_key else ""
         ax_main.set_title(f"{prefix}: {display_title}{title_suffix}", pad=12)
         ax_main.set_ylabel(f"{prefix} Events / Bin")
@@ -311,7 +311,7 @@ class FeatureDistributionPlotter(BasePlotter):
             else:
                 ax_res.set_ylim(bottom=0.0)
 
-            prefix = "Signal" if is_signal else "Background"
+            prefix = "Signal" if is_signal else "Jet Leak in Signal"
             title_suffix = f" ({region_key})" if region_key else ""
             ax_main.set_title(f"{prefix}: {display_title}{title_suffix}", pad=12)
             ax_main.set_ylabel(f"{prefix} Events / Bin")
@@ -333,7 +333,7 @@ class FeatureDistributionPlotter(BasePlotter):
             fig.delaxes(e_main)
             fig.delaxes(e_res)
 
-        headline = "Signal (Photons)" if is_signal else "Background (Jets)"
+        headline = "Signal (Photons)" if is_signal else "Jet Leakage in Signal"
         suffix = f" - Region {region_key}" if region_key else ""
         fig.suptitle(f"Holdout {headline} Selection{suffix}", fontsize=14, y=1.002)
 
