@@ -150,6 +150,11 @@ class PlotTextKey(str, Enum):
     PEAK_REGION_YLABEL = "peak.region_ylabel"
     PEAK_HIGHLIGHT_LABEL = "peak.highlight_label"
     PEAK_TOTAL_SUBDET_LABEL = "peak.total_subdet_label"
+    PEAK_VARIANCE_BAR_SUPTITLE = "peak.variance_bar_suptitle"
+    PEAK_VARIANCE_ABS_PANEL_TITLE = "peak.variance_abs_panel_title"
+    PEAK_VARIANCE_CV_PANEL_TITLE = "peak.variance_cv_panel_title"
+    PEAK_VARIANCE_YLABEL = "peak.variance_ylabel"
+    PEAK_CV_YLABEL = "peak.cv_ylabel"
 
 
 class PlotTranslator:
@@ -726,6 +731,26 @@ class PlotTranslator:
         PlotTextKey.PEAK_TOTAL_SUBDET_LABEL: {
             "en": "Full Subdetector",
             "pt": "Subdetector Completo",
+        },
+        PlotTextKey.PEAK_VARIANCE_BAR_SUPTITLE: {
+            "en": "Subdetector Ring Energy Variance & Relative Dispersion ({n_rings} Rings) - {scope}",
+            "pt": "Variância Média e Dispersão Relativa de Energia por Subdetector ({n_rings} Anéis) - {scope}",
+        },
+        PlotTextKey.PEAK_VARIANCE_ABS_PANEL_TITLE: {
+            "en": "Mean Per-Ring Variance ($\\overline{{\\sigma^2}}$): All Rings vs Top-{top_k} Peak Rings",
+            "pt": "Variância Média por Anel ($\\overline{{\\sigma^2}}$): Todos os Anéis vs Top-{top_k} Anéis de Pico",
+        },
+        PlotTextKey.PEAK_VARIANCE_CV_PANEL_TITLE: {
+            "en": r"Relative Dispersion (Coefficient of Variation $\mathrm{CV} = \overline{\sigma} / |\overline{\mu}|$)",
+            "pt": r"Dispersão Relativa (Coeficiente de Variação $\mathrm{CV} = \overline{\sigma} / |\overline{\mu}|$)",
+        },
+        PlotTextKey.PEAK_VARIANCE_YLABEL: {
+            "en": r"Mean Ring Variance ($\overline{\sigma^2}$)",
+            "pt": r"Variância Média por Anel ($\overline{\sigma^2}$)",
+        },
+        PlotTextKey.PEAK_CV_YLABEL: {
+            "en": r"Coefficient of Variation ($\mathrm{CV} = \overline{\sigma} / |\overline{\mu}|$)",
+            "pt": r"Coeficiente de Variação ($\mathrm{CV} = \overline{\sigma} / |\overline{\mu}|$)",
         },
     }
 

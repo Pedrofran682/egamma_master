@@ -42,6 +42,15 @@ class SubdetectorPeakMetrics:
     ring_1_global_pct: float
     ring_2_global_pct: float
     ring_3_global_pct: float
+    mean_ring_energy: float = 0.0
+    mean_ring_variance: float = 0.0
+    mean_ring_std: float = 0.0
+    subdetector_cv: float = 0.0
+    peak_mean_ring_energy: float = 0.0
+    peak_mean_ring_variance: float = 0.0
+    peak_mean_ring_std: float = 0.0
+    peak_cv: float = 0.0
+    variance_share_pct: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the metrics record to a plain dictionary.
@@ -92,6 +101,12 @@ class RingPeakEnergyAnalyzer:
         if abs(denominator) <= 1e-12:
             return 0.0
         return float((numerator / denominator) * 100.0)
+
+    @staticmethod
+    def _safe_ratio(numerator: float, denominator: float) -> float:
+        if abs(denominator) <= 1e-12:
+            return 0.0
+        return float(numerator / denominator)
 
     @classmethod
     def resolve_ring_indexes(
@@ -216,24 +231,37 @@ class RingPeakEnergyAnalyzer:
         ring_indexes: Optional[np.ndarray] = None,
         region: str = "global",
         class_name: str = "Signal",
+        std_profile: Optional[np.ndarray] = None,
     ) -> List[SubdetectorPeakMetrics]:
-        """Computes intra-detector and global calorimeter peak fractions for a single profile.
+        """Computes intra-detector, global calorimeter peak fractions, and variance metrics.
 
         Args:
             mean_profile: 1D mean normalized energy profile array across rings.
             ring_indexes: Optional explicit global ring index array.
             region: Kinematic region identifier string.
             class_name: Particle class label (e.g., 'Signal' or 'Background').
+            std_profile: Optional 1D per-ring standard deviation array matching `mean_profile`.
 
         Returns:
             List of SubdetectorPeakMetrics, one per configured subdetector.
 
         Raises:
-            ValueError: If `mean_profile` is empty or not 1D-convertible.
+            ValueError: If `mean_profile` is empty or `std_profile` length mismatches `mean_profile`.
         """
         profile = np.asarray(mean_profile, dtype=np.float64).ravel()
         if profile.size == 0:
             raise ValueError("mean_profile must not be empty.")
+
+        if std_profile is not None:
+            std_arr = np.asarray(std_profile, dtype=np.float64).ravel()
+            if std_arr.size != profile.size:
+                raise ValueError(
+                    f"std_profile length ({std_arr.size}) must match mean_profile length ({profile.size})."
+                )
+            var_profile = np.square(std_arr)
+        else:
+            std_arr = np.zeros(profile.size, dtype=np.float64)
+            var_profile = np.zeros(profile.size, dtype=np.float64)
 
         global_indexes = self.resolve_ring_indexes(
             n_rings=int(profile.size),
@@ -245,6 +273,7 @@ class RingPeakEnergyAnalyzer:
             ring_indexes=global_indexes,
         )
         total_energy = float(np.sum(profile))
+        total_variance = float(np.sum(var_profile))
 
         metrics: List[SubdetectorPeakMetrics] = []
         for subdet in self.subdetectors:
@@ -255,10 +284,25 @@ class RingPeakEnergyAnalyzer:
 
             subdet_vals = profile[pos] if n_sub > 0 else np.array([], dtype=np.float64)
             peak_vals = profile[peak_pos] if n_peak > 0 else np.array([], dtype=np.float64)
+            subdet_std = std_arr[pos] if n_sub > 0 else np.array([], dtype=np.float64)
+            subdet_var = var_profile[pos] if n_sub > 0 else np.array([], dtype=np.float64)
+            peak_std = std_arr[peak_pos] if n_peak > 0 else np.array([], dtype=np.float64)
+            peak_var = var_profile[peak_pos] if n_peak > 0 else np.array([], dtype=np.float64)
 
             subdet_energy = float(np.sum(subdet_vals))
             peak_energy = float(np.sum(peak_vals))
             tail_energy = float(subdet_energy - peak_energy)
+
+            mean_ring_energy = float(np.mean(subdet_vals)) if n_sub > 0 else 0.0
+            mean_ring_variance = float(np.mean(subdet_var)) if n_sub > 0 else 0.0
+            mean_ring_std = float(np.mean(subdet_std)) if n_sub > 0 else 0.0
+            subdetector_cv = self._safe_ratio(mean_ring_std, abs(mean_ring_energy))
+
+            peak_mean_ring_energy = float(np.mean(peak_vals)) if n_peak > 0 else 0.0
+            peak_mean_ring_variance = float(np.mean(peak_var)) if n_peak > 0 else 0.0
+            peak_mean_ring_std = float(np.mean(peak_std)) if n_peak > 0 else 0.0
+            peak_cv = self._safe_ratio(peak_mean_ring_std, abs(peak_mean_ring_energy))
+            variance_share_pct = self._safe_pct(float(np.sum(subdet_var)), total_variance)
 
             ring_1_energy = float(peak_vals[0]) if n_peak >= 1 else 0.0
             ring_2_energy = float(peak_vals[1]) if n_peak >= 2 else 0.0
@@ -289,6 +333,15 @@ class RingPeakEnergyAnalyzer:
                     ring_1_global_pct=self._safe_pct(ring_1_energy, total_energy),
                     ring_2_global_pct=self._safe_pct(ring_2_energy, total_energy),
                     ring_3_global_pct=self._safe_pct(ring_3_energy, total_energy),
+                    mean_ring_energy=mean_ring_energy,
+                    mean_ring_variance=mean_ring_variance,
+                    mean_ring_std=mean_ring_std,
+                    subdetector_cv=subdetector_cv,
+                    peak_mean_ring_energy=peak_mean_ring_energy,
+                    peak_mean_ring_variance=peak_mean_ring_variance,
+                    peak_mean_ring_std=peak_mean_ring_std,
+                    peak_cv=peak_cv,
+                    variance_share_pct=variance_share_pct,
                 )
             )
         return metrics
@@ -300,8 +353,10 @@ class RingPeakEnergyAnalyzer:
         ring_indexes: Optional[np.ndarray] = None,
         region: str = "global",
         n_rings_label: Optional[int] = None,
+        std_signal: Optional[np.ndarray] = None,
+        std_bkg: Optional[np.ndarray] = None,
     ) -> pd.DataFrame:
-        """Builds a side-by-side comparison DataFrame of peak ring shares for Signal vs Background.
+        """Builds a side-by-side comparison DataFrame of peak shares and variance for Signal vs Background.
 
         Args:
             mean_signal: Mean normalized ring profile for signal events.
@@ -309,6 +364,8 @@ class RingPeakEnergyAnalyzer:
             ring_indexes: Optional explicit global ring index array.
             region: Kinematic region identifier string.
             n_rings_label: Optional integer label for model ring dimensionality.
+            std_signal: Optional per-ring standard deviation array for signal events.
+            std_bkg: Optional per-ring standard deviation array for background events.
 
         Returns:
             DataFrame with one row per subdetector comparing Signal and Background metrics.
@@ -328,12 +385,14 @@ class RingPeakEnergyAnalyzer:
             ring_indexes=ring_indexes,
             region=region,
             class_name="Signal",
+            std_profile=std_signal,
         )
         bkg_metrics = self.analyze_profile(
             mean_profile=bkg_arr,
             ring_indexes=ring_indexes,
             region=region,
             class_name="Background",
+            std_profile=std_bkg,
         )
 
         resolved_n_rings = int(n_rings_label) if n_rings_label is not None else int(sig_arr.size)
@@ -358,6 +417,15 @@ class RingPeakEnergyAnalyzer:
                     "signal_ring_1_intra_pct": sig.ring_1_intra_pct,
                     "signal_ring_2_intra_pct": sig.ring_2_intra_pct,
                     "signal_ring_3_intra_pct": sig.ring_3_intra_pct,
+                    "signal_mean_ring_energy": sig.mean_ring_energy,
+                    "signal_mean_ring_variance": sig.mean_ring_variance,
+                    "signal_mean_ring_std": sig.mean_ring_std,
+                    "signal_subdetector_cv": sig.subdetector_cv,
+                    "signal_peak_mean_ring_energy": sig.peak_mean_ring_energy,
+                    "signal_peak_mean_ring_variance": sig.peak_mean_ring_variance,
+                    "signal_peak_mean_ring_std": sig.peak_mean_ring_std,
+                    "signal_peak_cv": sig.peak_cv,
+                    "signal_variance_share_pct": sig.variance_share_pct,
                     "background_ring_1_energy": bkg.ring_1_energy,
                     "background_ring_2_energy": bkg.ring_2_energy,
                     "background_ring_3_energy": bkg.ring_3_energy,
@@ -369,13 +437,93 @@ class RingPeakEnergyAnalyzer:
                     "background_ring_1_intra_pct": bkg.ring_1_intra_pct,
                     "background_ring_2_intra_pct": bkg.ring_2_intra_pct,
                     "background_ring_3_intra_pct": bkg.ring_3_intra_pct,
+                    "background_mean_ring_energy": bkg.mean_ring_energy,
+                    "background_mean_ring_variance": bkg.mean_ring_variance,
+                    "background_mean_ring_std": bkg.mean_ring_std,
+                    "background_subdetector_cv": bkg.subdetector_cv,
+                    "background_peak_mean_ring_energy": bkg.peak_mean_ring_energy,
+                    "background_peak_mean_ring_variance": bkg.peak_mean_ring_variance,
+                    "background_peak_mean_ring_std": bkg.peak_mean_ring_std,
+                    "background_peak_cv": bkg.peak_cv,
+                    "background_variance_share_pct": bkg.variance_share_pct,
                     "delta_intra_detector_pct": sig.intra_detector_pct - bkg.intra_detector_pct,
                     "delta_global_calorimeter_pct": (
                         sig.global_calorimeter_pct - bkg.global_calorimeter_pct
                     ),
+                    "ratio_bkg_to_sig_mean_variance": self._safe_ratio(
+                        bkg.mean_ring_variance, sig.mean_ring_variance
+                    ),
+                    "ratio_bkg_to_sig_peak_variance": self._safe_ratio(
+                        bkg.peak_mean_ring_variance, sig.peak_mean_ring_variance
+                    ),
+                    "ratio_bkg_to_sig_cv": self._safe_ratio(
+                        bkg.subdetector_cv, sig.subdetector_cv
+                    ),
                 }
             )
         return pd.DataFrame(rows)
+
+    def compare_hadronic_vs_em_variance(
+        self,
+        comparison_df: pd.DataFrame,
+        hadronic_subdetector: str = "TileCal",
+    ) -> Dict[str, Any]:
+        """Compares hadronic subdetector variance and CV against electromagnetic layers.
+
+        Args:
+            comparison_df: Output DataFrame from `analyze_signal_vs_background`.
+            hadronic_subdetector: Subdetector name representing the hadronic calorimeter.
+
+        Returns:
+            Dictionary comparing absolute variance, peak variance, CV, and peak rankings.
+
+        Raises:
+            ValueError: If `comparison_df` is empty or lacks `hadronic_subdetector`.
+        """
+        if comparison_df.empty:
+            raise ValueError("comparison_df must not be empty.")
+        had_subset = comparison_df[comparison_df["subdetector"] == hadronic_subdetector]
+        if had_subset.empty:
+            raise ValueError(
+                f"Hadronic subdetector '{hadronic_subdetector}' not found in comparison_df."
+            )
+
+        had_row = had_subset.iloc[0]
+        em_df = comparison_df[comparison_df["subdetector"] != hadronic_subdetector]
+
+        result: Dict[str, Any] = {"hadronic_subdetector": hadronic_subdetector}
+        metric_specs = (
+            ("mean_variance", "mean_ring_variance", "mean_variance"),
+            ("peak_variance", "peak_mean_ring_variance", "peak_variance"),
+            ("cv", "subdetector_cv", "mean_cv"),
+        )
+        for cls_name in ("signal", "background"):
+            for out_label, col_suffix, em_suffix in metric_specs:
+                col_name = f"{cls_name}_{col_suffix}"
+                had_val = float(had_row[col_name])
+                em_val = float(em_df[col_name].mean()) if not em_df.empty else 0.0
+                ratio_suffix = "variance_ratio" if out_label == "mean_variance" else f"{out_label}_ratio"
+                result[f"{cls_name}_hadronic_{out_label}"] = had_val
+                result[f"{cls_name}_em_{em_suffix}"] = em_val
+                result[f"{cls_name}_hadronic_to_em_{ratio_suffix}"] = self._safe_ratio(
+                    had_val, em_val
+                )
+
+        result["signal_highest_abs_variance_subdetector"] = str(
+            comparison_df.loc[comparison_df["signal_mean_ring_variance"].idxmax(), "subdetector"]
+        )
+        result["background_highest_abs_variance_subdetector"] = str(
+            comparison_df.loc[
+                comparison_df["background_mean_ring_variance"].idxmax(), "subdetector"
+            ]
+        )
+        result["signal_highest_cv_subdetector"] = str(
+            comparison_df.loc[comparison_df["signal_subdetector_cv"].idxmax(), "subdetector"]
+        )
+        result["background_highest_cv_subdetector"] = str(
+            comparison_df.loc[comparison_df["background_subdetector_cv"].idxmax(), "subdetector"]
+        )
+        return result
 
     def compute_total_peak_concentration(self, comparison_df: pd.DataFrame) -> Dict[str, float]:
         """Summarizes total calorimeter energy captured by all subdetector peak rings combined.
@@ -421,7 +569,7 @@ class RingPeakEnergyAnalyzer:
         Returns:
             DataFrame with mean, std, min, and max per subdetector across regions.
         """
-        metric_columns = (
+        base_metrics = (
             "signal_intra_detector_pct",
             "background_intra_detector_pct",
             "signal_global_calorimeter_pct",
@@ -429,11 +577,23 @@ class RingPeakEnergyAnalyzer:
             "signal_subdetector_share_pct",
             "background_subdetector_share_pct",
         )
+        variance_metrics = (
+            "signal_mean_ring_variance",
+            "background_mean_ring_variance",
+            "signal_peak_mean_ring_variance",
+            "background_peak_mean_ring_variance",
+            "signal_subdetector_cv",
+            "background_subdetector_cv",
+        )
         if regional_df.empty:
             columns = ["subdetector", "n_regions"]
-            for metric in metric_columns:
+            for metric in base_metrics + variance_metrics:
                 columns.extend([f"{metric}_mean", f"{metric}_std", f"{metric}_min", f"{metric}_max"])
             return pd.DataFrame(columns=columns)
+
+        metric_columns = base_metrics + tuple(
+            col for col in variance_metrics if col in regional_df.columns
+        )
 
         ordered_names = [s.name for s in self.subdetectors]
         extra_names = [

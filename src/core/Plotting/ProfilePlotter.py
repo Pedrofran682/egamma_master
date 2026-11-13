@@ -693,6 +693,234 @@ class RingPeakEnergyPlotter(BasePlotter):
             show=show,
         )
 
+    def _render_variance_comparison_panel(
+        self,
+        ax: plt.Axes,
+        x: np.ndarray,
+        width: float,
+        subdets: List[str],
+        sig_all: np.ndarray,
+        sig_peak: np.ndarray,
+        bkg_all: np.ndarray,
+        bkg_peak: np.ndarray,
+        ylabel: str,
+        panel_title: str,
+        value_fmt: str,
+        use_log: bool,
+        legend_handles: List[Patch],
+        lang: str,
+    ) -> None:
+        ax.bar(
+            x - width / 2,
+            sig_all,
+            width,
+            color="navy",
+            alpha=0.28,
+            edgecolor="navy",
+            hatch="//",
+            linewidth=1.0,
+            zorder=2,
+        )
+        ax.bar(
+            x + width / 2,
+            bkg_all,
+            width,
+            color="darkorange",
+            alpha=0.28,
+            edgecolor="darkorange",
+            hatch="//",
+            linewidth=1.0,
+            zorder=2,
+        )
+        bars_sig = ax.bar(
+            x - width / 2,
+            sig_peak,
+            width * 0.56,
+            color="navy",
+            alpha=0.90,
+            zorder=3,
+        )
+        bars_bkg = ax.bar(
+            x + width / 2,
+            bkg_peak,
+            width * 0.56,
+            color="darkorange",
+            alpha=0.90,
+            zorder=3,
+        )
+
+        for idx, (b_sig, b_bkg) in enumerate(zip(bars_sig, bars_bkg)):
+            h_sig = b_sig.get_height()
+            h_bkg = b_bkg.get_height()
+            ax.annotate(
+                f"{h_sig:{value_fmt}}",
+                xy=(b_sig.get_x() + b_sig.get_width() / 2, max(h_sig, sig_all[idx])),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=8.0,
+                color="navy",
+                fontweight="bold",
+            )
+            ax.annotate(
+                f"{h_bkg:{value_fmt}}",
+                xy=(b_bkg.get_x() + b_bkg.get_width() / 2, max(h_bkg, bkg_all[idx])),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=8.0,
+                color="darkorange",
+                fontweight="bold",
+            )
+
+        all_vals = np.concatenate([sig_all, sig_peak, bkg_all, bkg_peak])
+        if use_log and all_vals.size > 0 and np.all(all_vals > 0.0):
+            ax.set_yscale("log")
+            ax.set_ylim(float(np.min(all_vals)) * 0.4, float(np.max(all_vals)) * 5.0)
+        else:
+            max_val = max(float(np.max(all_vals)) if all_vals.size > 0 else 1.0, 1e-6)
+            ax.set_ylim(0.0, max_val * 1.24)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(subdets, fontsize=10)
+        ax.set_xlabel(self.tr(PlotTextKey.PEAK_SUBDETECTOR_XLABEL, language=lang), fontsize=11)
+        ax.set_ylabel(ylabel, fontsize=11)
+        ax.set_title(panel_title, fontsize=11.0, pad=8)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+        ax.legend(handles=legend_handles, fontsize=8.5, loc="upper right", frameon=True)
+
+    def plot_subdetector_variance_bars(
+        self,
+        comparison_df: pd.DataFrame,
+        output_dir: Union[str, Path],
+        filename: str,
+        scope_label: str = "Global",
+        plot_title: Optional[str] = None,
+        language: Optional[str] = None,
+        show: bool = False,
+        subfolder: str = "RingPeakAnalysis",
+    ) -> str:
+        """Renders grouped bars comparing mean ring variance and relative CV per subdetector.
+
+        Args:
+            comparison_df: Output DataFrame from `RingPeakEnergyAnalyzer.analyze_signal_vs_background`.
+            output_dir: Base directory where the figure will be saved.
+            filename: Output filename including extension.
+            scope_label: Scope descriptor shown in the figure suptitle.
+            plot_title: Optional custom suptitle string.
+            language: Optional language override ('en' or 'pt').
+            show: Whether to display the figure inline before closing.
+            subfolder: Output subdirectory inside `output_dir`.
+
+        Returns:
+            Absolute file path of the saved figure.
+        """
+        mh.style.use("ATLAS")
+        lang = self._resolve_language(language=language)
+
+        subdets = comparison_df["subdetector"].tolist()
+        x = np.arange(len(subdets))
+        width = 0.36
+
+        sig_var_all = comparison_df["signal_mean_ring_variance"].to_numpy(dtype=float)
+        sig_var_peak = comparison_df["signal_peak_mean_ring_variance"].to_numpy(dtype=float)
+        bkg_var_all = comparison_df["background_mean_ring_variance"].to_numpy(dtype=float)
+        bkg_var_peak = comparison_df["background_peak_mean_ring_variance"].to_numpy(dtype=float)
+
+        sig_cv_all = comparison_df["signal_subdetector_cv"].to_numpy(dtype=float)
+        sig_cv_peak = comparison_df["signal_peak_cv"].to_numpy(dtype=float)
+        bkg_cv_all = comparison_df["background_subdetector_cv"].to_numpy(dtype=float)
+        bkg_cv_peak = comparison_df["background_peak_cv"].to_numpy(dtype=float)
+
+        n_rings_model = (
+            int(comparison_df["n_rings_model"].iloc[0])
+            if "n_rings_model" in comparison_df.columns and not comparison_df.empty
+            else 100
+        )
+
+        sig_label = self.tr(PlotTextKey.PROFILE_SIGNAL_LABEL, language=lang)
+        bkg_label = self.tr(PlotTextKey.PROFILE_BACKGROUND_LABEL, language=lang)
+        peak_label = self.tr(
+            PlotTextKey.PEAK_HIGHLIGHT_LABEL,
+            language=lang,
+            top_k=self.analyzer.top_k,
+        )
+        full_subdet_label = self.tr(PlotTextKey.PEAK_TOTAL_SUBDET_LABEL, language=lang)
+
+        legend_handles = [
+            Patch(facecolor="navy", alpha=0.90, label=f"{sig_label} ({peak_label})"),
+            Patch(facecolor="darkorange", alpha=0.90, label=f"{bkg_label} ({peak_label})"),
+            Patch(
+                facecolor="gray",
+                alpha=0.28,
+                edgecolor="black",
+                hatch="//",
+                label=full_subdet_label,
+            ),
+        ]
+
+        fig, (ax_var, ax_cv) = plt.subplots(1, 2, figsize=(15, 6))
+        self._render_variance_comparison_panel(
+            ax=ax_var,
+            x=x,
+            width=width,
+            subdets=subdets,
+            sig_all=sig_var_all,
+            sig_peak=sig_var_peak,
+            bkg_all=bkg_var_all,
+            bkg_peak=bkg_var_peak,
+            ylabel=self.tr(PlotTextKey.PEAK_VARIANCE_YLABEL, language=lang),
+            panel_title=self.tr(
+                PlotTextKey.PEAK_VARIANCE_ABS_PANEL_TITLE,
+                language=lang,
+                top_k=self.analyzer.top_k,
+            ),
+            value_fmt=".1e",
+            use_log=True,
+            legend_handles=legend_handles,
+            lang=lang,
+        )
+        self._render_variance_comparison_panel(
+            ax=ax_cv,
+            x=x,
+            width=width,
+            subdets=subdets,
+            sig_all=sig_cv_all,
+            sig_peak=sig_cv_peak,
+            bkg_all=bkg_cv_all,
+            bkg_peak=bkg_cv_peak,
+            ylabel=self.tr(PlotTextKey.PEAK_CV_YLABEL, language=lang),
+            panel_title=self.tr(PlotTextKey.PEAK_VARIANCE_CV_PANEL_TITLE, language=lang),
+            value_fmt=".2f",
+            use_log=False,
+            legend_handles=legend_handles,
+            lang=lang,
+        )
+
+        suptitle = (
+            plot_title
+            if plot_title is not None
+            else self.tr(
+                PlotTextKey.PEAK_VARIANCE_BAR_SUPTITLE,
+                language=lang,
+                n_rings=n_rings_model,
+                scope=scope_label,
+            )
+        )
+        fig.suptitle(suptitle, fontsize=13.5, y=0.98)
+        fig.tight_layout(rect=[0, 0, 1, 0.92])
+
+        return self.save_figure(
+            fig=fig,
+            folder_path=output_dir,
+            subfolder=subfolder,
+            filename=filename,
+            file_format=self._resolve_file_format(filename),
+            show=show,
+        )
+
     def plot_regional_peak_heatmap(
         self,
         regional_df: pd.DataFrame,
@@ -722,9 +950,17 @@ class RingPeakEnergyPlotter(BasePlotter):
         Raises:
             ValueError: If `metric` is unsupported or `regional_df` is empty.
         """
-        if metric not in ("intra_detector_pct", "global_calorimeter_pct"):
+        supported_metrics = (
+            "intra_detector_pct",
+            "global_calorimeter_pct",
+            "mean_ring_variance",
+            "peak_mean_ring_variance",
+            "subdetector_cv",
+            "peak_cv",
+        )
+        if metric not in supported_metrics:
             raise ValueError(
-                f"Unsupported metric '{metric}'. Expected 'intra_detector_pct' or 'global_calorimeter_pct'."
+                f"Unsupported metric '{metric}'. Expected one of {supported_metrics}."
             )
         if regional_df.empty:
             raise ValueError("regional_df must not be empty.")
@@ -761,12 +997,15 @@ class RingPeakEnergyPlotter(BasePlotter):
         fig_height = max(5.5, 0.36 * n_regions + 2.2)
         fig, axes = plt.subplots(1, 2, figsize=(15, fig_height), sharey=True)
 
-        metric_label = self.tr(
-            PlotTextKey.PEAK_INTRA_YLABEL
-            if metric == "intra_detector_pct"
-            else PlotTextKey.PEAK_GLOBAL_YLABEL,
-            language=lang,
-        )
+        metric_key_map = {
+            "intra_detector_pct": PlotTextKey.PEAK_INTRA_YLABEL,
+            "global_calorimeter_pct": PlotTextKey.PEAK_GLOBAL_YLABEL,
+            "mean_ring_variance": PlotTextKey.PEAK_VARIANCE_YLABEL,
+            "peak_mean_ring_variance": PlotTextKey.PEAK_VARIANCE_YLABEL,
+            "subdetector_cv": PlotTextKey.PEAK_CV_YLABEL,
+            "peak_cv": PlotTextKey.PEAK_CV_YLABEL,
+        }
+        metric_label = self.tr(metric_key_map[metric], language=lang)
         class_titles = (
             self.tr(PlotTextKey.PROFILE_SIGNAL_LABEL, language=lang),
             self.tr(PlotTextKey.PROFILE_BACKGROUND_LABEL, language=lang),
@@ -803,14 +1042,20 @@ class RingPeakEnergyPlotter(BasePlotter):
                     val = matrix[row_idx, col_idx]
                     if np.isfinite(val):
                         text_color = "white" if val > midpoint else "black"
+                        if metric.endswith("_pct"):
+                            cell_text = f"{val:.1f}%"
+                        elif "variance" in metric:
+                            cell_text = f"{val:.1e}"
+                        else:
+                            cell_text = f"{val:.2f}"
                         ax.text(
                             col_idx,
                             row_idx,
-                            f"{val:.1f}%",
+                            cell_text,
                             ha="center",
                             va="center",
                             color=text_color,
-                            fontsize=8.5,
+                            fontsize=8.0 if "variance" in metric else 8.5,
                         )
 
         axes[0].set_ylabel(self.tr(PlotTextKey.PEAK_REGION_YLABEL, language=lang), fontsize=11)
@@ -864,8 +1109,18 @@ class RingPeakEnergyPlotter(BasePlotter):
             if np.any(sig_mask)
             else np.zeros(normalized_rings.shape[1], dtype=np.float64)
         )
+        std_signal = (
+            np.std(normalized_rings[sig_mask], axis=0)
+            if np.any(sig_mask)
+            else np.zeros(normalized_rings.shape[1], dtype=np.float64)
+        )
         mean_bkg = (
             np.mean(normalized_rings[bg_mask], axis=0)
+            if np.any(bg_mask)
+            else np.zeros(normalized_rings.shape[1], dtype=np.float64)
+        )
+        std_bkg = (
+            np.std(normalized_rings[bg_mask], axis=0)
             if np.any(bg_mask)
             else np.zeros(normalized_rings.shape[1], dtype=np.float64)
         )
@@ -876,6 +1131,8 @@ class RingPeakEnergyPlotter(BasePlotter):
             mean_bkg=mean_bkg,
             ring_indexes=context.ring_indexes,
             region=region_label,
+            std_signal=std_signal,
+            std_bkg=std_bkg,
         )
         filename = f"et{context.iet}.eta{context.ieta}.{plot_name}.pdf"
         return self.plot_subdetector_peak_bars(

@@ -179,13 +179,84 @@ def test_zero_denominator_and_50_ring_and_region_aggregation() -> None:
     assert np.isclose(m_small[0].intra_detector_pct, 100.0)
 
 
-def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> None:
-    sig_100, bkg_100 = _build_synthetic_100_ring_profiles()
-    std_100 = np.full(100, 0.002)
+def test_variance_cv_and_hadronic_vs_em_comparison() -> None:
+    sig, bkg = _build_synthetic_100_ring_profiles()
+    std_sig = np.full(100, 0.002, dtype=np.float64)
+    std_bkg = np.full(100, 0.002, dtype=np.float64)
+
+    std_sig[0:3] = 0.01
+    std_sig[88:100] = 0.001
+    std_bkg[88:100] = 0.02
 
     analyzer = RingPeakEnergyAnalyzer(top_k=3)
-    df_r1 = analyzer.analyze_signal_vs_background(sig_100, bkg_100, region="et0_eta0")
-    df_r2 = analyzer.analyze_signal_vs_background(sig_100, bkg_100, region="et1_eta1")
+    with pytest.raises(ValueError):
+        analyzer.analyze_profile(sig, std_profile=np.ones(10))
+
+    comp_df = analyzer.analyze_signal_vs_background(
+        mean_signal=sig,
+        mean_bkg=bkg,
+        region="et2_eta1",
+        std_signal=std_sig,
+        std_bkg=std_bkg,
+    )
+
+    assert np.isclose(comp_df["signal_variance_share_pct"].sum(), 100.0)
+    assert np.isclose(comp_df["background_variance_share_pct"].sum(), 100.0)
+
+    ps_row = comp_df.loc[comp_df["subdetector"] == "PreSampler"].iloc[0]
+    expected_ps_var = float(np.mean(std_sig[0:8] ** 2))
+    expected_ps_std = float(np.mean(std_sig[0:8]))
+    expected_ps_mean_e = 0.10 / 8.0
+    assert np.isclose(ps_row["signal_mean_ring_energy"], expected_ps_mean_e)
+    assert np.isclose(ps_row["signal_mean_ring_variance"], expected_ps_var)
+    assert np.isclose(ps_row["signal_mean_ring_std"], expected_ps_std)
+    assert np.isclose(ps_row["signal_subdetector_cv"], expected_ps_std / expected_ps_mean_e)
+    assert np.isclose(ps_row["signal_peak_mean_ring_variance"], 0.01**2)
+    assert np.isclose(ps_row["signal_peak_cv"], 0.01 / 0.03)
+
+    tile_row = comp_df.loc[comp_df["subdetector"] == "TileCal"].iloc[0]
+    assert np.isclose(tile_row["background_mean_ring_variance"], 0.02**2)
+    assert np.isclose(tile_row["ratio_bkg_to_sig_mean_variance"], (0.02**2) / (0.001**2))
+    assert np.isclose(tile_row["ratio_bkg_to_sig_peak_variance"], (0.02**2) / (0.001**2))
+    assert tile_row["ratio_bkg_to_sig_cv"] > 0.0
+
+    had_summary = analyzer.compare_hadronic_vs_em_variance(comp_df)
+    assert had_summary["hadronic_subdetector"] == "TileCal"
+    assert had_summary["background_highest_abs_variance_subdetector"] == "TileCal"
+    assert had_summary["background_hadronic_to_em_variance_ratio"] > 1.0
+    assert had_summary["signal_hadronic_cv"] > had_summary["signal_em_mean_cv"]
+    assert had_summary["signal_highest_cv_subdetector"] == "TileCal"
+
+    with pytest.raises(ValueError):
+        analyzer.compare_hadronic_vs_em_variance(pd.DataFrame())
+    with pytest.raises(ValueError):
+        analyzer.compare_hadronic_vs_em_variance(comp_df, hadronic_subdetector="Missing")
+
+    regional_var = analyzer.summarize_across_regions(comp_df)
+    assert "signal_mean_ring_variance_mean" in regional_var.columns
+    assert "background_subdetector_cv_mean" in regional_var.columns
+
+
+def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> None:
+    sig_100, bkg_100 = _build_synthetic_100_ring_profiles()
+    std_sig_100 = np.full(100, 0.002, dtype=np.float64)
+    std_bkg_100 = np.full(100, 0.004, dtype=np.float64)
+
+    analyzer = RingPeakEnergyAnalyzer(top_k=3)
+    df_r1 = analyzer.analyze_signal_vs_background(
+        sig_100,
+        bkg_100,
+        region="et0_eta0",
+        std_signal=std_sig_100,
+        std_bkg=std_bkg_100,
+    )
+    df_r2 = analyzer.analyze_signal_vs_background(
+        sig_100,
+        bkg_100,
+        region="et1_eta1",
+        std_signal=std_sig_100 * 1.2,
+        std_bkg=std_bkg_100 * 1.3,
+    )
     regional_df = pd.concat([df_r1, df_r2], ignore_index=True)
 
     rng = np.random.default_rng(42)
@@ -198,9 +269,9 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
 
         p_prof = plotter.plot_highlighted_peak_profile(
             mean_signal=sig_100,
-            std_signal=std_100,
+            std_signal=std_sig_100,
             mean_bkg=bkg_100,
-            std_bkg=std_100,
+            std_bkg=std_bkg_100,
             output_dir=lang_dir,
             filename="global_peak_profile.png",
             scope_label="Global",
@@ -210,6 +281,13 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
             comparison_df=df_r1,
             output_dir=lang_dir,
             filename="global_peak_bars.pdf",
+            scope_label="Global",
+            language=lang,
+        )
+        p_var_bars = plotter.plot_subdetector_variance_bars(
+            comparison_df=df_r1,
+            output_dir=lang_dir,
+            filename="global_variance_bars.png",
             scope_label="Global",
             language=lang,
         )
@@ -227,6 +305,20 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
             metric="global_calorimeter_pct",
             language=lang,
         )
+        p_heat_var = plotter.plot_regional_peak_heatmap(
+            regional_df=regional_df,
+            output_dir=lang_dir,
+            filename="heatmap_variance.png",
+            metric="mean_ring_variance",
+            language=lang,
+        )
+        p_heat_cv = plotter.plot_regional_peak_heatmap(
+            regional_df=regional_df,
+            output_dir=lang_dir,
+            filename="heatmap_cv.pdf",
+            metric="subdetector_cv",
+            language=lang,
+        )
 
         ctx = RegionPlotContext(
             iet=1,
@@ -238,7 +330,16 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
         )
         p_ctx = plotter.plot(ctx, x_rings=ctx_data)
 
-        for saved in (p_prof, p_bars, p_heat_intra, p_heat_global, p_ctx):
+        for saved in (
+            p_prof,
+            p_bars,
+            p_var_bars,
+            p_heat_intra,
+            p_heat_global,
+            p_heat_var,
+            p_heat_cv,
+            p_ctx,
+        ):
             path_obj = pathlib.Path(saved)
             assert path_obj.exists() and path_obj.stat().st_size > 0
 
