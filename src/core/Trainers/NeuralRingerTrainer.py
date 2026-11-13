@@ -51,12 +51,72 @@ class NeuralRingerTrainer(BaseTrainer):
         self._full_dataset: Any = get_instance(self.config.dataset)
         self._full_dataset.config = config
         self.results_folder_path: str = ""
+        self._split_manifest: SplitManifest | None = None
 
     def _apply_debug_overrides(self) -> None:
         if self.config.debug:
             log.warning("#### EXECUTING ON DEBUG MODE. ####")
             self.config.epochs = 2
             self.config.n_initializations = 1
+
+    def _get_expected_cv_folds(self) -> int:
+        """Returns the number of cross-validation folds reserved after holdout split."""
+        return max(1, int(self.kfold.get_n_splits()) - 1)
+
+    def _get_missing_repeats_for_fold(
+        self, et: int, eta: int, fold_idx: int
+    ) -> list[int]:
+        """Identifies repeat indices without persisted checkpoint results for a fold.
+
+        Args:
+            et: Transverse energy bin index.
+            eta: Pseudorapidity bin index.
+            fold_idx: Cross-validation fold index.
+
+        Returns:
+            List of missing repeat indices.
+        """
+        return [
+            repeat
+            for repeat in range(self.config.n_initializations)
+            if not verify_results(
+                self.results_folder_path, et, eta, repeat, fold_idx
+            )
+        ]
+
+    def _is_region_complete(self, et: int, eta: int) -> bool:
+        """Checks whether all CV fold and repeat checkpoints exist for a region.
+
+        Args:
+            et: Transverse energy bin index.
+            eta: Pseudorapidity bin index.
+
+        Returns:
+            True if all expected checkpoints exist, False otherwise.
+        """
+        total_folds = self._get_expected_cv_folds()
+        for fold_idx in range(total_folds):
+            for repeat in range(self.config.n_initializations):
+                if not verify_results(
+                    self.results_folder_path, et, eta, repeat, fold_idx
+                ):
+                    return False
+        log.info(
+            f"Region et={et}, eta={eta} already trained. Skipping dataset and split manifest loading."
+        )
+        return True
+
+    def _get_split_manifest(self) -> SplitManifest:
+        """Lazily instantiates and caches the SplitManifest for this run."""
+        manifest_path = self.config.split_manifest_path or os.path.join(
+            self.results_folder_path, "split_manifest.json"
+        )
+        if (
+            self._split_manifest is None
+            or str(self._split_manifest.manifest_file) != str(manifest_path)
+        ):
+            self._split_manifest = SplitManifest(manifest_path)
+        return self._split_manifest
 
     @property
     def device(self) -> torch.device:
@@ -112,12 +172,14 @@ class NeuralRingerTrainer(BaseTrainer):
         Returns:
             Source file path of the processed region dataset.
         """
+        et = int(self.et)
+        eta = int(self.eta)
+        if self._is_region_complete(et, eta):
+            return str(self.full_dataset.file_paths[index])
+
         data, target, path = self.full_dataset[index]
-        manifest_path = self.config.split_manifest_path or os.path.join(
-            self.results_folder_path, "split_manifest.json"
-        )
-        manifest = SplitManifest(manifest_path)
-        region_key = f"et_{int(self.et)}_eta_{int(self.eta)}"
+        manifest = self._get_split_manifest()
+        region_key = f"et_{et}_eta_{eta}"
 
         test_data, train_cross_validation = manifest.get_or_create_region_splits(
             region_key, data, target, self.kfold
@@ -127,6 +189,10 @@ class NeuralRingerTrainer(BaseTrainer):
         ring_indices = self.full_dataset.ring_column_indices
 
         for fold_idx, (train_index, val_index) in enumerate(train_cross_validation):
+            missing_repeats = self._get_missing_repeats_for_fold(et, eta, fold_idx)
+            if not missing_repeats:
+                continue
+
             train_dl = self.factory.create_dataloader(
                 data[train_index][:, ring_indices], target[train_index]
             )
@@ -134,12 +200,7 @@ class NeuralRingerTrainer(BaseTrainer):
                 data[val_index][:, ring_indices], target[val_index]
             )
 
-            for repeat in range(self.config.n_initializations):
-                if verify_results(
-                    self.results_folder_path, self.et, self.eta, repeat, fold_idx
-                ):
-                    continue
-
+            for repeat in missing_repeats:
                 log.info(
                     f"Executing fold: {fold_idx + 1}/{total_folds}. Repeat: {repeat + 1}"
                 )

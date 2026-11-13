@@ -9,7 +9,7 @@ from .MetricPlotter import (
     RocPlotter,
 )
 from .PlotManager import PlotManager
-from .ProfilePlotter import ProfileMeanEnergyPlotter
+from .ProfilePlotter import ProfileMeanEnergyPlotter, RingPeakEnergyPlotter
 from .RegionDistributionPlotter import RegionDistributionPlotter
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "PlotTranslator",
     "BilingualPlotOrchestrator",
     "ProfileMeanEnergyPlotter",
+    "RingPeakEnergyPlotter",
     "ModelMetricsPlotter",
     "RocPlotter",
     "BoxplotSPPlotter",

@@ -16,6 +16,11 @@ from .PileupThresholdCalibrator import (
 )
 from .RegionalOperatingPointsConsolidator import RegionalOperatingPointsConsolidator
 from .LatexTableFormatter import LatexTableFormatter
+from .RingPeakEnergyAnalyzer import (
+    RingPeakEnergyAnalyzer,
+    SubdetectorDefinition,
+    SubdetectorPeakMetrics,
+)
 
 __all__ = [
     "ResultAggregator",
@@ -33,4 +38,7 @@ __all__ = [
     "Pileup2DDistribution",
     "RegionalOperatingPointsConsolidator",
     "LatexTableFormatter",
+    "RingPeakEnergyAnalyzer",
+    "SubdetectorDefinition",
+    "SubdetectorPeakMetrics",
 ]

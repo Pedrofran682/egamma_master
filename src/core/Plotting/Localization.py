@@ -138,6 +138,18 @@ class PlotTextKey(str, Enum):
     EFFICIENCY_ETA_PROPOSED_FEATURE = "efficiency.eta_proposed_feature"
     EFFICIENCY_LABEL_STANDARD_CUT = "efficiency.label_standard_cut"
     EFFICIENCY_LABEL_PROPOSED_CUT = "efficiency.label_proposed_cut"
+    PEAK_PROFILE_TITLE = "peak.profile_title"
+    PEAK_INTRA_BAR_TITLE = "peak.intra_bar_title"
+    PEAK_GLOBAL_BAR_TITLE = "peak.global_bar_title"
+    PEAK_BAR_SUPTITLE = "peak.bar_suptitle"
+    PEAK_SUBDETECTOR_XLABEL = "peak.subdetector_xlabel"
+    PEAK_INTRA_YLABEL = "peak.intra_ylabel"
+    PEAK_GLOBAL_YLABEL = "peak.global_ylabel"
+    PEAK_HEATMAP_TITLE = "peak.heatmap_title"
+    PEAK_REGION_XLABEL = "peak.region_xlabel"
+    PEAK_REGION_YLABEL = "peak.region_ylabel"
+    PEAK_HIGHLIGHT_LABEL = "peak.highlight_label"
+    PEAK_TOTAL_SUBDET_LABEL = "peak.total_subdet_label"
 
 
 class PlotTranslator:
@@ -666,6 +678,54 @@ class PlotTranslator:
         PlotTextKey.EFFICIENCY_LABEL_PROPOSED_CUT: {
             "en": "Efficiency (Proposed Cut)",
             "pt": "Eficiência (Corte Proposto)",
+        },
+        PlotTextKey.PEAK_PROFILE_TITLE: {
+            "en": "Average Energy Profile with Top-{top_k} Peak Rings Highlighted ({n_rings} Rings) - {scope}",
+            "pt": "Perfil Médio de Energia com Top-{top_k} Anéis de Pico Destacados ({n_rings} Anéis) - {scope}",
+        },
+        PlotTextKey.PEAK_INTRA_BAR_TITLE: {
+            "en": "Top-{top_k} Rings Energy Share Within Each Subdetector (Intra-Detector %)",
+            "pt": "Fração de Energia dos Top-{top_k} Anéis Dentro de Cada Subdetector (% Intra-Detector)",
+        },
+        PlotTextKey.PEAK_GLOBAL_BAR_TITLE: {
+            "en": "Top-{top_k} Rings Energy Share Across Full Calorimeter (Global %)",
+            "pt": "Fração de Energia dos Top-{top_k} Anéis no Calorímetro Total (% Global)",
+        },
+        PlotTextKey.PEAK_BAR_SUPTITLE: {
+            "en": "Subdetector Peak Ring Energy Concentration ({n_rings} Rings) - {scope}",
+            "pt": "Concentração de Energia nos Anéis de Pico por Subdetector ({n_rings} Anéis) - {scope}",
+        },
+        PlotTextKey.PEAK_SUBDETECTOR_XLABEL: {
+            "en": "Calorimeter Subdetector",
+            "pt": "Subdetector do Calorímetro",
+        },
+        PlotTextKey.PEAK_INTRA_YLABEL: {
+            "en": "Intra-Detector Energy Share (%)",
+            "pt": "Fração de Energia Intra-Detector (%)",
+        },
+        PlotTextKey.PEAK_GLOBAL_YLABEL: {
+            "en": "Total Calorimeter Energy Share (%)",
+            "pt": "Fração da Energia Total do Calorímetro (%)",
+        },
+        PlotTextKey.PEAK_HEATMAP_TITLE: {
+            "en": "Regional Top-{top_k} Peak Energy Share ({metric_label}) - {class_label}",
+            "pt": "Fração Regional de Energia nos Top-{top_k} Anéis ({metric_label}) - {class_label}",
+        },
+        PlotTextKey.PEAK_REGION_XLABEL: {
+            "en": "Calorimeter Subdetector",
+            "pt": "Subdetector do Calorímetro",
+        },
+        PlotTextKey.PEAK_REGION_YLABEL: {
+            "en": "Kinematic Region ($E_T, \\eta$)",
+            "pt": "Região Cinemática ($E_T, \\eta$)",
+        },
+        PlotTextKey.PEAK_HIGHLIGHT_LABEL: {
+            "en": "Top-{top_k} Peak Rings",
+            "pt": "Top-{top_k} Anéis de Pico",
+        },
+        PlotTextKey.PEAK_TOTAL_SUBDET_LABEL: {
+            "en": "Full Subdetector",
+            "pt": "Subdetector Completo",
         },
     }
 

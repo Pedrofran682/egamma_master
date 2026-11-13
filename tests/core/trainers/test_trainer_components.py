@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from typing import Dict
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from src.core.Trainers.TrainingFactory import TrainingFactory
 from src.core.Validation.ResultAggregator import ResultAggregator
 from src.Parser.DynamicConfiguration import DynamicConfiguration
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
+from src.utils import get_results_file_name
 
 
 class TinyClassifier(nn.Module):
@@ -190,6 +192,74 @@ class TestTrainerComponents(unittest.TestCase):
         _, best_rep_new, mean_sp_new, _ = ResultAggregator.get_best_model_details(repeat_only_df)
         self.assertEqual(best_rep_new, 2)
         self.assertAlmostEqual(mean_sp_new, 0.91)
+
+    def test_train_region_skips_dataset_and_manifest_when_region_complete(self) -> None:
+        config = self._build_config(epochs=1, n_initializations=1)
+        trainer = NeuralRingerTrainer(config)
+        trainer.results_folder_path = self.temp_dir.name
+        trainer.et = 0
+        trainer.eta = 0
+
+        expected_path = os.path.join(self.temp_dir.name, "sample.et0.eta0.npz")
+        mock_dataset = MagicMock()
+        mock_dataset.file_paths = [expected_path]
+        trainer.full_dataset = mock_dataset
+
+        for fold_idx in range(2):
+            result_file = os.path.join(
+                self.temp_dir.name, get_results_file_name(0, 0, 0, fold_idx)
+            )
+            pd.to_pickle([{"repeat": 1, "fold": fold_idx, "best_sp_value": 0.9}], result_file)
+
+        with patch("src.core.Trainers.NeuralRingerTrainer.SplitManifest") as mock_manifest_cls:
+            returned_path = trainer.train_region(0)
+
+        self.assertEqual(returned_path, expected_path)
+        mock_dataset.__getitem__.assert_not_called()
+        mock_manifest_cls.assert_not_called()
+
+    def test_train_region_skips_completed_fold_dataloader_and_caches_manifest(self) -> None:
+        torch.manual_seed(0)
+        np.random.seed(0)
+        config = self._build_config(epochs=1, n_initializations=1)
+        config.split_manifest_path = os.path.join(self.temp_dir.name, "split_manifest.json")
+        trainer = NeuralRingerTrainer(config)
+        trainer.results_folder_path = self.temp_dir.name
+        trainer.et = 0
+        trainer.eta = 0
+
+        existing_fold0 = os.path.join(
+            self.temp_dir.name, get_results_file_name(0, 0, 0, 0)
+        )
+        pd.to_pickle([{"repeat": 1, "fold": 0, "best_sp_value": 0.9}], existing_fold0)
+
+        features = np.random.randn(30, 4).astype(np.float32)
+        labels = np.array([0, 1] * 15, dtype=np.int32)
+        dataset_path = os.path.join(self.temp_dir.name, "sample.et0.eta0.npz")
+        mock_dataset = MagicMock()
+        mock_dataset.file_paths = [dataset_path]
+        mock_dataset.ring_column_indices = [0, 1, 2, 3]
+        mock_dataset.__getitem__.return_value = (features, labels, dataset_path)
+        trainer.full_dataset = mock_dataset
+
+        with patch.object(
+            trainer.factory,
+            "create_dataloader",
+            wraps=trainer.factory.create_dataloader,
+        ) as mock_create_dl:
+            returned_path = trainer.train_region(0)
+
+        self.assertEqual(returned_path, dataset_path)
+        self.assertEqual(mock_create_dl.call_count, 2)
+        self.assertTrue(
+            os.path.exists(
+                os.path.join(self.temp_dir.name, get_results_file_name(0, 0, 0, 1))
+            )
+        )
+        first_manifest = trainer._get_split_manifest()
+        second_manifest = trainer._get_split_manifest()
+        self.assertIs(first_manifest, second_manifest)
+        self.assertIn("et_0_eta_0", first_manifest.data)
 
 
 if __name__ == "__main__":
