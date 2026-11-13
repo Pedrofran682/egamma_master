@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import pandas as pd
 
 
@@ -212,13 +212,64 @@ class DistanceMetricsETL:
         return enriched
 
     @staticmethod
+    def format_table_with_uncertainties(
+        df: pd.DataFrame,
+        pairs: Sequence[Union[Tuple[str, str], Tuple[str, str, str]]],
+        id_cols: Optional[List[str]] = None,
+        precision: int = 4,
+        column_format: Optional[str] = None,
+    ) -> Tuple[pd.DataFrame, str]:
+        """Formats arbitrary metric values and uncertainty column pairs into LaTeX representation.
+
+        Args:
+            df: Source DataFrame containing values and uncertainty metrics.
+            pairs: Sequence of either (display_name, value_col, unc_col) or (value_col, unc_col).
+            id_cols: Optional identifier columns to preserve and escape in output.
+            precision: Decimal precision for floating point numbers.
+            column_format: Optional LaTeX column formatting string (e.g., 'l l c c').
+
+        Returns:
+            Tuple of (formatted_dataframe, latex_table_string).
+        """
+        formatted = pd.DataFrame()
+
+        if id_cols is not None:
+            for col in id_cols:
+                if col in df.columns:
+                    formatted[col] = df[col].apply(lambda s: str(s).replace("_", r"\_"))
+
+        norm_specs: List[Tuple[str, str, str]] = []
+        for item in pairs:
+            if len(item) == 3:
+                norm_specs.append((item[0], item[1], item[2]))
+            elif len(item) == 2:
+                norm_specs.append((item[0], item[0], item[1]))
+            else:
+                raise ValueError(f"Each pair must be (value_col, unc_col) or (display_name, value_col, unc_col), got: {item}")
+
+        for col_name, val_col, unc_col in norm_specs:
+            if val_col in df.columns and unc_col in df.columns:
+                formatted[col_name] = [
+                    f"${val:.{precision}f} \\pm {unc:.{precision}f}$"
+                    for val, unc in zip(df[val_col], df[unc_col])
+                ]
+
+        if column_format is None:
+            n_id = len([c for c in (id_cols or []) if c in df.columns])
+            n_vals = sum(1 for _, v, u in norm_specs if v in df.columns and u in df.columns)
+            column_format = " ".join(["l"] * n_id + ["c"] * n_vals)
+
+        latex_str = formatted.to_latex(index=False, escape=False, column_format=column_format)
+        return formatted, latex_str
+
+    @staticmethod
     def format_latex_table(
         df: pd.DataFrame,
         precision: int = 4,
         features: Optional[List[str]] = None,
         comparisons: Optional[List[str]] = None,
     ) -> Tuple[pd.DataFrame, str]:
-        """Formats distance metrics and uncertainties into a LaTeX table representation.
+        """Formats distance metrics and uncertainties into a LaTeX table representation (Legacy).
 
         Args:
             df: DataFrame containing Feature, Comparison, and metric/uncertainty pairs.
@@ -235,10 +286,6 @@ class DistanceMetricsETL:
         if comparisons is not None:
             filtered = filtered[filtered["Comparison"].isin(comparisons)]
 
-        formatted = pd.DataFrame()
-        formatted["Feature"] = filtered["Feature"].apply(lambda s: str(s).replace("_", r"\_"))
-        formatted["Comparison"] = filtered["Comparison"].apply(lambda s: str(s).replace("_", r"\_"))
-
         metric_specs = [
             ("KS Distance ($D$)", "KS Distance (D)", "KS Uncertainty"),
             ("Wasserstein ($W_1$)", "Wasserstein Distance", "Wasserstein Uncertainty"),
@@ -246,14 +293,12 @@ class DistanceMetricsETL:
             ("JS Divergence", "JS Divergence", "JS Uncertainty"),
         ]
 
-        for col_name, val_col, unc_col in metric_specs:
-            if val_col in filtered.columns and unc_col in filtered.columns:
-                formatted[col_name] = [
-                    f"${val:.{precision}f} \\pm {unc:.{precision}f}$"
-                    for val, unc in zip(filtered[val_col], filtered[unc_col])
-                ]
-
-        latex_str = formatted.to_latex(index=False, escape=False, column_format="l l c c c c")
-        return formatted, latex_str
+        return DistanceMetricsETL.format_table_with_uncertainties(
+            df=filtered,
+            pairs=metric_specs,
+            id_cols=["Feature", "Comparison"],
+            precision=precision,
+            column_format="l l c c c c",
+        )
 
 

@@ -131,3 +131,37 @@ def test_format_latex_table():
     assert r"\begin{tabular}" in latex_str
     assert r"$0.0123 \pm 0.0045$" in latex_str
 
+
+def test_format_table_with_uncertainties():
+    custom_df = pd.DataFrame({
+        "Operating_Point": ["Loose", "Tight"],
+        "Signal_Eff": [0.9424, 0.8812],
+        "Signal_Eff_Unc": [0.0015, 0.0020],
+        "Fake_Rate": [0.0531, 0.0210],
+        "Fake_Rate_Unc": [0.0008, 0.0005],
+    })
+
+    # Test with 3-element tuples (display_name, val_col, unc_col)
+    pairs_3 = [
+        (r"$\varepsilon_{\text{sig}}$", "Signal_Eff", "Signal_Eff_Unc"),
+        (r"Fake Rate", "Fake_Rate", "Fake_Rate_Unc"),
+    ]
+    fmt_df_3, latex_3 = DistanceMetricsETL.format_table_with_uncertainties(
+        custom_df, pairs=pairs_3, id_cols=["Operating_Point"], precision=3
+    )
+
+    assert "Operating_Point" in fmt_df_3.columns
+    assert fmt_df_3["Operating_Point"].iloc[0] == "Loose"
+    assert fmt_df_3[r"$\varepsilon_{\text{sig}}$"].iloc[0] == r"$0.942 \pm 0.002$"
+    assert r"$0.053 \pm 0.001$" in latex_3
+
+    # Test with 2-element tuples (val_col, unc_col)
+    pairs_2 = [
+        ("Signal_Eff", "Signal_Eff_Unc"),
+    ]
+    fmt_df_2, latex_2 = DistanceMetricsETL.format_table_with_uncertainties(
+        custom_df, pairs=pairs_2, id_cols=["Operating_Point"]
+    )
+    assert "Signal_Eff" in fmt_df_2.columns
+    assert fmt_df_2["Signal_Eff"].iloc[0] == r"$0.9424 \pm 0.0015$"
+
