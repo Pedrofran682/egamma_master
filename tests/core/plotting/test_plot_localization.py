@@ -19,7 +19,10 @@ from src.core.Plotting.MetricPlotter import (
 )
 from src.core.Plotting.PileupPlotter import PileupPlotter
 from src.core.Plotting.PlotManager import PlotManager
-from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
+from src.core.Plotting.ProfilePlotter import (
+    ProfileMeanEnergyPlotter,
+    StreamingRingProfileAccumulator,
+)
 from src.core.Plotting.QuadrantPlotter import QuadrantPlotter
 from src.core.Plotting.RegionDistributionPlotter import RegionDistributionPlotter
 from src.core.Validation.EfficiencyPlotter import EfficiencyPlotter
@@ -219,12 +222,26 @@ def test_metric_plotters_bilingual_generation_and_text(tmp_path: pathlib.Path) -
 
 
 def test_profile_plotter_bilingual(tmp_path: pathlib.Path) -> None:
+    from src.utils import norm1
+
     rng = np.random.default_rng(7)
     data = rng.uniform(0.1, 1.0, size=(30, 10))
     target = np.array([1] * 15 + [0] * 15)
 
+    acc = StreamingRingProfileAccumulator(n_rings=10)
+    acc.update(data[:12], target[:12])
+    acc.update(data[12:], target[12:])
+    mean_sig, std_sig, mean_bg, std_bg = acc.compute_stats()
+    normed = norm1(data)
+    assert np.allclose(mean_sig, np.mean(normed[target == 1], axis=0))
+    assert np.allclose(std_sig, np.std(normed[target == 1], axis=0))
+    assert np.allclose(mean_bg, np.mean(normed[target == 0], axis=0))
+    assert np.allclose(std_bg, np.std(normed[target == 0], axis=0))
+
     captured_xlabels: Dict[str, List[str]] = {"en": [], "pt": []}
+    captured_titles: Dict[str, List[str]] = {"en": [], "pt": []}
     original_set_xlabel = matplotlib.axes.Axes.set_xlabel
+    original_set_title = matplotlib.axes.Axes.set_title
 
     for lang in ("en", "pt"):
         lang_dir = tmp_path / lang
@@ -241,14 +258,49 @@ def test_profile_plotter_bilingual(tmp_path: pathlib.Path) -> None:
             captured_xlabels[lang].append(str(label))
             return original_set_xlabel(self_ax, label, *args, **kwargs)
 
-        with patch.object(matplotlib.axes.Axes, "set_xlabel", _spy_set_xlabel):
-            saved = ProfileMeanEnergyPlotter(language=lang).plot(ctx, x_rings=data)
+        def _spy_set_title(self_ax, label, *args, **kwargs):
+            captured_titles[lang].append(str(label))
+            return original_set_title(self_ax, label, *args, **kwargs)
 
-        assert pathlib.Path(saved).exists()
-        assert pathlib.Path(saved).stat().st_size > 0
+        reg_title = PlotTranslator.translate(
+            PlotTextKey.PROFILE_REGIONAL_TITLE,
+            language=lang,
+            n_rings=10,
+            region="et1_eta1",
+        )
+        glob_title = PlotTranslator.translate(
+            PlotTextKey.PROFILE_GLOBAL_TITLE,
+            language=lang,
+            n_rings=10,
+            n_regions=2,
+        )
+
+        with (
+            patch.object(matplotlib.axes.Axes, "set_xlabel", _spy_set_xlabel),
+            patch.object(matplotlib.axes.Axes, "set_title", _spy_set_title),
+        ):
+            plotter = ProfileMeanEnergyPlotter(language=lang)
+            saved = plotter.plot(ctx, x_rings=data, plot_title=reg_title)
+            saved_global = plotter.plot_from_stats(
+                mean_signal=mean_sig,
+                std_signal=std_sig,
+                mean_bkg=mean_bg,
+                std_bkg=std_bg,
+                output_dir=str(lang_dir),
+                filename="global_test_profile.pdf",
+                plot_title=glob_title,
+                language=lang,
+            )
+
+        assert pathlib.Path(saved).exists() and pathlib.Path(saved).stat().st_size > 0
+        assert pathlib.Path(saved_global).exists() and pathlib.Path(saved_global).stat().st_size > 0
 
     assert "Calorimeter Ring Index" in captured_xlabels["en"]
     assert "Índice do Anel no Calorímetro" in captured_xlabels["pt"]
+    assert any("Average Energy Profile (10 Rings) - Region et1_eta1" in t for t in captured_titles["en"])
+    assert any("Perfil Médio de Energia (10 Anéis) - Região et1_eta1" in t for t in captured_titles["pt"])
+    assert any("Global Average Energy Profile (10 Rings)" in t for t in captured_titles["en"])
+    assert any("Perfil Médio Global de Energia (10 Anéis)" in t for t in captured_titles["pt"])
 
 
 def test_region_distribution_plotter_bilingual(tmp_path: pathlib.Path) -> None:

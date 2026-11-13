@@ -46,6 +46,16 @@ class PlotTextKey(str, Enum):
     PROFILE_BACKGROUND_LABEL = "profile.background_label"
     PROFILE_XLABEL = "profile.xlabel"
     PROFILE_YLABEL = "profile.ylabel"
+    PROFILE_REGIONAL_TITLE = "profile.regional_title"
+    PROFILE_GLOBAL_TITLE = "profile.global_title"
+    DATASET_DIST_REGIONAL_TITLE = "dataset_dist.regional_title"
+    DATASET_DIST_GLOBAL_TITLE = "dataset_dist.global_title"
+    DATASET_DIST_YLABEL_DENSITY = "dataset_dist.ylabel_density"
+    DATASET_DIST_YLABEL_COUNTS = "dataset_dist.ylabel_counts"
+    DATASET_DIST_LOG_SUFFIX = "dataset_dist.log_suffix"
+    DATASET_YIELD_XLABEL = "dataset_yield.xlabel"
+    DATASET_YIELD_YLABEL = "dataset_yield.ylabel"
+    DATASET_YIELD_TITLE = "dataset_yield.title"
     CONV_TITLE = "conv.title"
     SALIENCY_SIGNAL_MEAN = "saliency.signal_mean"
     SALIENCY_SIGNAL_STD = "saliency.signal_std"
@@ -288,6 +298,46 @@ class PlotTranslator:
         PlotTextKey.PROFILE_YLABEL: {
             "en": "Normalized Energy",
             "pt": "Energia Normalizada",
+        },
+        PlotTextKey.PROFILE_REGIONAL_TITLE: {
+            "en": "Average Energy Profile ({n_rings} Rings) - Region {region}",
+            "pt": "Perfil Médio de Energia ({n_rings} Anéis) - Região {region}",
+        },
+        PlotTextKey.PROFILE_GLOBAL_TITLE: {
+            "en": "Global Average Energy Profile ({n_rings} Rings) - All Processed Regions ({n_regions} regions)",
+            "pt": "Perfil Médio Global de Energia ({n_rings} Anéis) - Todas as Regiões Processadas ({n_regions} regiões)",
+        },
+        PlotTextKey.DATASET_DIST_REGIONAL_TITLE: {
+            "en": "Distribution of {variable} (Region {region})",
+            "pt": "Distribuição de {variable} (Região {region})",
+        },
+        PlotTextKey.DATASET_DIST_GLOBAL_TITLE: {
+            "en": "Global Distribution of {variable} - All Processed Regions ({n_regions} regions)",
+            "pt": "Distribuição Global de {variable} - Todas as Regiões Processadas ({n_regions} regiões)",
+        },
+        PlotTextKey.DATASET_DIST_YLABEL_DENSITY: {
+            "en": "Density",
+            "pt": "Densidade",
+        },
+        PlotTextKey.DATASET_DIST_YLABEL_COUNTS: {
+            "en": "Counts",
+            "pt": "Contagens",
+        },
+        PlotTextKey.DATASET_DIST_LOG_SUFFIX: {
+            "en": " (log scale)",
+            "pt": " (escala log)",
+        },
+        PlotTextKey.DATASET_YIELD_XLABEL: {
+            "en": "Calorimeter Kinematic Region (ET, ETA)",
+            "pt": "Região Cinemática do Calorímetro (ET, ETA)",
+        },
+        PlotTextKey.DATASET_YIELD_YLABEL: {
+            "en": "Event Count",
+            "pt": "Contagem de Eventos",
+        },
+        PlotTextKey.DATASET_YIELD_TITLE: {
+            "en": "Event Yield Distribution across Calorimeter Regions",
+            "pt": "Distribuição de Eventos nas Regiões do Calorímetro",
         },
         PlotTextKey.CONV_TITLE: {
             "en": "Feature Extraction - Conv layer output",
