@@ -32,7 +32,7 @@
 
 
 # python main.py --config config/NeuralRinger/ModelV9_HighBatch_100Rings.yaml --split_manifest results/split_manifest.json --results_path results/config_nameModelV9_HighBatch_100Rings_id20261105222012
-python main.py --config config/NeuralRinger/ModelV9_HighBatch_50Rings.yaml --split_manifest results/split_manifest.json --results_path results/config_nameModelV9_HighBatch_50Rings_id20261109122259
+# python main.py --config config/NeuralRinger/ModelV9_HighBatch_50Rings.yaml --split_manifest results/split_manifest.json --results_path results/config_nameModelV9_HighBatch_50Rings_id20261109122259
 
-python main.py --config config/NeuralRinger/ModelV10_HighBatch_100Rings.yaml --split_manifest results/split_manifest.json
+python main.py --config config/NeuralRinger/ModelV10_HighBatch_100Rings.yaml --split_manifest results/split_manifest.json  --results_path results/config_nameModelV10_HighBatch_100Rings_id20261112210846
 python main.py --config config/NeuralRinger/ModelV10_HighBatch_50Rings.yaml --split_manifest results/split_manifest.json
