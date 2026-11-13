@@ -1,0 +1,47 @@
+config_name: "ModelV1_HighBatch_newExtraction_20_regions_50Rings_medium"
+batch_size: 512
+epochs: 100
+n_initializations: 5
+pred_target_limiar: 0.5
+num_workers: 4
+debug: false
+balance_data: False
+trigger_filter: "ph_medium"
+use_trigger_filter: True
+
+
+et_range_idx: [1]
+eta_range_idx: [1]
+
+loss_function:
+  module: "torch.nn"
+  object_name: "BCELoss"
+
+optimizer_function:
+  module: "torch.optim"
+  object_name: "Adam"
+  parameters:
+    lr: 0.010
+
+kFold:
+  module: "sklearn.model_selection"
+  object_name: "StratifiedKFold"
+  parameters:
+    n_splits: 10
+    random_state: 42
+    shuffle: True
+
+model:
+  module: "src.Models.egamma.ModelV1"
+  object_name: "ModelV1"
+  parameters:
+    input_dim: 50
+
+dataset:
+  module: "src.core.Datasets.EgammaNpzDataset"
+  object_name: "EgammaNpzDataset"
+  parameters:
+    drive_path: "/eos/user/p/pmourafr/RootFiles/dataSetup/concatenated_results/"
+    startswith: "consolidated.et"
+    endswith: ".npz"
+    percentage: 0.5

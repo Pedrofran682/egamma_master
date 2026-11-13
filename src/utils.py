@@ -1,443 +1,642 @@
-from pathlib import Path
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-from sklearn.metrics import roc_curve, roc_auc_score
+import importlib
+import logging
 import os
-from typing import Union, Callable, Tuple 
-from typing import Union, Callable, Tuple 
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from scipy import special, stats
+import torch
+from torch.utils.data import WeightedRandomSampler
+
+from src.Models.Models import get_model
+from src.Parser.DynamicConfiguration import DynamicConfiguration
+
+log = logging.getLogger()
 
 
-def create_folder(new_folder_name: str , base_path: str = "results") -> str:
-    folder_path = Path(base_path) / new_folder_name 
+def get_best_sp_model(
+    training_results_list: pd.DataFrame,
+    model_builder_tag: str,
+    input_dimensions: int,
+) -> Tuple[Optional[torch.nn.Module], Optional[pd.Series]]:
+    """Retrieve the model and checkpoint info with the highest SP value.
+
+    Args:
+        training_results_list: DataFrame containing training fold records.
+        model_builder_tag: Architecture identifier tag.
+        input_dimensions: Number of input features for the network.
+
+    Returns:
+        Tuple containing the instantiated model with loaded weights and the record series.
+    """
+    if not (training_results_list.shape[0] > 0):
+        log.error("A lista de resultados de treinamento está vazia.")
+        return None, None
+
+    highest_sp_model_info = training_results_list.iloc[
+        np.argmax(training_results_list["best_sp_value"])
+    ]
+
+    try:
+        best_overall_sp_model = get_model(model_builder_tag, input_dimensions)
+        best_overall_sp_model.load_state_dict(highest_sp_model_info["best_weights"])
+        return best_overall_sp_model, highest_sp_model_info
+    except Exception as e:
+        log.info(
+            f"Não foi possível carregar o modelo com os pesos fornecidos. Motivo: {e}"
+        )
+        raise e
+
+
+def create_folder(new_folder_name: str, base_path: str = "results") -> str:
+    """Create a directory if it does not exist.
+
+    Args:
+        new_folder_name: Subdirectory name to create.
+        base_path: Root parent path.
+
+    Returns:
+        Created directory path as a string.
+    """
+    folder_path = Path(base_path) / new_folder_name
     try:
         folder_path.mkdir(parents=True, exist_ok=True)
-        print(f"Folder '{folder_path}' created or already exists (using pathlib).")
+        log.info(f"Folder '{folder_path}' created or already exists.")
     except OSError as error:
-        print(f"Error creating directory '{folder_path}': {error}")
+        log.error(f"Error creating directory '{folder_path}': {error}")
     return str(folder_path)
 
 
 def norm1(data: np.ndarray) -> np.ndarray:
-      norms = np.abs( data.sum(axis=1) )
-      norms[norms==0] = 1
-      return data / norms[:, None]
+    """Normalize input samples along axis 1 by their L1 norm.
+
+    Args:
+        data: 2D array of feature vectors.
+
+    Returns:
+        L1-normalized array where row sums equal 1.
+    """
+    norms = np.abs(data.sum(axis=1))
+    norms[norms == 0] = 1
+    return data / norms[:, None]
 
 
-# def plot_profile_mean_energy_rings(signal_data:  np.ndarray, bg_data:  np.ndarray,
-#                                    folder_path: str, iet: int, ieta: int,
-#                                   percentage: float=1.) -> None:
-#     signal = norm1(signal_data)
-#     background = norm1(bg_data)
+def compute_saliency_map(x: np.ndarray, model: torch.nn.Module) -> np.ndarray:
+    """Compute normalized gradient saliency map for a single sample.
 
-#     x_axis = np.arange(len(signal[0]))
-#     number_of_rings = len(signal[0,:])
-#     mean_ringsSignal = np.mean(signal, axis=0)
-#     std_ringsSignal = np.std(signal, axis=0)
+    Args:
+        x: 1D feature array for a single event.
+        model: Trained PyTorch neural network.
 
-#     mean_ringBKG = np.mean(background, axis=0)
-#     std_ringBKG = np.std(background, axis=0)
-    
-#     yAxis_max = np.max(mean_ringBKG) if np.max(mean_ringBKG) > np.max(mean_ringsSignal) else np.max(mean_ringsSignal)
-#     # Subdetectores e cores
-#     subdet_names = ['PreSampler', 'EM1', 'EM2', 'EM3', 'TileCal']
-#     indexes = np.array(get_rings_index(percentage))
-#     subdet_x = [0, 
-#                 np.where(indexes == 8)[0][0],
-#                 np.where(indexes == 72)[0][0],
-#                 np.where(indexes == 80)[0][0],
-#                 np.where(indexes == 88)[0][0]]
-#     subdet_colors = ['#1b9e77', '#d95f09', '#7570b3', '#e7298a', '#66a61e']
-
-#     plt.figure(figsize=(10, 5), clear=True, num=1)
-#     # --- Curva Fóton ---
-#     plt.errorbar(x_axis, mean_ringsSignal, std_ringsSignal,
-#                  marker='o', mfc='navy', mec='navy', ms=3,
-#                  mew=0.5, elinewidth=0.8, capsize=2,
-#                  ecolor='navy', color='navy',
-#                  label='Fóton')
-#     # --- Curva Jatos Hadrônicos ---
-#     plt.errorbar(x_axis, mean_ringBKG, std_ringBKG,
-#                  marker='s', mfc='darkorange', mec='darkorange', ms=3,
-#                  mew=0.5, elinewidth=0.8, capsize=2,
-#                  ecolor='darkorange', color='darkorange',
-#                  label='Jatos Hadrônicos')
-#     # --- Linhas verticais e rótulos mais baixos (y=0.66) ---
-#     for x, name, color in zip(subdet_x, subdet_names, subdet_colors):
-#         plt.axvline(x=x, color=color, linestyle='--', linewidth=1)
-#         plt.text(x+1.2, yAxis_max * 1.2, name, rotation=90,
-#                  va='bottom', ha='center', fontsize=9, color=color)
-#     # --- Estilo dos eixos ---
-#     plt.xlabel('Anéis', fontsize=13)
-#     plt.ylabel('Energia Normalizada', fontsize=13)
-#     plt.xticks(ticks=np.linspace(0, number_of_rings, 10, dtype=int),
-#                labels=[str(i+1) for i in np.linspace(0, number_of_rings, 10, dtype=int)],
-#                fontsize=11)
-#     plt.yticks(fontsize=11)
-#     # plt.xlim(-1, number_of_rings)
-#     plt.ylim(-0.05, yAxis_max * 1.5)
-#     plt.grid(True, linestyle='--', alpha=0.6)
-#     # --- Legenda sinal/fundo ---
-#     plt.legend(fontsize=10, loc='upper right')
-#     plt.title('Perfil Médio de Energia nos Anéis - NeuralRinger', fontsize=14)
-#     # --- Salvar com bounding box que inclui textos externos ---
-#     plt.tight_layout()
-#     try:
-#         plt.savefig(os.path.join(folder_path,
-#                                  f"et{iet}.eta{ieta}.RingsMeanProfiles_Ylim_OK_Rotulos_OK_NeuralRinger.pdf"),
-#                     format='pdf',
-#                     dpi=300,
-#                     transparent=True, 
-#                     bbox_inches='tight')
-#         # plt.show()
-#         # https://stackoverflow.com/questions/28757348/how-to-clear-memory-completely-of-all-matplotlib-plots
-#         # plt.close()
-#     except Exception as e:
-#         # plt.close()
-#         raise
-        
-#     df = pd.DataFrame({
-#         'signal_data': signal_data,
-#         'bg_data': bg_data,
-#     })
-#     df.to_pickle(os.path.join(folder_path, 'plot_profile_mean_energy_rings.pkl'))
+    Returns:
+        Min-max normalized 1D saliency array across input features.
+    """
+    x_tensor = torch.from_numpy(x[np.newaxis, :]).float().requires_grad_(True)
+    pred = model(x_tensor)
+    grad = torch.autograd.grad(outputs=pred.sum(), inputs=x_tensor)[0]
+    saliency = np.abs(grad.numpy()[0])
+    smin, smax = saliency.min(), saliency.max()
+    saliency_norm = (saliency - smin) / (smax - smin + 1e-8)
+    return saliency_norm
 
 
-def plot_boxplot_SP(data_type: str,
-                    all_training_results:  dict[str, Union[str, int, object]],
-                    folder_path: str, iet: int, ieta: int,
-                   should_plot = False) -> None:
-    if should_plot:
-        if not all_training_results:
-            print("Erro: A lista 'all_training_results' está vazia. Por favor, execute o treinamento primeiro.")
-        else:
-            if data_type == "best_sp_value":
-                title = 'Distribuição do Índice SP por Fold (Agregado pelas Inicializações)'
-                y_label = 'Melhor Índice SP'
-            if data_type == "best_fa_value":
-                title = 'Distribuição do FA por Fold (Agregado pelas Inicializações)'
-                y_label = 'Fake Rate'
-            if data_type == "best_pd_value":
-                title = 'Distribuição do PD por Fold (Agregado pelas Inicializações)'
-                y_label = 'Efficiency'
-            # --- 1. Converter a lista de dicionários em um DataFrame Pandas ---
-            df_results = pd.DataFrame(all_training_results)
-        
-            # Filtrar qualquer entrada onde 'best_sp_value' seja None (se houver)
-            df_results = df_results.dropna(subset=[data_type])
-            if df_results.empty:
-                print("Nenhum dado válido encontrado para plotar boxplots.")
-            else:
-                # --- 2. Plotar os Boxplots do Índice SP por Fold ---
-                plt.figure(figsize=(12, 7), clear=True, num=1)
-                # 'x='fold'' agrupará os boxplots por fold.
-                # 'y='best_sp_value'' será a métrica de cada boxplot.
-                # 'data=df_results' especifica o DataFrame.
-                sns.boxplot(x='fold', y=data_type, data=df_results, palette='plasma',
-                            hue='fold', legend=False)
-                # O swarmplot adiciona os pontos individuais, mostrando a densidade dos dados.
-                sns.swarmplot(x='fold', y=data_type, data=df_results, 
-                              palette='dark:black', alpha=0.7, size=3, 
-                              hue='fold', legend=False)
-        
-                plt.title(title)
-                plt.xlabel('Número do Fold')
-                plt.ylabel(y_label)
-                plt.grid(axis='y', linestyle='--', alpha=0.7)
-                # Ajusta os rótulos do eixo X para serem mais legíveis, começando do Fold 1
-                plt.xticks(ticks=range(df_results['fold'].max() + 1), 
-                           labels=[f'Fold {f+1}' for f in range(df_results['fold'].max() + 1)])
-                plt.tight_layout()
-                fold_file_template = "iet{iet}.ieta{ieta}_{data_type}.pdf".format(
-                    ieta = ieta, 
-                    iet = iet,
-                    data_type = data_type)
-                plt.savefig(os.path.join(folder_path, fold_file_template))
-                # plt.show()
-                # plt.close()
+def compute_mean_std_saliency(
+    X_subset: np.ndarray,
+    model: torch.nn.Module,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute mean and standard deviation saliency profiles across a sample subset.
+
+    Args:
+        X_subset: 2D array of samples.
+        model: PyTorch neural network.
+
+    Returns:
+        Tuple of (mean_saliency, std_saliency) 1D arrays.
+    """
+    saliency_list = [compute_saliency_map(x, model) for x in X_subset]
+    saliency_array = np.stack(saliency_list)
+    return np.mean(saliency_array, axis=0), np.std(saliency_array, axis=0)
+
+
+def get_results_file_name(et: int, eta: int, repeat: int, fold_idx: int) -> str:
+    """Format standard pickle filename for a fold result.
+
+    Args:
+        et: Transverse energy bin index.
+        eta: Pseudorapidity bin index.
+        repeat: Repetition run index.
+        fold_idx: Cross-validation fold index.
+
+    Returns:
+        Formatted filename string.
+    """
+    return f"repeat{repeat}.fold_idx{fold_idx}.iet{et}.ieta{eta}.pkl"
+
+
+def verify_results(
+    folder_path: str, et: int, eta: int, repeat: int, fold_idx: int
+) -> bool:
+    """Check if a specific fold result pickle file exists.
+
+    Args:
+        folder_path: Destination results folder.
+        et: Transverse energy bin index.
+        eta: Pseudorapidity bin index.
+        repeat: Repetition run index.
+        fold_idx: Cross-validation fold index.
+
+    Returns:
+        True if the result file exists, False otherwise.
+    """
+    file2verify = os.path.join(
+        folder_path, get_results_file_name(et, eta, repeat, fold_idx)
+    )
+    log.info(f"Verifying {file2verify}")
+    if os.path.exists(file2verify):
+        log.info(f"{file2verify} already processed")
+        return True
+    return False
+
+
+def get_et_eta(file_path: str) -> Tuple[int, int]:
+    """Extract et and eta bin indices from a file path string.
+
+    Args:
+        file_path: File name or path containing 'et' and 'eta' tokens.
+
+    Returns:
+        Tuple of integer (et, eta) indices.
+
+    Raises:
+        ValueError: If et or eta cannot be parsed from the path.
+    """
+    regex_pattern = r"et(\d+).*?eta(\d+)"
+    match = re.search(regex_pattern, file_path)
+
+    if match:
+        et = match.group(1)
+        eta = match.group(2)
+        return int(et), int(eta)
+    raise ValueError(f"Could not get et or eta value from file path: {file_path}")
+
+
+def get_results(folder_path: str) -> List[Dict[str, Any]]:
+    """Parse and summarize all fold results from a results directory.
+
+    Args:
+        folder_path: Path containing pickle result files.
+
+    Returns:
+        List of dictionaries with aggregated metric summaries for each file.
+    """
+    listed_files = [
+        file
+        for file in os.listdir(folder_path)
+        if (file.endswith(".pkl") and not file.startswith(".sys.v#."))
+    ]
+    all_metrics: List[Dict[str, Any]] = []
+    for file in listed_files:
+        data = pd.DataFrame(pd.read_pickle(os.path.join(folder_path, file)))
+        data = data[
+            [
+                "file_path",
+                "fold",
+                "best_sp_value",
+                "best_fa_value",
+                "best_pd_value",
+                "history",
+            ]
+        ]
+        metrics: Dict[str, Any] = {
+            "source_file": None,
+            "mean_sp": 0.0,
+            "std_sp": 0.0,
+            "mean_fa": 0.0,
+            "std_fa": 0.0,
+            "mean_pd": 0.0,
+            "std_pd": 0.0,
+        }
+
+        metrics["mean_sp"], metrics["std_sp"] = get_metrics(data, "best_sp_value")
+        metrics["mean_fa"], metrics["std_fa"] = get_metrics(data, "best_fa_value")
+        metrics["mean_pd"], metrics["std_pd"] = get_metrics(data, "best_pd_value")
+        metrics["source_file"] = file
+
+        metrics["folder_path"] = folder_path
+        max_score_index = data["best_sp_value"].idxmax()
+        row_of_max_value = data.loc[max_score_index]
+        metrics["auc"] = row_of_max_value["history"]["callbackMetrics"]["auc_score"]
+        metrics["best_sp_value"] = row_of_max_value["best_sp_value"]
+        metrics["best_fa_value"] = row_of_max_value["best_fa_value"]
+        metrics["best_pd_value"] = row_of_max_value["best_pd_value"]
+
+        all_metrics.append(metrics)
+    return all_metrics
+
+
+def get_metrics(df: pd.DataFrame, column: str) -> Tuple[float, float]:
+    """Calculate mean and standard deviation for a DataFrame column.
+
+    Args:
+        df: Input DataFrame.
+        column: Target column name.
+
+    Returns:
+        Tuple of (mean, standard_deviation).
+    """
+    mean_value = float(df[column].mean())
+    std_value = float(df[column].std())
+    return mean_value, std_value
+
+
+def extract_percentage(row: pd.Series) -> str:
+    """Extract ring percentage identifier from folder_path in a series row.
+
+    Args:
+        row: Series containing a 'folder_path' entry.
+
+    Returns:
+        Extracted percentage string, or fallback failure message.
+    """
+    match = re.search(r"dim(\d+\.\d+)", row["folder_path"])
+    if match:
+        return match.group(1)
+    return "extract_percentage function failed"
+
+
+def extract_model_name(row: pd.Series) -> str:
+    """Extract model name identifier from folder_path in a series row.
+
+    Args:
+        row: Series containing a 'folder_path' entry.
+
+    Returns:
+        Extracted model name string, or fallback failure message.
+    """
+    match = re.search(r"(modelV\d+)", row["folder_path"])
+    if match:
+        return match.group(1)
+    return "extract_model_name function failed"
+
+
+def extract_et(row: pd.Series) -> str:
+    """Extract et index from source_file name in a series row.
+
+    Args:
+        row: Series containing a 'source_file' entry.
+
+    Returns:
+        Extracted et index string, or fallback failure message.
+    """
+    match = re.search(r"iet(\d+)\.ieta(\d+)", row["source_file"])
+    if match:
+        return match.group(1)
+    return "extract_et function failed"
+
+
+def extract_eta(row: pd.Series) -> str:
+    """Extract eta index from source_file name in a series row.
+
+    Args:
+        row: Series containing a 'source_file' entry.
+
+    Returns:
+        Extracted eta index string, or fallback failure message.
+    """
+    match = re.search(r"iet(\d+)\.ieta(\d+)", row["source_file"])
+    if match:
+        return match.group(2)
+    return "extract_eta function failed"
+
+
+def get_instance(configuration: DynamicConfiguration) -> Any:
+    """Instantiate a class dynamically from configuration parameters.
+
+    Args:
+        configuration: DynamicConfiguration specifying module, object, and parameters.
+
+    Returns:
+        Instantiated class object.
+
+    Raises:
+        ValueError: If module cannot be imported or object is missing.
+    """
+    try:
+        module = importlib.import_module(configuration.module)
+        target_class = getattr(module, configuration.object_name)
+        return target_class(**configuration.parameters)
+    except ImportError:
+        raise ValueError(f"Could not import module '{configuration.module}'")
+    except AttributeError:
+        raise ValueError(
+            f"Could not find '{configuration.object_name}' in '{configuration.module}'"
+        )
+    except Exception as e:
+        raise ValueError(f"Error initializing {configuration.object_name}: {e}")
+
+
+def get_class_weight(target: Union[np.ndarray, torch.Tensor]) -> WeightedRandomSampler:
+    """Create a WeightedRandomSampler to balance class frequencies.
+
+    Args:
+        target: Target label array or tensor (binary/multiclass).
+
+    Returns:
+        Configured PyTorch WeightedRandomSampler.
+    """
+    log.info("Creating samples_weight")
+    if isinstance(target, torch.Tensor):
+        target_np = target.detach().cpu().numpy().flatten()
     else:
-        df_results = pd.DataFrame(all_training_results)
-        df_results.to_pickle(
-            os.path.join(folder_path, f'iet{iet}.ieta{ieta}.{data_type}_plot_boxplot_SP.pkl'))
+        target_np = target.flatten()
 
-# def get_best_sp_model(training_results_list: list[dict],
-#                       model_builder_tag: str,
-#                       input_dimensions: int) ->  Tuple[tf.keras.Sequential, 
-#                                                 dict[str, Union[str, int, object]]]:
-#     """
-#     Identifica e retorna o modelo Keras com o maior índice SP de uma lista de resultados de treinamento.
+    class_sample_count = np.array(
+        [len(np.where(target_np == t)[0]) for t in np.unique(target_np)]
+    )
+    weight = 1.0 / class_sample_count
+    samples_weight = np.array([weight[int(t)] for t in target_np])
 
-#     Args:
-#         training_results_list (list): Uma lista de dicionários, onde cada dicionário
-#                                       contém 'fold', 'repeat', 'best_sp_value',
-#                                       'best_weights' e 'keras_history'.
-#         model_builder_fn (function): Uma função que reconstrói a arquitetura do modelo
-#                                      (ex: build_model(input_dim)).
-#         input_dimensions (int): A dimensão de entrada necessária para construir o modelo.
-
-#     Returns:
-#         tf.keras.Model: O modelo Keras com os pesos correspondentes ao maior SP.
-#         dict: As informações completas da rodada que produziu o melhor modelo.
-#               Retorna (None, None) se a lista estiver vazia ou nenhum modelo foi salvo.
-#     """
-#     if not training_results_list:
-#         print("A lista de resultados de treinamento está vazia.")
-#         return None, None
-
-#     highest_sp_model_info = None
-#     max_sp_index_global = -float('inf')
-
-#     for run_info in training_results_list:
-#         current_sp = run_info.get('best_sp_value', -float('inf'))
-
-#         # Ignora entradas onde best_weights não foi salvo (ex: devido a um SP inicial de 0)
-#         if run_info.get('best_weights') is None:
-#             continue
-
-#         if current_sp > max_sp_index_global:
-#             max_sp_index_global = current_sp
-#             highest_sp_model_info = run_info
-
-#     if highest_sp_model_info:
-#         # print(f"\n--- Modelo com o mais alto índice SP encontrado ---")
-#         # print(f"  Fold: {highest_sp_model_info['fold']+1}")
-#         # print(f"  Inicialização: {highest_sp_model_info['repeat']+1}")
-#         # print(f"  Melhor Índice SP: {highest_sp_model_info['best_sp_value']:.4f}")
-
-#         # Recriar a arquitetura do modelo
-#         best_overall_sp_model = build_model(input_dimensions, model_builder_tag)
-
-#         # Carregar os melhores pesos
-#         best_overall_sp_model.set_weights(highest_sp_model_info['best_weights'])
-
-#         # print("Modelo recuperado com sucesso e pronto para uso!")
-#         return best_overall_sp_model, highest_sp_model_info
-#     else:
-#         print("Nenhum modelo com pesos salvos foi encontrado na lista fornecida.")
-#         return None, None
+    samples_weight_tensor = torch.from_numpy(samples_weight)
+    number_generator = torch.Generator().manual_seed(42)
+    return WeightedRandomSampler(
+        samples_weight_tensor,  # type: ignore
+        len(samples_weight_tensor),
+        generator=number_generator,
+    )
 
 
-def plot_model_metrics(best_model_details: dict[str, Union[str, int, object]]) -> None:
-    if best_model_details is None:
-        print("Erro: Detalhes do melhor modelo não encontrados. Por favor, execute 'get_best_sp_model' primeiro.")
+def save_table(
+    table: pd.DataFrame,
+    directory: Union[str, Path],
+    region_key: str,
+    name: str,
+) -> Path:
+    """Persists a results table as CSV with a region-prefixed filename.
+
+    Args:
+        table: DataFrame to persist.
+        directory: Destination folder (created if missing).
+        region_key: Kinematic region identifier used as filename prefix.
+        name: Descriptive table name.
+
+    Returns:
+        Path of the written CSV file.
+    """
+    dir_path = Path(directory)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    csv_path = dir_path / f"{region_key}_{name}.csv"
+    table.to_csv(csv_path, index=False)
+    log.info(f"Saved table: {csv_path}")
+    return csv_path
+
+
+def extract_feature_values(
+    features: np.ndarray,
+    names: np.ndarray,
+    feat_name: str,
+) -> np.ndarray:
+    """Extracts raw feature column or calculates derived physics variables like Eratio.
+
+    Args:
+        features: Event feature matrix of shape (N, D).
+        names: Column feature names array of shape (D,).
+        feat_name: Target variable name.
+
+    Returns:
+        1D numpy array of values.
+    """
+    name_to_idx = {name.strip(): i for i, name in enumerate(names)}
+
+    if feat_name.lower() in ["eratio", "eration", "l2_eratio"]:
+        if "trig_L2_calo_emaxs1" in name_to_idx and "trig_L2_calo_e2tsts1" in name_to_idx:
+            emaxs1 = features[:, name_to_idx["trig_L2_calo_emaxs1"]]
+            e2tsts1 = features[:, name_to_idx["trig_L2_calo_e2tsts1"]]
+            denom = emaxs1 + e2tsts1
+            safe_denom = np.where(denom != 0.0, denom, 1.0)
+            return np.where(denom != 0.0, (emaxs1 - e2tsts1) / safe_denom, 0.0)
+        raise KeyError("Cannot compute Eratio: 'trig_L2_calo_emaxs1' and 'trig_L2_calo_e2tsts1' not found.")
+
+    if feat_name in name_to_idx:
+        return features[:, name_to_idx[feat_name]]
+
+    for name, idx in name_to_idx.items():
+        if feat_name.lower() == name.lower():
+            return features[:, idx]
+
+    raise KeyError(f"Feature '{feat_name}' not found in dataset columns.")
+
+
+def compute_ks_test_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+) -> Tuple[float, float, float]:
+    """Computes two-sample Kolmogorov-Smirnov statistic D, bootstrap uncertainty, and p-value.
+
+    Args:
+        sample_ref: Reference distribution sample.
+        sample_eval: Evaluated model-selected sample.
+        n_bootstraps: Number of bootstrap iterations for uncertainty estimation.
+        random_seed: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (ks_statistic, ks_uncertainty, p_value).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0, 1.0
+
+    ks_res = stats.ks_2samp(sample_ref, sample_eval)
+    d_stat = float(ks_res.statistic)
+    p_val = float(ks_res.pvalue)
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    d_boot = np.empty(n_bootstraps, dtype=float)
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        d_boot[b] = stats.ks_2samp(b_ref, b_eval, method="asymp").statistic
+    d_unc = float(np.std(d_boot, ddof=1))
+    return d_stat, d_unc, p_val
+
+
+def compute_wasserstein_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+) -> Tuple[float, float]:
+    """Computes first Wasserstein distance and bootstrap uncertainty.
+
+    Args:
+        sample_ref: Reference distribution sample.
+        sample_eval: Evaluated model-selected sample.
+        n_bootstraps: Number of bootstrap iterations for uncertainty estimation.
+        random_seed: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (wasserstein_distance, wasserstein_uncertainty).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0
+
+    w_dist = float(stats.wasserstein_distance(sample_ref, sample_eval))
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    w_boot = np.empty(n_bootstraps, dtype=float)
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        w_boot[b] = stats.wasserstein_distance(b_ref, b_eval)
+    w_unc = float(np.std(w_boot, ddof=1))
+    return w_dist, w_unc
+
+
+def _estimate_empirical_pmf(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    bins: Union[int, np.ndarray] = 35,
+    epsilon: float = 1e-7,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Discretizes continuous samples onto common support with Laplace/epsilon smoothing."""
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+
+    if isinstance(bins, int):
+        all_vals = np.concatenate([sample_ref, sample_eval])
+        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+        if low >= high:
+            low -= 1.0
+            high += 1.0
+        bin_edges = np.linspace(low, high, bins + 1)
     else:
-        # --- 1. Extrair os Dados do Histórico ---
-        history_data = best_model_details
-    
-        epochs = range(1, len(history_data['train_loss']) + 1)
-    
-        # Métricas comuns
-        train_loss = history_data['train_loss']
-        val_loss = history_data['val_loss']
-        train_accuracy = history_data['train_acc']
-        val_accuracy = history_data['val_acc']
-    
-        # Valores de SP, FPR e TPR do callback SP
-        callbackMetrics = history_data["callbackMetrics"][0]
-        val_sp = callbackMetrics.get('max_sp_val') # .get() para evitar KeyError se a chave não existir
-        val_fa = callbackMetrics.get('max_sp_fa_val') # FPR
-        val_pd = callbackMetrics.get('max_sp_pd_val') # TPR
+        bin_edges = np.asarray(bins, dtype=float)
 
-        # Verifica se as métricas do SP estão presentes
-        if val_sp is None or val_fa is None or val_pd is None:
-            print("Aviso: Algumas métricas (SP, FPR, TPR) não encontradas no histórico. Verifique a implementação do seu callback 'sp'.")
-            # Podemos definir como arrays vazios ou None para que os plots condicionais funcionem
-            val_sp, val_fa, val_pd = None, None, None
-    
-        # --- 2. Plotar as Curvas de Aprendizagem (Loss, Accuracy, e SP/FPR/TPR) ---
-        plt.figure(figsize=(18, 6), clear=True, num=1) # Aumenta a figura para 3 subplots
-    
-        # Plot Loss
-        plt.subplot(1, 3, 1) # 1 linha, 3 colunas, 1º plot
-        plt.plot(epochs, train_loss, 'o-', label='Perda no Treinamento')
-        plt.plot(epochs, val_loss, 'o-', label='Perda na Validação')
-        plt.title('Curvas de Perda (Loss)')
-        plt.xlabel('Época')
-        plt.ylabel('Perda')
-        plt.grid(True)
-        plt.legend()
-    
-        # Plot Accuracy
-        plt.subplot(1, 3, 2) # 1 linha, 3 colunas, 2º plot
-        plt.plot(epochs, train_accuracy, 'o-', label='Acurácia no Treinamento')
-        plt.plot(epochs, val_accuracy, 'o-', label='Acurácia na Validação')
-        plt.title('Curvas de Acurácia')
-        plt.xlabel('Época')
-        plt.ylabel('Acurácia')
-        plt.grid(True)
-        plt.legend()
-    
-        # Plot SP, TPR e FPR (se disponíveis)
-        plt.subplot(1, 3, 3) # 1 linha, 3 colunas, 3º plot
-        if val_sp is not None:
-            plt.plot(epochs, val_sp, 'o-', label='Índice SP', color='purple')
-        if val_pd is not None:
-            plt.plot(epochs, val_pd, 'o-', label='TPR (Verdadeiros Positivos)', color='darkgreen')
-        if val_fa is not None:
-            plt.plot(epochs, val_fa, 'o-', label='FPR (Falsos Positivos)', color='darkred')
-    
-        if val_sp is not None:
-            # Linha vertical para o melhor SP
-            best_sp_epoch_idx = np.argmax(val_sp)
-            plt.axvline(x=epochs[best_sp_epoch_idx], color='blue', linestyle='--', label=f'Melhor SP (Época {epochs[best_sp_epoch_idx]})')
-    
-        plt.title('Métricas de Desempenho (SP, TPR, FPR)')
-        plt.xlabel('Época')
-        plt.ylabel('Valor da Métrica')
-        plt.grid(True)
-        plt.legend()
-    
-        plt.tight_layout()
-        # model_metrics_file_template = "iet{iet}.ieta{ieta}_modelMetrics.pdf".format(
-        #     ieta = ieta, 
-        #     iet=iet)
-        # plt.savefig(os.path.join(folder_path, model_metrics_file_template))
-        plt.show()
-        # plt.close()
-    
-        # print("\nCurvas de aprendizagem (Loss, Accuracy, SP, TPR, FPR) geradas com sucesso para o melhor modelo SP!")
+    c_ref, _ = np.histogram(sample_ref, bins=bin_edges)
+    c_eval, _ = np.histogram(sample_eval, bins=bin_edges)
+
+    p = (c_ref + epsilon) / (c_ref.sum() + epsilon * len(c_ref))
+    q = (c_eval + epsilon) / (c_eval.sum() + epsilon * len(c_eval))
+    return p, q
 
 
-def plot_model_acc(best_overall_sp_model: tf.keras.Sequential, 
-                   test_set: Tuple[np.ndarray,np.ndarray],
-                  folder_path=None, ns = "", iet="", ieta="") -> float:
-    X_test_final, y_test_final = test_set
-    if best_overall_sp_model is None:
-        print("Erro: O modelo com o melhor SP não foi encontrado. Certifique-se de que 'get_best_sp_model' foi executada corretamente.")
+def compute_kl_divergence_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    bins: Union[int, np.ndarray] = 35,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+    epsilon: float = 1e-7,
+) -> Tuple[float, float]:
+    """Computes discrete Kullback-Leibler divergence D_KL(P || Q) and bootstrap uncertainty.
+
+    Args:
+        sample_ref: Reference distribution sample P.
+        sample_eval: Evaluated model selection sample Q.
+        bins: Number of bins or explicit bin edges.
+        n_bootstraps: Number of bootstrap iterations.
+        random_seed: Random seed for reproducibility.
+        epsilon: Regularization smoothing constant to avoid log(0).
+
+    Returns:
+        Tuple of (kl_divergence, kl_uncertainty).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0
+
+    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=bins, epsilon=epsilon)
+    kl_stat = float(np.sum(special.rel_entr(p, q)))
+
+    if isinstance(bins, int):
+        all_vals = np.concatenate([sample_ref, sample_eval])
+        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+        if low >= high:
+            low -= 1.0
+            high += 1.0
+        fixed_bin_edges = np.linspace(low, high, bins + 1)
     else:
-        # --- 2. Previsões da Rede ---
-        print("\nFazendo previsões no conjunto de teste com o modelo de melhor SP...")
-        y_pred_proba = best_overall_sp_model.predict(X_test_final).ravel()
-    
-        # --- 3. Curva ROC ---
-        print("Gerando Curva ROC...")
-        fpr, tpr, thresholds = roc_curve(y_test_final, y_pred_proba)
-        auc_score = roc_auc_score(y_test_final, y_pred_proba)
-    
-        plt.figure(figsize=(8, 6), clear=True, num=1)
-        plt.plot(fpr, tpr, color='blue', lw=2, label=f'Curva ROC (AUC = {auc_score:.4f})')
-        plt.plot([0, 1], [0, 1], color='gray', linestyle='--', lw=1)
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('Taxa de Falsos Positivos (FPR)')
-        plt.ylabel('Taxa de Verdadeiros Positivos (TPR)')
-        plt.title('Curva ROC do Modelo'+ \
-             f"\n({iet},{ieta})")
-        plt.legend(loc="lower right")
-        plt.grid(True)
-        roc_file_template = "ns{ns}.iet{iet}.ieta{ieta}_ROC.pdf".format(
-            ns = ns,
-            ieta = ieta, 
-            iet=iet)
-        plt.savefig(os.path.join(folder_path, roc_file_template))
-        # plt.show()
-        # plt.close()
-        # --- 4. Histograma de Saída da Rede (Sinal vs. Background) ---
-        print("Gerando Histograma de Saída da Rede...")
-    
-        # Separar as previsões para sinal e background
-        # Assumindo que 1 é sinal e 0 é background em y_test_final
-        predictions_signal = y_pred_proba[y_test_final == 1]
-        predictions_background = y_pred_proba[y_test_final == 0]
-    
-        plt.figure(figsize=(10, 6), clear=True, num=1)
-        plt.hist(predictions_background, bins=50, alpha=0.7, label='Background', color='red', density=True)
-        plt.hist(predictions_signal, bins=50, alpha=0.7, label='Sinal', color='green', density=True)
-        plt.xlabel('Saída da Rede (Probabilidade)')
-        plt.ylabel('Densidade')
-        plt.yscale('log')
-        plt.title('Histograma de Saída da Rede para Sinal e Background'+ \
-             f"\n({iet},{ieta})")
-        plt.legend(loc='upper right')
-        plt.grid(True)
-        model_output_file_template = "ns{ns}.iet{iet}.ieta{ieta}_modelOutput.pdf".format(
-            ns = ns,
-            ieta = ieta, 
-            iet=iet)
-        plt.savefig(os.path.join(folder_path, model_output_file_template))
-        # plt.show()
-        # plt.close()
-    
-        print("\nVisualizações geradas com sucesso!")
-        return auc_score
+        fixed_bin_edges = bins
+
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    kl_boot = np.empty(n_bootstraps, dtype=float)
+
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        bp, bq = _estimate_empirical_pmf(b_ref, b_eval, bins=fixed_bin_edges, epsilon=epsilon)
+        kl_boot[b] = float(np.sum(special.rel_entr(bp, bq)))
+
+    kl_unc = float(np.std(kl_boot, ddof=1))
+    return kl_stat, kl_unc
 
 
-# def compute_saliency_map(x: np.ndarray, model: tf.keras.Sequential) -> np.ndarray:
-#     x_tensor = tf.convert_to_tensor(x[np.newaxis, :], dtype=tf.float32)
-#     with tf.GradientTape() as tape:
-#         tape.watch(x_tensor)
-#         pred = model(x_tensor)
-#     grad = tape.gradient(pred, x_tensor)
-#     saliency = np.abs(grad.numpy()[0])
-#     # Normalização Min-Max por amostra
-#     smin, smax = saliency.min(), saliency.max()
-#     saliency_norm = (saliency - smin) / (smax - smin + 1e-8)
-#     return saliency_norm
+def compute_js_divergence_with_uncertainty(
+    sample_ref: np.ndarray,
+    sample_eval: np.ndarray,
+    bins: Union[int, np.ndarray] = 35,
+    n_bootstraps: int = 100,
+    random_seed: int = 42,
+    epsilon: float = 1e-7,
+) -> Tuple[float, float]:
+    """Computes symmetric Jensen-Shannon divergence in [0, 1] and bootstrap uncertainty.
 
+    Args:
+        sample_ref: Reference distribution sample P.
+        sample_eval: Evaluated model selection sample Q.
+        bins: Number of bins or explicit bin edges.
+        n_bootstraps: Number of bootstrap iterations.
+        random_seed: Random seed for reproducibility.
+        epsilon: Regularization smoothing constant.
 
-# def compute_mean_std_saliency(X_subset: np.ndarray, 
-#                               model: tf.keras.Sequential) -> Tuple[float, float]:
-#     saliency_list = [compute_saliency_map(x, model) for x in X_subset]
-#     saliency_array = np.stack(saliency_list)
-#     return np.mean(saliency_array, axis=0), np.std(saliency_array, axis=0)
+    Returns:
+        Tuple of (js_divergence, js_uncertainty).
+    """
+    sample_ref = sample_ref[np.isfinite(sample_ref)]
+    sample_eval = sample_eval[np.isfinite(sample_eval)]
+    if len(sample_ref) == 0 or len(sample_eval) == 0:
+        return 0.0, 0.0
 
+    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=bins, epsilon=epsilon)
+    m = 0.5 * (p + q)
+    js_stat = float((0.5 * np.sum(special.rel_entr(p, m)) + 0.5 * np.sum(special.rel_entr(q, m))) / np.log(2))
 
-# def plot_saliency_comparison_normalized(model: tf.keras.Sequential, 
-#                                         X_test: np.ndarray, y_test: np.ndarray, 
-#                                         n_samples=100,
-#                                         folder_path=None,
-#                                        ns = "", iet="", ieta="") -> None:
-#     # --- Seleciona n_samples de cada classe ---
-#     idx_sinal = np.where(y_test == 1)[0]
-#     idx_backg = np.where(y_test == 0)[0]
-#     np.random.shuffle(idx_sinal)
-#     np.random.shuffle(idx_backg)
+    if isinstance(bins, int):
+        all_vals = np.concatenate([sample_ref, sample_eval])
+        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+        if low >= high:
+            low -= 1.0
+            high += 1.0
+        fixed_bin_edges = np.linspace(low, high, bins + 1)
+    else:
+        fixed_bin_edges = bins
 
-#     idx_sinal = idx_sinal[:n_samples]
-#     idx_backg = idx_backg[:n_samples]
-#     X_sinal = X_test[idx_sinal]
-#     X_backg = X_test[idx_backg]
-#     # --- Calcula perfis de saliency normalizados ---
-#     mean_sinal, std_sinal = compute_mean_std_saliency(X_sinal, model)
-#     mean_backg, std_backg = compute_mean_std_saliency(X_backg, model)
-#     # --- Plot ---
-#     plt.figure(figsize=(12, 6), clear=True, num=1)
-#     x_range = np.arange(len(mean_sinal))
+    rng = np.random.default_rng(random_seed)
+    n_ref = len(sample_ref)
+    n_eval = len(sample_eval)
+    js_boot = np.empty(n_bootstraps, dtype=float)
 
-#     plt.plot(mean_sinal, label='Sinal (Média)', color='blue')
-#     plt.fill_between(x_range, 
-#                      mean_sinal - std_sinal,
-#                      mean_sinal + std_sinal,
-#                      color='blue', alpha=0.3, label='Sinal ±1σ')
-#     plt.plot(mean_backg, label='Background (Média)', color='red')
-#     plt.fill_between(x_range, 
-#                      mean_backg - std_backg, 
-#                      mean_backg + std_backg,
-#                      color='red', alpha=0.3, label='Background ±1σ')
-#     plt.title(f'Comparação do Perfil Médio de Saliency Normalizado\n({n_samples} amostras por classe)' + \
-#              f"\n({iet},{ieta})")
-#     plt.xlabel('Posição da Entrada - Indice de Anéis')
-#     plt.ylabel('Importância Normalizada (Saliency)')
-#     plt.legend()
-#     plt.grid(True, linestyle='--')
-#     plt.tight_layout()
-    
-#     saliency_file_template = "ns{ns}.iet{iet}.ieta{ieta}_saliency_comparacao_normalizada.pdf".format(
-#         ns = ns,
-#         ieta = ieta, 
-#         iet=iet)
-#     plt.savefig(os.path.join(folder_path, saliency_file_template), dpi=300)
-#     # plt.show()
-#     # plt.close()
+    for b in range(n_bootstraps):
+        b_ref = rng.choice(sample_ref, size=n_ref, replace=True)
+        b_eval = rng.choice(sample_eval, size=n_eval, replace=True)
+        bp, bq = _estimate_empirical_pmf(b_ref, b_eval, bins=fixed_bin_edges, epsilon=epsilon)
+        bm = 0.5 * (bp + bq)
+        js_val = (0.5 * np.sum(special.rel_entr(bp, bm)) + 0.5 * np.sum(special.rel_entr(bq, bm))) / np.log(2)
+        js_boot[b] = float(js_val)
 
-
-
-
-
-
-
-
-
-
-
+    js_unc = float(np.std(js_boot, ddof=1))
+    return js_stat, js_unc
