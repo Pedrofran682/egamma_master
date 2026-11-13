@@ -155,6 +155,10 @@ class PlotTextKey(str, Enum):
     PEAK_VARIANCE_CV_PANEL_TITLE = "peak.variance_cv_panel_title"
     PEAK_VARIANCE_YLABEL = "peak.variance_ylabel"
     PEAK_CV_YLABEL = "peak.cv_ylabel"
+    PEAK_ET_HIST2D_SUPTITLE = "peak.et_hist2d_suptitle"
+    PEAK_ET_HIST2D_PANEL_TITLE = "peak.et_hist2d_panel_title"
+    PEAK_ET_HIST2D_YLABEL = "peak.et_hist2d_ylabel"
+    PEAK_ET_HIST2D_CBAR_LABEL = "peak.et_hist2d_cbar_label"
 
 
 class PlotTranslator:
@@ -751,6 +755,22 @@ class PlotTranslator:
         PlotTextKey.PEAK_CV_YLABEL: {
             "en": r"Coefficient of Variation ($\mathrm{CV} = \overline{\sigma} / |\overline{\mu}|$)",
             "pt": r"Coeficiente de Variação ($\mathrm{CV} = \overline{\sigma} / |\overline{\mu}|$)",
+        },
+        PlotTextKey.PEAK_ET_HIST2D_SUPTITLE: {
+            "en": "2D Histogram: Transverse Energy ($E_T$) vs Detector Region ({n_rings} Rings) - {scope}",
+            "pt": "Histograma 2D: Energia Transversa ($E_T$) vs Região do Detector ({n_rings} Anéis) - {scope}",
+        },
+        PlotTextKey.PEAK_ET_HIST2D_PANEL_TITLE: {
+            "en": "{class_label} (N={n_events:,})",
+            "pt": "{class_label} (N={n_events:,})",
+        },
+        PlotTextKey.PEAK_ET_HIST2D_YLABEL: {
+            "en": "{et_label} [GeV]",
+            "pt": "{et_label} [GeV]",
+        },
+        PlotTextKey.PEAK_ET_HIST2D_CBAR_LABEL: {
+            "en": r"Energy-Weighted Event Counts ($\Sigma E_{\mathrm{norm1}}$)",
+            "pt": r"Contagem Ponderada pela Energia ($\Sigma E_{\mathrm{norm1}}$)",
         },
     }
 

@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from src.utils import norm1
+
 
 @dataclass(frozen=True)
 class SubdetectorDefinition:
@@ -618,3 +620,104 @@ class RingPeakEnergyAnalyzer:
             summary_rows.append(row)
 
         return pd.DataFrame(summary_rows)
+
+    def compute_subdetector_et_histogram2d(
+        self,
+        rings_data: np.ndarray,
+        transverse_energy_gev: np.ndarray,
+        labels: np.ndarray,
+        ring_indexes: Optional[np.ndarray] = None,
+        n_et_bins: int = 30,
+        et_range: Optional[Tuple[float, float]] = None,
+    ) -> Dict[str, Any]:
+        """Computes energy-weighted 2D histograms of transverse energy vs subdetector region.
+
+        Args:
+            rings_data: Ring energy matrix of shape `(n_events, n_rings)`.
+            transverse_energy_gev: Event transverse energy vector in GeV of shape `(n_events,)`.
+            labels: Binary label vector (`1` for signal, `0` for background).
+            ring_indexes: Optional explicit global ring index array.
+            n_et_bins: Number of bins along the transverse energy axis.
+            et_range: Optional `(min_et, max_et)` range in GeV overriding 1st-99th percentile.
+
+        Returns:
+            Dictionary containing `subdetectors`, `et_edges`, `signal_hist2d`, `background_hist2d`,
+            `n_signal`, `n_background`, and `n_rings`.
+
+        Raises:
+            ValueError: If input shapes are invalid, `n_et_bins < 1`, or no finite events remain.
+        """
+        if int(n_et_bins) < 1:
+            raise ValueError("n_et_bins must be at least 1.")
+
+        rings = np.asarray(rings_data, dtype=np.float64)
+        if rings.ndim != 2 or rings.shape[0] == 0 or rings.shape[1] == 0:
+            raise ValueError("rings_data must be a non-empty 2D array.")
+
+        et = np.asarray(transverse_energy_gev, dtype=np.float64).ravel()
+        y = np.asarray(labels).ravel()
+        if et.size != rings.shape[0] or y.size != rings.shape[0]:
+            raise ValueError(
+                "transverse_energy_gev and labels lengths must match rings_data row count."
+            )
+
+        valid_mask = np.isfinite(et) & np.isfinite(y)
+        if not np.any(valid_mask):
+            raise ValueError("No finite transverse_energy_gev values found.")
+
+        et_valid = et[valid_mask]
+        y_valid = y[valid_mask]
+        norm_rings = np.asarray(norm1(rings[valid_mask]), dtype=np.float64)
+
+        n_rings = int(norm_rings.shape[1])
+        positions_map = self.resolve_subdetector_positions(
+            n_rings=n_rings,
+            ring_indexes=ring_indexes,
+        )
+        subdet_names = [s.name for s in self.subdetectors]
+        subdet_energies = np.column_stack(
+            [
+                np.sum(norm_rings[:, positions_map[name]], axis=1)
+                if len(positions_map[name]) > 0
+                else np.zeros(norm_rings.shape[0], dtype=np.float64)
+                for name in subdet_names
+            ]
+        )
+
+        if et_range is not None:
+            low, high = float(et_range[0]), float(et_range[1])
+        else:
+            p_low, p_high = np.percentile(et_valid, [1.0, 99.0])
+            low, high = float(p_low), float(p_high)
+            if high <= low:
+                low, high = float(np.min(et_valid)), float(np.max(et_valid))
+        if high <= low:
+            low -= 0.5
+            high += 0.5
+        et_edges = np.linspace(low, high, int(n_et_bins) + 1, dtype=np.float64)
+
+        def _build_class_hist(mask: np.ndarray) -> np.ndarray:
+            hist = np.zeros((int(n_et_bins), len(subdet_names)), dtype=np.float64)
+            if not np.any(mask):
+                return hist
+            et_cls = et_valid[mask]
+            weights_cls = subdet_energies[mask]
+            for s_idx in range(len(subdet_names)):
+                hist[:, s_idx], _ = np.histogram(
+                    et_cls,
+                    bins=et_edges,
+                    weights=weights_cls[:, s_idx],
+                )
+            return hist
+
+        sig_mask = y_valid == 1
+        bg_mask = y_valid == 0
+        return {
+            "subdetectors": subdet_names,
+            "et_edges": et_edges,
+            "signal_hist2d": _build_class_hist(sig_mask),
+            "background_hist2d": _build_class_hist(bg_mask),
+            "n_signal": int(np.sum(sig_mask)),
+            "n_background": int(np.sum(bg_mask)),
+            "n_rings": n_rings,
+        }

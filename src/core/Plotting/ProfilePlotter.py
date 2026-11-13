@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm, Normalize
 from matplotlib.patches import Patch
 import mplhep as mh
 import numpy as np
@@ -1064,6 +1065,136 @@ class RingPeakEnergyPlotter(BasePlotter):
             cbar_ax = fig.add_axes([0.935, 0.15, 0.018, 0.72])
             cbar = fig.colorbar(im, cax=cbar_ax)
             cbar.set_label(metric_label, fontsize=10.5)
+
+        return self.save_figure(
+            fig=fig,
+            folder_path=output_dir,
+            subfolder=subfolder,
+            filename=filename,
+            file_format=self._resolve_file_format(filename),
+            show=show,
+        )
+
+    def plot_subdetector_et_hist2d(
+        self,
+        hist2d_data: Dict[str, Any],
+        output_dir: Union[str, Path],
+        filename: str,
+        scope_label: str = "Region",
+        et_label: str = "trig_L2_calo_et",
+        plot_title: Optional[str] = None,
+        language: Optional[str] = None,
+        show: bool = False,
+        subfolder: str = "RegionalEtHist2D",
+    ) -> str:
+        """Renders side-by-side 2D histograms of transverse energy vs detector subdetector.
+
+        Args:
+            hist2d_data: Output dictionary from `RingPeakEnergyAnalyzer.compute_subdetector_et_histogram2d`.
+            output_dir: Base directory where the figure will be saved.
+            filename: Output filename including extension.
+            scope_label: Region descriptor shown in the suptitle.
+            et_label: Transverse energy variable name for the y-axis label.
+            plot_title: Optional custom suptitle override.
+            language: Optional language override ('en' or 'pt').
+            show: Whether to display the figure inline before closing.
+            subfolder: Output subdirectory inside `output_dir`.
+
+        Returns:
+            Absolute file path of the saved figure.
+        """
+        mh.style.use("ATLAS")
+        lang = self._resolve_language(language=language)
+
+        subdets: List[str] = list(hist2d_data["subdetectors"])
+        et_edges = np.asarray(hist2d_data["et_edges"], dtype=float)
+        sig_hist = np.asarray(hist2d_data["signal_hist2d"], dtype=float)
+        bkg_hist = np.asarray(hist2d_data["background_hist2d"], dtype=float)
+        n_signal = int(hist2d_data.get("n_signal", 0))
+        n_background = int(hist2d_data.get("n_background", 0))
+        n_rings = int(hist2d_data.get("n_rings", 100))
+
+        x_edges = np.arange(len(subdets) + 1, dtype=float) - 0.5
+        combined_pos = np.concatenate(
+            [sig_hist[sig_hist > 0.0], bkg_hist[bkg_hist > 0.0]]
+        )
+        if combined_pos.size > 0:
+            vmin = float(np.min(combined_pos))
+            vmax = float(np.max(combined_pos))
+            if vmax / max(vmin, 1e-12) > 10.0:
+                norm: Normalize = LogNorm(vmin=vmin, vmax=vmax)
+            else:
+                norm = Normalize(vmin=0.0, vmax=vmax if vmax > 0.0 else 1.0)
+        else:
+            norm = Normalize(vmin=0.0, vmax=1.0)
+
+        cmap = plt.get_cmap("viridis").copy()
+        cmap.set_bad("#f5f5f5")
+
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
+        class_specs = (
+            (
+                sig_hist,
+                self.tr(PlotTextKey.PROFILE_SIGNAL_LABEL, language=lang),
+                n_signal,
+            ),
+            (
+                bkg_hist,
+                self.tr(PlotTextKey.PROFILE_BACKGROUND_LABEL, language=lang),
+                n_background,
+            ),
+        )
+
+        mesh = None
+        for ax, (matrix, cls_label, n_evt) in zip(axes, class_specs):
+            plot_matrix = (
+                np.ma.masked_less_equal(matrix, 0.0)
+                if isinstance(norm, LogNorm)
+                else matrix
+            )
+            mesh = ax.pcolormesh(
+                x_edges,
+                et_edges,
+                plot_matrix,
+                cmap=cmap,
+                norm=norm,
+                shading="flat",
+            )
+            ax.set_xticks(np.arange(len(subdets)))
+            ax.set_xticklabels(subdets, fontsize=10, rotation=18, ha="right")
+            ax.set_xlabel(self.tr(PlotTextKey.PEAK_SUBDETECTOR_XLABEL, language=lang), fontsize=11)
+            ax.set_title(
+                self.tr(
+                    PlotTextKey.PEAK_ET_HIST2D_PANEL_TITLE,
+                    language=lang,
+                    class_label=cls_label,
+                    n_events=n_evt,
+                ),
+                fontsize=11.5,
+                pad=8,
+            )
+
+        axes[0].set_ylabel(
+            self.tr(PlotTextKey.PEAK_ET_HIST2D_YLABEL, language=lang, et_label=et_label),
+            fontsize=11,
+        )
+
+        suptitle = (
+            plot_title
+            if plot_title is not None
+            else self.tr(
+                PlotTextKey.PEAK_ET_HIST2D_SUPTITLE,
+                language=lang,
+                n_rings=n_rings,
+                scope=scope_label,
+            )
+        )
+        fig.suptitle(suptitle, fontsize=13.5, y=0.98)
+        fig.tight_layout(rect=[0, 0, 0.91, 0.92])
+        if mesh is not None:
+            cbar_ax = fig.add_axes([0.925, 0.14, 0.018, 0.72])
+            cbar = fig.colorbar(mesh, cax=cbar_ax)
+            cbar.set_label(self.tr(PlotTextKey.PEAK_ET_HIST2D_CBAR_LABEL, language=lang), fontsize=10.5)
 
         return self.save_figure(
             fig=fig,

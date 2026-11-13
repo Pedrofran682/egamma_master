@@ -262,6 +262,14 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
     rng = np.random.default_rng(42)
     ctx_data = rng.uniform(0.01, 1.0, size=(20, 100))
     ctx_labels = np.array([1] * 10 + [0] * 10)
+    et_gev = rng.uniform(15.0, 60.0, size=20)
+    hist2d_data = analyzer.compute_subdetector_et_histogram2d(
+        rings_data=ctx_data,
+        transverse_energy_gev=et_gev,
+        labels=ctx_labels,
+        n_et_bins=6,
+        et_range=(15.0, 60.0),
+    )
 
     for lang in ("en", "pt"):
         lang_dir = tmp_path / lang
@@ -319,6 +327,14 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
             metric="subdetector_cv",
             language=lang,
         )
+        p_hist2d = plotter.plot_subdetector_et_hist2d(
+            hist2d_data=hist2d_data,
+            output_dir=lang_dir,
+            filename="et_vs_subdetector_hist2d.png",
+            scope_label="et1_eta2",
+            et_label="trig_L2_calo_et",
+            language=lang,
+        )
 
         ctx = RegionPlotContext(
             iet=1,
@@ -338,6 +354,7 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
             p_heat_global,
             p_heat_var,
             p_heat_cv,
+            p_hist2d,
             p_ctx,
         ):
             path_obj = pathlib.Path(saved)
@@ -350,3 +367,33 @@ def test_ring_peak_energy_plotter_bilingual_outputs(tmp_path: pathlib.Path) -> N
             filename="bad.png",
             metric="unknown_metric",
         )
+
+
+def test_subdetector_et_histogram2d_computation() -> None:
+    sig_100, bkg_100 = _build_synthetic_100_ring_profiles()
+    rings = np.vstack([np.tile(sig_100, (4, 1)), np.tile(bkg_100, (3, 1))])
+    et_gev = np.array([25.0, 25.0, 45.0, 45.0, 30.0, 30.0, 50.0])
+    labels = np.array([1, 1, 1, 1, 0, 0, 0])
+
+    analyzer = RingPeakEnergyAnalyzer(top_k=3)
+    res = analyzer.compute_subdetector_et_histogram2d(
+        rings_data=rings,
+        transverse_energy_gev=et_gev,
+        labels=labels,
+        n_et_bins=3,
+        et_range=(20.0, 50.0),
+    )
+
+    assert res["subdetectors"] == ["PreSampler", "EM1", "EM2", "EM3", "TileCal"]
+    assert res["n_signal"] == 4
+    assert res["n_background"] == 3
+    assert res["n_rings"] == 100
+    assert res["signal_hist2d"].shape == (3, 5)
+    assert res["background_hist2d"].shape == (3, 5)
+    assert np.isclose(np.sum(res["signal_hist2d"]), 4.0)
+    assert np.isclose(np.sum(res["background_hist2d"]), 3.0)
+
+    with pytest.raises(ValueError):
+        analyzer.compute_subdetector_et_histogram2d(rings, et_gev[:-1], labels)
+    with pytest.raises(ValueError):
+        analyzer.compute_subdetector_et_histogram2d(rings, et_gev, labels, n_et_bins=0)
