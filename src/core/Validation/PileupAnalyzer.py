@@ -1,6 +1,8 @@
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 import numpy as np
 from scipy import stats
+
+from src.utils import extract_feature_values
 
 
 class PileupAnalyzer:
@@ -9,38 +11,20 @@ class PileupAnalyzer:
     @staticmethod
     def extract_feature(
         features: np.ndarray,
-        feature_names: np.ndarray,
+        feature_names: Union[np.ndarray, Sequence[str]],
         target_name: str,
     ) -> np.ndarray:
         """Extracts column values or computes derived physics variables.
 
         Args:
             features: 2D array of event features (N, D).
-            feature_names: Array of feature name strings.
+            feature_names: Array or sequence of feature name strings.
             target_name: Target variable name.
 
         Returns:
             1D numpy array of values.
         """
-        name_to_idx = {name.strip(): i for i, name in enumerate(feature_names)}
-
-        if target_name.lower() in ["eratio", "eration", "l2_eratio"]:
-            if "trig_L2_calo_emaxs1" in name_to_idx and "trig_L2_calo_e2tsts1" in name_to_idx:
-                emaxs1 = features[:, name_to_idx["trig_L2_calo_emaxs1"]]
-                e2tsts1 = features[:, name_to_idx["trig_L2_calo_e2tsts1"]]
-                denom = emaxs1 + e2tsts1
-                safe_denom = np.where(denom != 0.0, denom, 1.0)
-                return np.where(denom != 0.0, (emaxs1 - e2tsts1) / safe_denom, 0.0)
-            raise KeyError("Cannot compute Eratio: required sub-features missing.")
-
-        if target_name in name_to_idx:
-            return features[:, name_to_idx[target_name]]
-
-        for name, idx in name_to_idx.items():
-            if target_name.lower() == name.lower():
-                return features[:, idx]
-
-        raise KeyError(f"Feature '{target_name}' not found in feature_names.")
+        return extract_feature_values(features, feature_names, target_name)
 
     @classmethod
     def compute_efficiency_vs_mu(

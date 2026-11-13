@@ -1,6 +1,7 @@
 from src.core.Interfaces.BasePlotter import BasePlotter
 from .Context import RegionPlotContext
 from .LegacyPlotter import ConvLayerPlotter, SaliencyMapPlotter
+from .Localization import BilingualPlotOrchestrator, PlotTextKey, PlotTranslator
 from .MetricPlotter import (
     BoxplotSPPlotter,
     MetricsGridPlotter,
@@ -14,6 +15,9 @@ from .RegionDistributionPlotter import RegionDistributionPlotter
 __all__ = [
     "RegionPlotContext",
     "BasePlotter",
+    "PlotTextKey",
+    "PlotTranslator",
+    "BilingualPlotOrchestrator",
     "ProfileMeanEnergyPlotter",
     "ModelMetricsPlotter",
     "RocPlotter",

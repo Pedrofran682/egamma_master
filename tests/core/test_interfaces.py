@@ -157,11 +157,9 @@ class TestInterfaces(unittest.TestCase):
 
     def test_datasets_inherit_from_base_egamma_dataset(self) -> None:
         from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
-        from src.core.Datasets.EgammaNpzDatasetNoTargetOrigin import EgammaNpzDatasetNoTargetOrigin
         from src.core.Interfaces import BaseEgammaDataset
 
         self.assertTrue(issubclass(EgammaNpzDataset, BaseEgammaDataset))
-        self.assertTrue(issubclass(EgammaNpzDatasetNoTargetOrigin, BaseEgammaDataset))
 
     def test_base_hyperparameter_tuner_cannot_be_instantiated_directly(self) -> None:
         from src.core.Interfaces import BaseHyperparameterTuner

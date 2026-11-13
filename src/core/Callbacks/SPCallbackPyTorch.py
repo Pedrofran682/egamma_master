@@ -17,8 +17,6 @@ class SPCallbackPyTorch:
         verbose: bool = True,
         save_the_best: bool = True,
         patience: int = 10,
-        kernel_size: int = 2,
-        num_filters: int = 4,
     ) -> None:
         """Initialize the SPCallbackPyTorch instance.
 
@@ -26,8 +24,6 @@ class SPCallbackPyTorch:
             verbose: Whether to log epoch evaluation metrics.
             save_the_best: Whether to store the state dict of the model at peak SP.
             patience: Number of epochs to wait without improvement before stopping.
-            kernel_size: Kernel size parameter for convolutional layers.
-            num_filters: Number of filters for convolutional layers.
         """
         super().__init__()
         self.model: Optional[torch.nn.Module] = None
@@ -38,9 +34,6 @@ class SPCallbackPyTorch:
         self.__save_the_best: bool = save_the_best
         self.__best_weights: Dict[str, Any] = {}
         self.__best_epoch: int = 0
-
-        self.kernel_size: int = kernel_size
-        self.num_filters: int = num_filters
 
         self.__best_fa_at_knee: float = 0.0
         self.__best_pd_at_knee: float = 0.0

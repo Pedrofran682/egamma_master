@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 from src.utils import compute_mean_std_saliency
@@ -34,26 +35,34 @@ def extract_convolutional_features(model: torch.nn.Module, x: torch.Tensor) -> t
 class ConvLayerPlotter(BasePlotter):
     """Plotter for visualizing intermediate feature maps from convolutional layers."""
 
-    def __init__(self) -> None:
-        """Initialize the ConvLayerPlotter instance."""
-        super().__init__(name="ConvLayerPlotter")
-        self.profile_plotter: ProfileMeanEnergyPlotter = ProfileMeanEnergyPlotter()
+    def __init__(self, language: str = "en") -> None:
+        """Initialize the ConvLayerPlotter instance.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="ConvLayerPlotter", language=language)
+        self.profile_plotter: ProfileMeanEnergyPlotter = ProfileMeanEnergyPlotter(language=language)
 
     def plot(
         self,
         context: RegionPlotContext,
-        plot_title: str = "Feature Extraction - Conv layer output",
+        plot_title: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         """Extract and plot channel-wise convolutional feature maps.
 
         Args:
             context: Context containing model, trainer, and holdout data.
-            plot_title: Title prefix for generated channel plots.
+            plot_title: Optional title prefix for generated channel plots.
             **kwargs: Additional plotting options.
         """
         if context.model is None or context.trainer is None:
             return
+
+        lang = self._resolve_language(context)
+        resolved_title = plot_title if plot_title is not None else self.tr(PlotTextKey.CONV_TITLE, language=lang)
+        self.profile_plotter.language = lang
 
         context.model.eval()
         x_holdout_rings = context.x_holdout_rings
@@ -76,16 +85,20 @@ class ConvLayerPlotter(BasePlotter):
                 context=context,
                 x_rings=feature_slice,
                 plot_name=f"ConvFeatureExtraction_plot_ringer.ch{ch}",
-                plot_title=f"{plot_title}.ch{ch}",
+                plot_title=f"{resolved_title}.ch{ch}",
             )
 
 
 class SaliencyMapPlotter(BasePlotter):
     """Plotter for generating gradient-based saliency comparison profiles."""
 
-    def __init__(self) -> None:
-        """Initialize the SaliencyMapPlotter instance."""
-        super().__init__(name="SaliencyMapPlotter")
+    def __init__(self, language: str = "en") -> None:
+        """Initialize the SaliencyMapPlotter instance.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="SaliencyMapPlotter", language=language)
 
     def plot(
         self,
@@ -111,6 +124,7 @@ class SaliencyMapPlotter(BasePlotter):
         if y_test is None or x_holdout is None:
             return None
 
+        lang = self._resolve_language(context)
         x_test = torch.from_numpy(x_holdout).float().to(context.trainer.device)
 
         idx_signal = np.where(y_test == 1)[0]
@@ -128,37 +142,43 @@ class SaliencyMapPlotter(BasePlotter):
             x_test[idx_bg].cpu().numpy(), context.model
         )
 
-        fig, ax = plt.subplots(figsize=(12, 6), clear=True, num=1)
+        fig, ax = plt.subplots(figsize=(12, 6))
         x_range = np.arange(len(mean_signal))
 
-        ax.plot(mean_signal, label="Signal (mean)", color="blue")
+        ax.plot(mean_signal, label=self.tr(PlotTextKey.SALIENCY_SIGNAL_MEAN, language=lang), color="blue")
         ax.fill_between(
             x_range,
             mean_signal - std_signal,
             mean_signal + std_signal,
             color="blue",
             alpha=0.3,
-            label="Signal ±1σ",
+            label=self.tr(PlotTextKey.SALIENCY_SIGNAL_STD, language=lang),
         )
-        ax.plot(mean_bg, label="Background (mean)", color="red")
+        ax.plot(mean_bg, label=self.tr(PlotTextKey.SALIENCY_BACKGROUND_MEAN, language=lang), color="red")
         ax.fill_between(
             x_range,
             mean_bg - std_bg,
             mean_bg + std_bg,
             color="red",
             alpha=0.3,
-            label="Background ±1σ",
+            label=self.tr(PlotTextKey.SALIENCY_BACKGROUND_STD, language=lang),
         )
 
         ax.set_title(
-            f"Comparison of Normalized Mean Saliency Profile\n({n_samples} samples per class)\n({context.iet},{context.ieta})"
+            self.tr(
+                PlotTextKey.SALIENCY_TITLE,
+                language=lang,
+                n_samples=n_samples,
+                iet=context.iet,
+                ieta=context.ieta,
+            )
         )
-        ax.set_xlabel("Input Position - Ring Index")
+        ax.set_xlabel(self.tr(PlotTextKey.SALIENCY_XLABEL, language=lang))
         n_rings = len(mean_signal)
         ticks_loc = np.linspace(0, n_rings, 10, dtype=int)
         ax.set_xticks(ticks_loc)
         ax.set_xticklabels([str(i + 1) for i in ticks_loc])
-        ax.set_ylabel("Normalized Importance (Saliency)")
+        ax.set_ylabel(self.tr(PlotTextKey.SALIENCY_YLABEL, language=lang))
         ax.legend()
         ax.grid(True, linestyle="--")
         fig.tight_layout()

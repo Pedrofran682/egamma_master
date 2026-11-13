@@ -15,6 +15,7 @@ from .PileupThresholdCalibrator import (
     Pileup2DDistribution,
 )
 from .RegionalOperatingPointsConsolidator import RegionalOperatingPointsConsolidator
+from .LatexTableFormatter import LatexTableFormatter
 
 __all__ = [
     "ResultAggregator",
@@ -31,4 +32,5 @@ __all__ = [
     "OperatingPointCalibration",
     "Pileup2DDistribution",
     "RegionalOperatingPointsConsolidator",
+    "LatexTableFormatter",
 ]

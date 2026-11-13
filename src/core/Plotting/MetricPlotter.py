@@ -7,6 +7,7 @@ import seaborn as sns
 
 from src.core.Interfaces.BasePlotter import BaseMetricPlotter, BasePlotter
 from src.core.Plotting.Context import MetricPlotContext, RegionPlotContext
+from src.core.Plotting.Localization import PlotTextKey
 
 
 @cache
@@ -51,9 +52,13 @@ def get_eta_axis() -> List[str]:
 class ModelMetricsPlotter(BaseMetricPlotter):
     """Renders tripartite loss, accuracy, and SP/TPR/FPR evolution curves over epochs."""
 
-    def __init__(self) -> None:
-        """Initializes the ModelMetricsPlotter."""
-        super().__init__(name="ModelMetricsPlotter")
+    def __init__(self, language: str = "en") -> None:
+        """Initializes the ModelMetricsPlotter.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="ModelMetricsPlotter", language=language)
 
     def plot_metric(self, context: MetricPlotContext) -> str | None:
         """Plots training and validation metrics using MetricPlotContext."""
@@ -82,6 +87,7 @@ class ModelMetricsPlotter(BaseMetricPlotter):
         return self._render_plot(context, history_data)
 
     def _render_plot(self, context: RegionPlotContext, history_data: Dict[str, Any]) -> str:
+        lang = self._resolve_language(context)
         epochs = range(1, len(history_data["train_loss"]) + 1)
         train_loss = history_data["train_loss"]
         val_loss = history_data["val_loss"]
@@ -93,49 +99,51 @@ class ModelMetricsPlotter(BaseMetricPlotter):
         val_fa = callback_metrics.get("max_sp_fa_val")
         val_pd = callback_metrics.get("max_sp_pd_val")
 
-        fig = plt.figure(figsize=(18, 6), clear=True, num=1)
+        fig, (ax_loss, ax_acc, ax_perf) = plt.subplots(1, 3, figsize=(18, 6))
 
-        plt.subplot(1, 3, 1)
-        plt.plot(epochs, train_loss, "o-", label="Training Loss")
-        plt.plot(epochs, val_loss, "o-", label="Validation Loss")
-        plt.title("Loss Curves")
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.grid(True)
-        plt.legend()
+        ax_loss.plot(epochs, train_loss, "o-", label=self.tr(PlotTextKey.METRIC_TRAIN_LOSS, language=lang))
+        ax_loss.plot(epochs, val_loss, "o-", label=self.tr(PlotTextKey.METRIC_VAL_LOSS, language=lang))
+        ax_loss.set_title(self.tr(PlotTextKey.METRIC_LOSS_TITLE, language=lang))
+        ax_loss.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
+        ax_loss.set_ylabel(self.tr(PlotTextKey.METRIC_LOSS, language=lang))
+        ax_loss.grid(True)
+        ax_loss.legend()
 
-        plt.subplot(1, 3, 2)
-        plt.plot(epochs, train_acc, "o-", label="Training Accuracy")
-        plt.plot(epochs, val_acc, "o-", label="Validation Accuracy")
-        plt.title("Accuracy Curves")
-        plt.xlabel("Epoch")
-        plt.ylabel("Accuracy")
-        plt.grid(True)
-        plt.legend()
+        ax_acc.plot(epochs, train_acc, "o-", label=self.tr(PlotTextKey.METRIC_TRAIN_ACC, language=lang))
+        ax_acc.plot(epochs, val_acc, "o-", label=self.tr(PlotTextKey.METRIC_VAL_ACC, language=lang))
+        ax_acc.set_title(self.tr(PlotTextKey.METRIC_ACC_TITLE, language=lang))
+        ax_acc.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
+        ax_acc.set_ylabel(self.tr(PlotTextKey.METRIC_ACC, language=lang))
+        ax_acc.grid(True)
+        ax_acc.legend()
 
-        plt.subplot(1, 3, 3)
+        has_val_curve = False
         if val_sp is not None:
-            plt.plot(epochs, val_sp, "o-", label="SP metric", color="purple")
+            ax_perf.plot(epochs, val_sp, "o-", label=self.tr(PlotTextKey.METRIC_SP_LABEL, language=lang), color="purple")
+            has_val_curve = True
         if val_pd is not None:
-            plt.plot(epochs, val_pd, "o-", label="TPR (True Positives)", color="darkgreen")
+            ax_perf.plot(epochs, val_pd, "o-", label=self.tr(PlotTextKey.METRIC_TPR_LABEL, language=lang), color="darkgreen")
+            has_val_curve = True
         if val_fa is not None:
-            plt.plot(epochs, val_fa, "o-", label="FPR (False Positives)", color="darkred")
+            ax_perf.plot(epochs, val_fa, "o-", label=self.tr(PlotTextKey.METRIC_FPR_LABEL, language=lang), color="darkred")
+            has_val_curve = True
 
         if val_sp is not None:
             best_sp_epoch_idx = np.argmax(val_sp)
-            plt.axvline(
+            ax_perf.axvline(
                 x=epochs[best_sp_epoch_idx],
                 color="blue",
                 linestyle="--",
-                label=f"Best SP (Epoch {epochs[best_sp_epoch_idx]})",
+                label=self.tr(PlotTextKey.METRIC_BEST_SP_EPOCH, language=lang, epoch=epochs[best_sp_epoch_idx]),
             )
 
-        plt.title("Performance Metrics (SP, TPR, FPR)")
-        plt.xlabel("Epoch")
-        plt.ylabel("Metric value")
-        plt.grid(True)
-        plt.legend()
-        plt.tight_layout()
+        ax_perf.set_title(self.tr(PlotTextKey.METRIC_PERF_TITLE, language=lang))
+        ax_perf.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
+        ax_perf.set_ylabel(self.tr(PlotTextKey.METRIC_VALUE, language=lang))
+        ax_perf.grid(True)
+        if has_val_curve:
+            ax_perf.legend()
+        fig.tight_layout()
 
         filename = f"iet{context.iet}.ieta{context.ieta}_model_metrics.pdf"
         return self.save_figure(fig, context.output_dir, "model_metrics", filename)
@@ -144,9 +152,13 @@ class ModelMetricsPlotter(BaseMetricPlotter):
 class RocPlotter(BaseMetricPlotter):
     """Renders the Receiver Operating Characteristic (ROC) curve with AUC score."""
 
-    def __init__(self) -> None:
-        """Initializes the RocPlotter."""
-        super().__init__(name="RocPlotter")
+    def __init__(self, language: str = "en") -> None:
+        """Initializes the RocPlotter.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="RocPlotter", language=language)
 
     def plot_metric(self, context: MetricPlotContext) -> str | None:
         """Plots ROC curve using MetricPlotContext."""
@@ -178,19 +190,20 @@ class RocPlotter(BaseMetricPlotter):
         return self._render_plot(context, best_model_details)
 
     def _render_plot(self, context: RegionPlotContext, best_model_details: Dict[str, Any]) -> str:
+        lang = self._resolve_language(context)
         tpr, fpr = best_model_details["pd"], best_model_details["fa"]
         auc_score = best_model_details.get("auc_score", 0.0)
 
-        fig = plt.figure(figsize=(8, 6), clear=True, num=1)
-        plt.plot(fpr, tpr, color="blue", lw=2, label=f"ROC (AUC = {auc_score:.4f})")
-        plt.plot([0, 1], [0, 1], color="gray", linestyle="--", lw=1)
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel("False Positive Rate (FPR)")
-        plt.ylabel("True Positive Rate (TPR)")
-        plt.title(f"Model ROC Curve\n({context.iet},{context.ieta})")
-        plt.legend(loc="lower right")
-        plt.grid(True)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(fpr, tpr, color="blue", lw=2, label=self.tr(PlotTextKey.ROC_LEGEND, language=lang, auc=auc_score))
+        ax.plot([0, 1], [0, 1], color="gray", linestyle="--", lw=1)
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+        ax.set_xlabel(self.tr(PlotTextKey.ROC_XLABEL, language=lang))
+        ax.set_ylabel(self.tr(PlotTextKey.ROC_YLABEL, language=lang))
+        ax.set_title(self.tr(PlotTextKey.ROC_TITLE, language=lang, iet=context.iet, ieta=context.ieta))
+        ax.legend(loc="lower right")
+        ax.grid(True)
 
         filename = f"iet{context.iet}.ieta{context.ieta}_model_ROC.pdf"
         return self.save_figure(fig, context.output_dir, "ROC", filename)
@@ -199,9 +212,13 @@ class RocPlotter(BaseMetricPlotter):
 class BoxplotSPPlotter(BaseMetricPlotter):
     """Renders boxplot and swarmplot distributions of validation metrics across CV folds."""
 
-    def __init__(self) -> None:
-        """Initializes the BoxplotSPPlotter."""
-        super().__init__(name="BoxplotSPPlotter")
+    def __init__(self, language: str = "en") -> None:
+        """Initializes the BoxplotSPPlotter.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="BoxplotSPPlotter", language=language)
 
     def plot_metric(self, context: MetricPlotContext) -> str | None:
         """Plots distribution of metrics using MetricPlotContext."""
@@ -248,23 +265,31 @@ class BoxplotSPPlotter(BaseMetricPlotter):
         if df_results.empty:
             return None
 
-        labels_map = {
-            "best_sp_value": ("Distribution of SP Index by Fold", "Best SP Index"),
-            "best_fa_value": ("Distribution of FA by Fold", "Fake Rate"),
-            "best_pd_value": ("Distribution of PD by Fold", "Efficiency"),
+        lang = self._resolve_language(context)
+        key_map = {
+            "best_sp_value": (PlotTextKey.BOXPLOT_SP_TITLE, PlotTextKey.BOXPLOT_SP_YLABEL),
+            "best_fa_value": (PlotTextKey.BOXPLOT_FA_TITLE, PlotTextKey.BOXPLOT_FA_YLABEL),
+            "best_pd_value": (PlotTextKey.BOXPLOT_PD_TITLE, PlotTextKey.BOXPLOT_PD_YLABEL),
         }
-        title, y_label = labels_map.get(data_type, (f"Distribution of {data_type}", data_type))
+        if data_type in key_map:
+            title_key, ylabel_key = key_map[data_type]
+            title = self.tr(title_key, language=lang)
+            y_label = self.tr(ylabel_key, language=lang)
+        else:
+            title = self.tr(PlotTextKey.BOXPLOT_DEFAULT_TITLE, language=lang, data_type=data_type)
+            y_label = data_type
 
-        fig = plt.figure(figsize=(12, 7), clear=True, num=1)
-        sns.boxplot(x="fold", y=data_type, data=df_results, palette="plasma", hue="fold", legend=False)
-        sns.swarmplot(x="fold", y=data_type, data=df_results, palette="dark:black", alpha=0.7, size=3, hue="fold", legend=False)
-        plt.title(title)
-        plt.xlabel("Fold Number")
-        plt.ylabel(y_label)
-        plt.grid(axis="y", linestyle="--", alpha=0.7)
-        plt.xticks(
-            ticks=range(int(df_results["fold"].max()) + 1),
-            labels=[f"Fold {f+1}" for f in range(int(df_results["fold"].max()) + 1)],
+        fig, ax = plt.subplots(figsize=(12, 7))
+        sns.boxplot(x="fold", y=data_type, data=df_results, palette="plasma", hue="fold", legend=False, ax=ax)
+        sns.swarmplot(x="fold", y=data_type, data=df_results, palette="dark:black", alpha=0.7, size=3, hue="fold", legend=False, ax=ax)
+        ax.set_title(title)
+        ax.set_xlabel(self.tr(PlotTextKey.BOXPLOT_XLABEL, language=lang))
+        ax.set_ylabel(y_label)
+        ax.grid(axis="y", linestyle="--", alpha=0.7)
+        max_fold = int(df_results["fold"].max())
+        ax.set_xticks(
+            ticks=range(max_fold + 1),
+            labels=[self.tr(PlotTextKey.BOXPLOT_FOLD_TICK, language=lang, fold=f + 1) for f in range(max_fold + 1)],
         )
 
         filename = f"et{context.iet}.eta{context.ieta}.boxplot_SP.pdf"
@@ -274,9 +299,13 @@ class BoxplotSPPlotter(BaseMetricPlotter):
 class MetricsGridPlotter(BasePlotter):
     """Renders a 2D kinematic grid showing performance metrics (AUC, SP) per (ET, eta) pair."""
 
-    def __init__(self) -> None:
-        """Initializes the MetricsGridPlotter."""
-        super().__init__(name="MetricsGridPlotter")
+    def __init__(self, language: str = "en") -> None:
+        """Initializes the MetricsGridPlotter.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="MetricsGridPlotter", language=language)
 
     def plot(
         self,
@@ -296,18 +325,19 @@ class MetricsGridPlotter(BasePlotter):
         Returns:
             Absolute file path of the generated PNG figure.
         """
+        lang = self._resolve_language(context)
         fig, ax = plt.subplots(figsize=(10, 2))
         unique_et = df["et"].unique()
         unique_eta = df["eta"].unique()
         props = dict(boxstyle="round", facecolor="wheat", alpha=0.5)
 
         for _, row in df.iterrows():
-            label = f"AUC: {row['auc']:.3f}\nSP: {row['best_sp_value']:.3f}"
+            label = self.tr(PlotTextKey.GRID_CELL_LABEL, language=lang, auc=row["auc"], sp=row["best_sp_value"])
             ax.text(row["et"], row["eta"], label, ha="center", va="center", bbox=props, fontsize=10)
 
-        ax.set_ylabel("$\\eta$ (eta)")
-        ax.set_xlabel("$E_T$ (et)")
-        ax.set_title(f"[{model_name}] Metrics by pair ($E_T$, $\\eta$)")
+        ax.set_ylabel(self.tr(PlotTextKey.GRID_YLABEL, language=lang))
+        ax.set_xlabel(self.tr(PlotTextKey.GRID_XLABEL, language=lang))
+        ax.set_title(self.tr(PlotTextKey.GRID_TITLE, language=lang, model_name=model_name))
 
         margin_x = 0.5
         margin_y = 1.0

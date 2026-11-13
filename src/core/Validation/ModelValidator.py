@@ -2,13 +2,14 @@ import logging
 import os
 import pathlib
 import re
-from typing import List
+from typing import List, Tuple
 import numpy as np
 import pandas as pd
 import yaml
 
 from src.core.Datasets.SplitManifest import SplitManifest
 from src.core.Plotting.Context import RegionPlotContext
+from src.core.Plotting.Localization import BilingualPlotOrchestrator
 from src.core.Plotting.MetricPlotter import RocPlotter
 from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 from src.core.Interfaces.BaseEvaluator import BaseEvaluator
@@ -52,6 +53,7 @@ class ModelValidator:
         output_dir: str | pathlib.Path | None = None,
         target_et: int | None = None,
         target_eta: int | None = None,
+        language: str = "en",
     ) -> None:
         """Initializes the ModelValidator pipeline.
 
@@ -63,7 +65,10 @@ class ModelValidator:
             output_dir: Optional destination directory for plots (defaults to Plots/<results_folder_name>).
             target_et: Optional ET bin index filter.
             target_eta: Optional eta bin index filter.
+            language: Target plot language ('en', 'pt', or 'both').
         """
+        self.orchestrator: BilingualPlotOrchestrator = BilingualPlotOrchestrator(language=language)
+        default_lang = self.orchestrator.languages[0]
         self.config_path: pathlib.Path = pathlib.Path(config_path)
         self.config_instance: NeuralRingerTrainerConfiguration = self._load_config(config_path)
         self.data_path: pathlib.Path = pathlib.Path(data_path)
@@ -93,9 +98,11 @@ class ModelValidator:
         et_indices = np.where(feature_names == "trig_L2_calo_et")[0]
         trig_L2_calo_eta_index = int(eta_indices[0]) if len(eta_indices) > 0 else 0
         trig_L2_calo_et_index = int(et_indices[0]) if len(et_indices) > 0 else 0
-        self.efficiency_plotter: EfficiencyPlotter = EfficiencyPlotter(trig_L2_calo_et_index, trig_L2_calo_eta_index)
-        self.profile_plotter: ProfileMeanEnergyPlotter = ProfileMeanEnergyPlotter()
-        self.roc_plotter: RocPlotter = RocPlotter()
+        self.efficiency_plotter: EfficiencyPlotter = EfficiencyPlotter(
+            trig_L2_calo_et_index, trig_L2_calo_eta_index, language=default_lang
+        )
+        self.profile_plotter: ProfileMeanEnergyPlotter = ProfileMeanEnergyPlotter(language=default_lang)
+        self.roc_plotter: RocPlotter = RocPlotter(language=default_lang)
 
     @staticmethod
     def _load_config(config_path: str) -> NeuralRingerTrainerConfiguration:
@@ -158,9 +165,7 @@ class ModelValidator:
             )
         self.manifest.load()
 
-        validation_dir = self.plot_dir / "Validation"
-        validation_dir.mkdir(parents=True, exist_ok=True)
-
+        evaluated_regions: List[Tuple[int, int, HoldoutEvaluationResult]] = []
         all_results: List[HoldoutEvaluationResult] = []
 
         for index in range(len(self.trainer.full_dataset)):
@@ -200,18 +205,34 @@ class ModelValidator:
                 target_pd=target_pd,
             )
 
-            self.efficiency_plotter.plot_regional_efficiency(
-                result=result,
-                iet=iet,
-                ieta=ieta,
-                plot_dir=validation_dir,
-                config_name=self.config_instance.config_name,
-            )
+            evaluated_regions.append((iet, ieta, result))
             all_results.append(result)
 
-        if all_results:
-            self.efficiency_plotter.generate_global_plots(
-                all_results,
-                validation_dir,
-                self.config_instance.config_name,
-            )
+        def _render_language(lang: str, lang_base_dir: pathlib.Path) -> None:
+            validation_dir = lang_base_dir / "Validation"
+            validation_dir.mkdir(parents=True, exist_ok=True)
+            has_lang = hasattr(self.efficiency_plotter, "language")
+            prev_lang = getattr(self.efficiency_plotter, "language", None)
+            if has_lang:
+                self.efficiency_plotter.language = lang
+            try:
+                for iet, ieta, result in evaluated_regions:
+                    self.efficiency_plotter.plot_regional_efficiency(
+                        result=result,
+                        iet=iet,
+                        ieta=ieta,
+                        plot_dir=validation_dir,
+                        config_name=self.config_instance.config_name,
+                    )
+
+                if all_results:
+                    self.efficiency_plotter.generate_global_plots(
+                        all_results,
+                        validation_dir,
+                        self.config_instance.config_name,
+                    )
+            finally:
+                if has_lang and prev_lang is not None:
+                    self.efficiency_plotter.language = prev_lang
+
+        self.orchestrator.orchestrate(self.plot_dir, _render_language)

@@ -1,15 +1,17 @@
 import pathlib
-from typing import List
+from typing import Any, List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
 import mplhep as mh
 mh.style.use("ATLAS")
 
+from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluationResult
 
 
-class EfficiencyPlotter:
+class EfficiencyPlotter(BasePlotter):
     """Renders binned signal detection efficiency curves across kinematic variables.
 
     Attributes:
@@ -25,20 +27,40 @@ class EfficiencyPlotter:
         eta_index: int,
         et_cutoff: float = 150000.0,
         transparent: bool = False,
+        language: str = "en",
     ) -> None:
-        """Initializes EfficiencyPlotter with column indices and energy cutoff.
+        """Initializes EfficiencyPlotter with column indices, energy cutoff, and language.
 
         Args:
             et_index: Column index for transverse energy.
             eta_index: Column index for pseudorapidity.
             et_cutoff: Upper cutoff for transverse energy in MeV.
             transparent: Whether saved figures should have a transparent background (default: False).
+            language: Target language code ('en' or 'pt').
         """
+        super().__init__(name="EfficiencyPlotter", language=language)
         mh.style.use("ATLAS")
         self.et_index: int = et_index
         self.eta_index: int = eta_index
         self.et_cutoff: float = et_cutoff
         self.transparent: bool = transparent
+
+    def plot(self, context: Any, **kwargs: Any) -> Any:
+        """Fulfills BasePlotter interface, optionally delegating to plot_regional_efficiency."""
+        result = kwargs.get("result")
+        plot_dir = kwargs.get("plot_dir")
+        config_name = kwargs.get("config_name")
+        if result is not None and plot_dir is not None and config_name is not None:
+            iet = kwargs.get("iet", getattr(context, "iet", 0))
+            ieta = kwargs.get("ieta", getattr(context, "ieta", 0))
+            self.plot_regional_efficiency(
+                result=result,
+                iet=iet,
+                ieta=ieta,
+                plot_dir=pathlib.Path(plot_dir),
+                config_name=config_name,
+            )
+        return None
 
     def plot_efficiency_vs_feature(
         self,
@@ -46,9 +68,9 @@ class EfficiencyPlotter:
         y_holdout: np.ndarray,
         preds: np.ndarray,
         file_path: pathlib.Path | str,
-        feature_name: str = "Feature",
+        feature_name: Optional[str] = None,
         bins: int = 20,
-        label: str = "Efficiency (Signal)",
+        label: Optional[str] = None,
     ) -> None:
         """Renders binned efficiency with binomial uncertainty error bars.
 
@@ -67,6 +89,13 @@ class EfficiencyPlotter:
 
         if len(signal_feature_values) == 0:
             return
+
+        resolved_feature = (
+            feature_name if feature_name is not None else self.tr(PlotTextKey.EFFICIENCY_DEFAULT_FEATURE)
+        )
+        resolved_label = (
+            label if label is not None else self.tr(PlotTextKey.EFFICIENCY_DEFAULT_LABEL)
+        )
 
         bin_edges = np.histogram_bin_edges(signal_feature_values, bins=bins)
         bin_centers: List[float] = []
@@ -92,8 +121,8 @@ class EfficiencyPlotter:
                 efficiencies.append(efficiency)
                 binomial_uncertainties.append(binomial_uncertainty)
 
-        figure = plt.figure(figsize=(8, 5))
-        plt.errorbar(
+        figure, ax = plt.subplots(figsize=(8, 5))
+        ax.errorbar(
             bin_centers,
             efficiencies,
             yerr=binomial_uncertainties,
@@ -101,17 +130,81 @@ class EfficiencyPlotter:
             capsize=4,
             color="#1f77b4",
             linewidth=2,
-            label=label,
+            label=resolved_label,
         )
-        plt.xlabel(f"{feature_name}", fontsize=12)
-        plt.ylabel("Detection Efficiency (TPR)", fontsize=12)
-        plt.title(f"Detection Efficiency vs {feature_name}", fontsize=14)
-        plt.ylim(-0.05, 1.05)
-        plt.grid(True, linestyle="--", alpha=0.5)
-        plt.legend(fontsize=11)
+        ax.set_xlabel(resolved_feature, fontsize=12)
+        ax.set_ylabel(self.tr(PlotTextKey.EFFICIENCY_YLABEL), fontsize=12)
+        ax.set_title(self.tr(PlotTextKey.EFFICIENCY_TITLE_VS, feature_name=resolved_feature), fontsize=14)
+        ax.set_ylim(-0.05, 1.05)
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend(fontsize=11)
 
-        plt.savefig(file_path, format="png", transparent=self.transparent, bbox_inches="tight")
+        dest = pathlib.Path(file_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        figure.savefig(dest, format="png", transparent=self.transparent, bbox_inches="tight")
         plt.close(figure)
+
+    def _plot_cut_pair_curves(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        predictions_default: np.ndarray,
+        predictions_tuned: np.ndarray,
+        plot_dir: pathlib.Path,
+        prefix: str,
+    ) -> None:
+        """Generates standard and calibrated cut efficiency curves vs ET and eta."""
+        transverse_energies = features[:, self.et_index]
+        energy_filter_mask = transverse_energies < self.et_cutoff
+
+        filtered_features = features[energy_filter_mask]
+        filtered_targets = targets[energy_filter_mask]
+        filtered_predictions_default = predictions_default[energy_filter_mask]
+        filtered_predictions_tuned = predictions_tuned[energy_filter_mask]
+
+        filtered_transverse_energy_gev = filtered_features[:, self.et_index] / 1000.0
+        filtered_pseudorapidity_values = filtered_features[:, self.eta_index]
+        et_cutoff_gev = int(self.et_cutoff / 1000)
+
+        label_std = self.tr(PlotTextKey.EFFICIENCY_LABEL_STANDARD_CUT)
+        label_prop = self.tr(PlotTextKey.EFFICIENCY_LABEL_PROPOSED_CUT)
+
+        self.plot_efficiency_vs_feature(
+            filtered_transverse_energy_gev,
+            filtered_targets,
+            filtered_predictions_default,
+            plot_dir / f"{prefix}_signal_efficiency_vs_et_standard_cut.png",
+            feature_name=self.tr(PlotTextKey.EFFICIENCY_ET_STANDARD_FEATURE, et_cutoff_gev=et_cutoff_gev),
+            bins=10,
+            label=label_std,
+        )
+        self.plot_efficiency_vs_feature(
+            filtered_transverse_energy_gev,
+            filtered_targets,
+            filtered_predictions_tuned,
+            plot_dir / f"{prefix}_signal_efficiency_vs_et_target_pd_cut.png",
+            feature_name=self.tr(PlotTextKey.EFFICIENCY_ET_PROPOSED_FEATURE, et_cutoff_gev=et_cutoff_gev),
+            bins=10,
+            label=label_prop,
+        )
+        self.plot_efficiency_vs_feature(
+            filtered_pseudorapidity_values,
+            filtered_targets,
+            filtered_predictions_default,
+            plot_dir / f"{prefix}_signal_efficiency_vs_eta_standard_cut.png",
+            feature_name=self.tr(PlotTextKey.EFFICIENCY_ETA_STANDARD_FEATURE, et_cutoff_gev=et_cutoff_gev),
+            bins=20,
+            label=label_std,
+        )
+        self.plot_efficiency_vs_feature(
+            filtered_pseudorapidity_values,
+            filtered_targets,
+            filtered_predictions_tuned,
+            plot_dir / f"{prefix}_signal_efficiency_vs_eta_target_pd_cut.png",
+            feature_name=self.tr(PlotTextKey.EFFICIENCY_ETA_PROPOSED_FEATURE, et_cutoff_gev=et_cutoff_gev),
+            bins=20,
+            label=label_prop,
+        )
 
     def plot_regional_efficiency(
         self,
@@ -130,66 +223,13 @@ class EfficiencyPlotter:
             plot_dir: Target output directory.
             config_name: Model configuration name used in filenames.
         """
-        features = result.holdout_features_full
-        targets = result.holdout_labels
-        predictions_default = result.predictions_default_threshold
-        predictions_tuned = result.predictions_calibrated_cut
-
-        transverse_energies = features[:, self.et_index]
-        energy_filter_mask = transverse_energies < self.et_cutoff
-
-        filtered_features = features[energy_filter_mask]
-        filtered_targets = targets[energy_filter_mask]
-        filtered_predictions_default = predictions_default[energy_filter_mask]
-        filtered_predictions_tuned = predictions_tuned[energy_filter_mask]
-
-        filtered_transverse_energy_gev = filtered_features[:, self.et_index] / 1000.0
-        filtered_pseudorapidity_values = filtered_features[:, self.eta_index]
-        et_cutoff_gev = int(self.et_cutoff / 1000)
-        prefix = f"{config_name}_iet{iet}_ieta{ieta}"
-
-        et_standard_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_et_standard_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_transverse_energy_gev,
-            filtered_targets,
-            filtered_predictions_default,
-            et_standard_cut_plot_path,
-            feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV)",
-            bins=10,
-            label="Efficiency (Threshold 0.5)",
-        )
-
-        et_target_pd_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_et_target_pd_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_transverse_energy_gev,
-            filtered_targets,
-            filtered_predictions_tuned,
-            et_target_pd_cut_plot_path,
-            feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV) (Proposed Cut)",
-            bins=10,
-            label="Efficiency (Proposed Cut)",
-        )
-
-        eta_standard_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_eta_standard_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_pseudorapidity_values,
-            filtered_targets,
-            filtered_predictions_default,
-            eta_standard_cut_plot_path,
-            feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV)",
-            bins=20,
-            label="Efficiency (Threshold 0.5)",
-        )
-
-        eta_target_pd_cut_plot_path = plot_dir / f"{prefix}_signal_efficiency_vs_eta_target_pd_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_pseudorapidity_values,
-            filtered_targets,
-            filtered_predictions_tuned,
-            eta_target_pd_cut_plot_path,
-            feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV) (Proposed Cut)",
-            bins=20,
-            label="Efficiency (Proposed Cut)",
+        self._plot_cut_pair_curves(
+            features=result.holdout_features_full,
+            targets=result.holdout_labels,
+            predictions_default=result.predictions_default_threshold,
+            predictions_tuned=result.predictions_calibrated_cut,
+            plot_dir=plot_dir,
+            prefix=f"{config_name}_iet{iet}_ieta{ieta}",
         )
 
     def generate_global_plots(
@@ -208,63 +248,11 @@ class EfficiencyPlotter:
         if not results:
             return
 
-        global_features = np.concatenate([evaluation_result.holdout_features_full for evaluation_result in results], axis=0)
-        global_targets = np.concatenate([evaluation_result.holdout_labels for evaluation_result in results], axis=0)
-        global_predictions_default = np.concatenate([evaluation_result.predictions_default_threshold for evaluation_result in results], axis=0)
-        global_predictions_tuned = np.concatenate([evaluation_result.predictions_calibrated_cut for evaluation_result in results], axis=0)
-
-        global_transverse_energies = global_features[:, self.et_index]
-        energy_filter_mask = global_transverse_energies < self.et_cutoff
-
-        filtered_features = global_features[energy_filter_mask]
-        filtered_targets = global_targets[energy_filter_mask]
-        filtered_predictions_default = global_predictions_default[energy_filter_mask]
-        filtered_predictions_tuned_cut = global_predictions_tuned[energy_filter_mask]
-
-        filtered_transverse_energy_gev = filtered_features[:, self.et_index] / 1000.0
-        filtered_pseudorapidity_values = filtered_features[:, self.eta_index]
-        et_cutoff_gev = int(self.et_cutoff / 1000)
-
-        et_standard_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_et_standard_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_transverse_energy_gev,
-            filtered_targets,
-            filtered_predictions_default,
-            et_standard_cut_plot_path,
-            feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV)",
-            bins=10,
-            label="Efficiency (Threshold 0.5)",
-        )
-
-        et_target_pd_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_et_target_pd_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_transverse_energy_gev,
-            filtered_targets,
-            filtered_predictions_tuned_cut,
-            et_target_pd_cut_plot_path,
-            feature_name=f"$E_T$ [GeV] (< {et_cutoff_gev} GeV) (Proposed Cut)",
-            bins=10,
-            label="Efficiency (Proposed Cut)",
-        )
-
-        eta_standard_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_eta_standard_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_pseudorapidity_values,
-            filtered_targets,
-            filtered_predictions_default,
-            eta_standard_cut_plot_path,
-            feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV)",
-            bins=20,
-            label="Efficiency (Threshold 0.5)",
-        )
-
-        eta_target_pd_cut_plot_path = plot_dir / f"{config_name}_signal_efficiency_vs_eta_target_pd_cut.png"
-        self.plot_efficiency_vs_feature(
-            filtered_pseudorapidity_values,
-            filtered_targets,
-            filtered_predictions_tuned_cut,
-            eta_target_pd_cut_plot_path,
-            feature_name=f"$\\eta$ (for $E_T$ < {et_cutoff_gev} GeV) (Proposed Cut)",
-            bins=20,
-            label="Efficiency (Proposed Cut)",
+        self._plot_cut_pair_curves(
+            features=np.concatenate([r.holdout_features_full for r in results], axis=0),
+            targets=np.concatenate([r.holdout_labels for r in results], axis=0),
+            predictions_default=np.concatenate([r.predictions_default_threshold for r in results], axis=0),
+            predictions_tuned=np.concatenate([r.predictions_calibrated_cut for r in results], axis=0),
+            plot_dir=plot_dir,
+            prefix=config_name,
         )

@@ -46,6 +46,7 @@ class ResultsRecorder:
         """
         self.records.append(
             {
+                "repeat": repeat,
                 "reapet": repeat,
                 "file_path": file_path,
                 "fold": fold,

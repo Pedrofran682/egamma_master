@@ -6,6 +6,7 @@ import torch.nn as nn
 from sklearn.model_selection import StratifiedGroupKFold
 from torch.utils.data import DataLoader, TensorDataset
 
+from src.Parser.DynamicConfiguration import DynamicConfiguration
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 from src.utils import get_class_weight, get_instance
 
@@ -54,8 +55,16 @@ class TrainingFactory:
         Returns:
             Configured torch.optim.Optimizer instance.
         """
-        self.config.optimizer_function.parameters["params"] = model.parameters()
-        return get_instance(self.config.optimizer_function)
+        optimizer_params = {
+            **self.config.optimizer_function.parameters,
+            "params": model.parameters(),
+        }
+        optimizer_config = DynamicConfiguration(
+            module=self.config.optimizer_function.module,
+            object_name=self.config.optimizer_function.object_name,
+            parameters=optimizer_params,
+        )
+        return get_instance(optimizer_config)
 
     def create_loss_function(self) -> nn.Module:
         """Instantiates the loss criterion configured for the run.

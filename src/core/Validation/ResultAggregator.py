@@ -46,8 +46,27 @@ class ResultAggregator(BaseResultAggregator):
             for f in file_list:
                 try:
                     loaded = pd.read_pickle(f)
+                    if isinstance(loaded, dict):
+                        loaded = [loaded]
+                    elif isinstance(loaded, list):
+                        loaded = [
+                            {
+                                **result,
+                                **(
+                                    {"repeat": result.get("repeat", result.get("reapet"))}
+                                    if isinstance(result, dict)
+                                    and ("repeat" in result or "reapet" in result)
+                                    else {}
+                                ),
+                            }
+                            for result in loaded
+                        ]
                     df_item = pd.DataFrame(loaded)
                     if not df_item.empty:
+                        if "repeat" not in df_item.columns and "reapet" in df_item.columns:
+                            df_item["repeat"] = df_item["reapet"]
+                        elif "repeat" in df_item.columns and "reapet" in df_item.columns:
+                            df_item["repeat"] = df_item["repeat"].combine_first(df_item["reapet"])
                         df_list.append(df_item)
                 except Exception as e:
                     log.warning(f"Skipping unreadable result file {f}: {e}")
@@ -103,6 +122,16 @@ class ResultAggregator(BaseResultAggregator):
         return self.get_best_model_details(self._grouped_dfs[region_key])
 
     @staticmethod
+    def _resolve_repeat_series(df: pd.DataFrame) -> pd.Series:
+        if "repeat" in df.columns and "reapet" in df.columns:
+            return df["repeat"].combine_first(df["reapet"]).rename("repeat")
+        if "repeat" in df.columns:
+            return df["repeat"].rename("repeat")
+        if "reapet" in df.columns:
+            return df["reapet"].rename("repeat")
+        raise KeyError("Results DataFrame must contain 'repeat' or 'reapet' column.")
+
+    @staticmethod
     def get_best_model_details(df: pd.DataFrame) -> Tuple[Dict[str, Any], int, float, float]:
         """Determines the top-performing initialization repetition and extracts its best fold model.
 
@@ -116,14 +145,22 @@ class ResultAggregator(BaseResultAggregator):
                 - Mean SP value across folds for that repetition.
                 - Standard deviation of the SP values across folds.
         """
-        df_stats = df.groupby("reapet")["best_sp_value"].agg(["mean", "std"]).reset_index()
+        repeat_series = ResultAggregator._resolve_repeat_series(df)
+        df_stats = (
+            df.groupby(repeat_series)["best_sp_value"]
+            .agg(["mean", "std"])
+            .reset_index()
+        )
         best_init_idx = df_stats["mean"].idxmax()
-        best_repetition = int(df_stats.loc[best_init_idx, "reapet"])
+        best_repetition = int(df_stats.loc[best_init_idx, "repeat"])
         best_mean_sp = float(df_stats.loc[best_init_idx, "mean"])
         best_std_sp = float(df_stats.loc[best_init_idx, "std"])
 
-        df_best_rep = df[df["reapet"] == best_repetition]
+        df_best_rep = df[repeat_series == best_repetition]
         best_model_idx = df_best_rep["best_sp_value"].idxmax()
         best_model = df.loc[best_model_idx].to_dict()
+        if "repeat" not in best_model or pd.isna(best_model.get("repeat")):
+            if "reapet" in best_model:
+                best_model["repeat"] = best_model["reapet"]
 
         return best_model, best_repetition, best_mean_sp, best_std_sp

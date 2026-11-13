@@ -51,21 +51,18 @@ Output results and checkpoints are stored in `results/config_name<Name>_id<YYYYM
 ### Plotting
 - **Metric and ROC curves**:
   ```bash
-  conda run -n egamma python scripts/run_plots.py results/<run_folder>
-  ```
-- **Ringer energy profiles**:
-  ```bash
-  conda run -n egamma python scripts/run_plots.py results/<run_folder> --plot_ringer --percentage 0.5
+  conda run -n egamma python scripts/run_plots.py results/<run_folder> [--lang en|pt|both]
   ```
 - **Multi-model comparison ROC grid**:
   ```bash
-  conda run -n egamma python scripts/run_roc_plots.py --results_path results/
+  conda run -n egamma python scripts/run_roc_plots.py --results_path results/ [--lang en|pt|both]
   ```
+- **Bilingual plotting (`--lang`)**: Plotting and validation CLIs (`run_plots.py`, `run_roc_plots.py`, `plot_data_distribution.py`, `run_quadrant_analysis.py`, `validate_pd.py`) accept `--lang en|pt|both` (default: `en`). Single-language runs write directly to `<output_dir>/`; `--lang both` generates outputs under `<output_dir>/en/` and `<output_dir>/pt/` via `BilingualPlotOrchestrator`.
 
 ### Validating Models
-Compare model performance against benchmark threshold cuts (supports optional `--efficiencies_csv` and `--target_pd`):
+Compare model performance against benchmark threshold cuts (supports optional `--efficiencies_csv`, `--target_pd`, and `--lang`):
 ```bash
-conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/ [--efficiencies_csv <csv_path>] [--target_pd 0.9424]
+conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/ [--efficiencies_csv <csv_path>] [--target_pd 0.9424] [--lang en|pt|both]
 ```
 Calculate ATLAS baseline fast photon cut efficiencies:
 ```bash
@@ -75,7 +72,7 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_pat
 ### Regional Data Distribution Analysis
 Analyze and visualize class distributions across $E_T$ and $\eta$ regions:
 ```bash
-conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
+conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml [--lang en|pt|both]
 ```
 
 ### Quadrant Analysis (Model Comparison & Cut-Based Benchmark)
@@ -87,14 +84,16 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     --config1 config/NeuralRinger/ModelV1.yaml \
     --data_path1 results/<model1_results_dir> \
     --config2 config/NeuralRinger/ModelV2.yaml \
-    --data_path2 results/<model2_results_dir>
+    --data_path2 results/<model2_results_dir> \
+    [--lang en|pt|both]
 
 # Model vs Cut-Based Selection
 conda run -n egamma python scripts/run_quadrant_analysis.py \
     --mode model_vs_cut \
     --config1 config/NeuralRinger/ModelV1.yaml \
     --data_path1 results/<model1_results_dir> \
-    --working_point loose
+    --working_point loose \
+    [--lang en|pt|both]
 ```
 
 ### Hyperparameter Tuning
@@ -104,17 +103,6 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
     --tuning_config config/tuning/ModelV6_50Rings_region1_1_tuning.yaml \
     [--output_dir results/tuning_modelv6] \
     [--debug]
-```
-
-### Pileup Sensitivity Analysis
-Evaluate classifier stability, efficiency vs. $\langle\mu\rangle$, observable drifts, and primary vertex calibration:
-```bash
-conda run -n egamma python scripts/run_pileup_analysis.py \
-    --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
-    --results_path results/<model_results_dir> \
-    --target_et 1 --target_eta 1 \
-    [--output_dir Plots/pileup_analysis] \
-    [--format png|pdf]
 ```
 
 ### Batch Runs
@@ -134,18 +122,18 @@ When searching for or modifying functionality, refer to the following locations:
 | **Model Registry** | `src/Models/ModelRegistry.py` | Auto-discovers all `nn.Module` classes in `src/Models/egamma/` by class name |
 | **Model Architectures** | `src/Models/egamma/*.py` | Individual models (`ModelV1` through `ModelV10`, `Run2_ModelV1`, `Run2_ModelV1_2`) |
 | **Model Factory** | `src/Models/Models.py` | `get_model(tag, input_dim)` delegating to `ModelRegistry` |
-| **Interfaces** | `src/core/Interfaces/` | Abstract base classes (`BaseEgammaDataset`, `BaseTrainer`, `BaseResultAggregator`, `BaseEvaluator`, `BasePlotter`, `BaseMetricPlotter`, `BaseHyperparameterTuner`) |
-| **Dataset & Splits** | `src/core/Datasets/` | `EgammaNpzDataset.py` (reads `.npz` rings, exposes `feature_names`), `EgammaNpzDatasetNoTargetOrigin.py`, `SplitManifest.py` (K-fold split persistence with logging) |
+| **Interfaces** | `src/core/Interfaces/` | Abstract base classes (`BaseEgammaDataset`, `BaseTrainer`, `BaseResultAggregator`, `BaseEvaluator`, `BasePlotter` in `src/core/Interfaces/BasePlotter.py`, `BaseMetricPlotter`, `BaseHyperparameterTuner`) |
+| **Dataset & Splits** | `src/core/Datasets/` | `EgammaNpzDataset.py` (reads `.npz` rings, exposes `feature_names`), `SplitManifest.py` (K-fold split persistence with logging) |
 | **Trainers** | `src/core/Trainers/` | `NeuralRingerTrainer.py` (coordinator), `FoldTrainer.py` (single fold), `TrainingFactory.py`, `ResultsRecorder.py` |
 | **Tuning** | `src/core/Tuning/` | `GridSearchTuner.py` (tuner orchestrator), `TuningConfiguration.py` (search space & trial builder) |
 | **Callbacks** | `src/core/Callbacks/` | `SPCallbackPyTorch.py` (tracks SP index, knee point, early stopping, best weights) |
-| **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `BasePlotter.py`, `QuadrantPlotter.py` (2x2 heatmaps & score scatter), `FeatureDistributionPlotter.py` (2-panel distribution & ratio subplots), `PileupPlotter.py` (efficiency vs $\mu$ & 2D NPV heatmaps), `ProfilePlotter.py`, `MetricPlotter.py`, `RegionDistributionPlotter.py` (2D heatmaps), `LegacyPlotter.py`, `Context.py` |
-| **Validation** | `src/core/Validation/` | `ModelValidator.py`, `QuadrantAnalyzer.py` (supports aliases), `DistributionComparator.py` (KS, Wasserstein, KL & JS divergences), `DistanceMetricsETL.py` (validation distance metrics ETL consolidator), `PileupAnalyzer.py` ($\mu$ efficiency & vertex fit), `QuadrantTableConsolidator.py`, `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
+| **Plotting** | `src/core/Plotting/` | `PlotManager.py`, `Localization.py` (`PlotTranslator`, `BilingualPlotOrchestrator` for `--lang en|pt|both`), `QuadrantPlotter.py` (2x2 heatmaps & score scatter), `FeatureDistributionPlotter.py` (2-panel distribution & ratio subplots), `PileupPlotter.py` (efficiency vs $\mu$ & 2D NPV heatmaps), `ProfilePlotter.py`, `MetricPlotter.py`, `RegionDistributionPlotter.py` (2D heatmaps), `LegacyPlotter.py`, `Context.py` (`RegionPlotContext`, `MetricPlotContext`) |
+| **Validation** | `src/core/Validation/` | `ModelValidator.py`, `QuadrantAnalyzer.py` (supports aliases), `DistributionComparator.py` (KS, Wasserstein, KL & JS divergences), `DistanceMetricsETL.py` (validation distance metrics ETL consolidator), `LatexTableFormatter.py` (`LatexTableFormatter` booktabs table formatter), `PileupAnalyzer.py` ($\mu$ efficiency & vertex fit), `QuadrantTableConsolidator.py`, `RegionDataDistributionAnalyzer.py`, `HoldoutEvaluator.py`, `EfficiencyPlotter.py`, `ResultAggregator.py` |
 | **Configuration** | `src/Parser/` | `NeuralRingerTrainerConfiguration.py` (Pydantic schema), `DynamicConfiguration.py` |
 | **Utilities** | `src/utils.py` | L1-norm, metric aggregation, bin extraction, dynamic instantiation, statistical divergences (KS, Wasserstein, KL, JS), feature column extraction, CSV serialization |
 | **Configs** | `config/NeuralRinger/` | YAML training specifications |
-| **Notebooks** | `notebooks/` | Interactive analysis (`single_region_full_validation.ipynb`, `validate_results.ipynb`, `consolidate_quadrant_tables.ipynb`, `analyse_distance_metrics.ipynb`) |
-| **Entrypoints** | `main.py`, `scripts/*.py` | CLI execution scripts (`validate_pd.py`, `plot_data_distribution.py`, `run_plots.py`, `run_roc_plots.py`, `calculate_photon_cut_efficiency.py`, `run_pileup_analysis.py`) |
+| **Notebooks** | `notebooks/` | Interactive analysis (`single_region_full_validation.ipynb`, `validate_results.ipynb`, `consolidate_quadrant_tables.ipynb`, `analyse_distance_metrics.ipynb`, `format_latex_tables.ipynb`) |
+| **Entrypoints** | `main.py`, `scripts/*.py` | CLI execution scripts (`validate_pd.py`, `plot_data_distribution.py`, `run_plots.py`, `run_roc_plots.py`, `calculate_photon_cut_efficiency.py`) |
 | **Unit Tests** | `tests/` | Pytest test cases (`test_utils.py`, `test_distribution_comparator.py`, `test_feature_distribution_plotter.py`, `test_distance_metrics_etl.py`, `test_pileup.py`, `test_validation.py`, etc.) |
 
 ---

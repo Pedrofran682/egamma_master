@@ -9,6 +9,7 @@ import mplhep as mh
 mh.style.use("ATLAS")
 
 from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 from src.core.Plotting.RegionDistributionPlotter import DEFAULT_ET_INTERVALS, DEFAULT_ETA_INTERVALS
 from src.core.Validation.QuadrantAnalyzer import RegionalQuadrantResult
 
@@ -36,24 +37,37 @@ class QuadrantPlotter(BasePlotter):
         self,
         et_intervals: Optional[Dict[int, str]] = None,
         eta_intervals: Optional[Dict[int, str]] = None,
+        language: str = "en",
     ) -> None:
-        """Initializes QuadrantPlotter with optional kinematic label intervals.
+        """Initializes QuadrantPlotter with optional kinematic label intervals and language.
 
         Args:
             et_intervals: Optional dictionary mapping ET bin indices to physical intervals.
             eta_intervals: Optional dictionary mapping eta bin indices to physical intervals.
+            language: Target language code ('en' or 'pt').
         """
-        super().__init__(name="QuadrantPlotter")
+        super().__init__(name="QuadrantPlotter", language=language)
         mh.style.use("ATLAS")
         self.et_intervals: Dict[int, str] = et_intervals or DEFAULT_ET_INTERVALS
         self.eta_intervals: Dict[int, str] = eta_intervals or DEFAULT_ETA_INTERVALS
 
+    _VARIABLE_TRANSLATION_KEYS: Dict[str, PlotTextKey] = {
+        "trig_L2_calo_weta2": PlotTextKey.QUADRANT_VAR_TRIG_L2_CALO_WETA2,
+        "trig_L2_calo_wstot": PlotTextKey.QUADRANT_VAR_TRIG_L2_CALO_WSTOT,
+        "trig_L2_calo_fracs1": PlotTextKey.QUADRANT_VAR_TRIG_L2_CALO_FRACS1,
+    }
+
+    def _get_variable_display(self, var_name: str) -> str:
+        if var_name in self._VARIABLE_TRANSLATION_KEYS:
+            return self.tr(self._VARIABLE_TRANSLATION_KEYS[var_name])
+        return VARIABLE_LABELS.get(var_name, var_name)
+
     def _get_region_label(self, iet: int, ieta: int) -> str:
         if iet < 0 or ieta < 0:
-            return "Global (All Regions)"
-        et_desc = self.et_intervals.get(iet, f"Bin {iet}")
-        eta_desc = self.eta_intervals.get(ieta, f"Bin {ieta}")
-        return f"$E_T$ {et_desc}, $\\eta$ {eta_desc} (iet{iet}.ieta{ieta})"
+            return self.tr(PlotTextKey.QUADRANT_GLOBAL_REGION)
+        et_desc = self.et_intervals.get(iet, self.tr(PlotTextKey.QUADRANT_BIN_FALLBACK, bin_idx=iet))
+        eta_desc = self.eta_intervals.get(ieta, self.tr(PlotTextKey.QUADRANT_BIN_FALLBACK, bin_idx=ieta))
+        return self.tr(PlotTextKey.QUADRANT_REGION_LABEL, et_desc=et_desc, eta_desc=eta_desc, iet=iet, ieta=ieta)
 
     def plot_showershape_histogram(
         self,
@@ -88,17 +102,22 @@ class QuadrantPlotter(BasePlotter):
         c1 = preds1 == labels
         c2 = preds2 == labels
 
+        both_correct_label = self.tr(PlotTextKey.QUADRANT_BOTH_CORRECT)
+        s1_only_label = self.tr(PlotTextKey.QUADRANT_STRATEGY_ONLY, strategy=result.strategy1_name)
+        s2_only_label = self.tr(PlotTextKey.QUADRANT_STRATEGY_ONLY, strategy=result.strategy2_name)
+        both_wrong_label = self.tr(PlotTextKey.QUADRANT_BOTH_WRONG)
+
         categories = np.empty(len(labels), dtype=object)
-        categories[c1 & c2] = "Both Correct"
-        categories[c1 & ~c2] = f"{result.strategy1_name} Only"
-        categories[~c1 & c2] = f"{result.strategy2_name} Only"
-        categories[~c1 & ~c2] = "Both Wrong"
+        categories[c1 & c2] = both_correct_label
+        categories[c1 & ~c2] = s1_only_label
+        categories[~c1 & c2] = s2_only_label
+        categories[~c1 & ~c2] = both_wrong_label
 
         palette = {
-            "Both Correct": "#2ca02c",
-            f"{result.strategy1_name} Only": "#1f77b4",
-            f"{result.strategy2_name} Only": "#ff7f0e",
-            "Both Wrong": "#d62728",
+            both_correct_label: "#2ca02c",
+            s1_only_label: "#1f77b4",
+            s2_only_label: "#ff7f0e",
+            both_wrong_label: "#d62728",
         }
 
         finite_mask = np.isfinite(values)
@@ -122,17 +141,23 @@ class QuadrantPlotter(BasePlotter):
             gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08, "wspace": 0.18},
         )
         region_str = self._get_region_label(result.iet, result.ieta)
-        var_display = VARIABLE_LABELS.get(var_name, var_name)
+        var_display = self._get_variable_display(var_name)
 
         fig.suptitle(
-            f"{var_display} — Quadrant Breakdown\n{region_str} ({result.strategy1_name} vs {result.strategy2_name})",
+            self.tr(
+                PlotTextKey.QUADRANT_HIST_SUPTITLE,
+                var_display=var_display,
+                region_str=region_str,
+                s1=result.strategy1_name,
+                s2=result.strategy2_name,
+            ),
             fontsize=13,
             weight="bold",
         )
 
         sample_configs = [
-            ("Signal (Photons)", labels == 1, axes[0, 0], axes[1, 0], "True Signal"),
-            ("Background (Fakes)", labels == 0, axes[0, 1], axes[1, 1], "True Background"),
+            (self.tr(PlotTextKey.QUADRANT_SIGNAL_TITLE), labels == 1, axes[0, 0], axes[1, 0], self.tr(PlotTextKey.QUADRANT_TRUE_SIGNAL)),
+            (self.tr(PlotTextKey.QUADRANT_BACKGROUND_TITLE), labels == 0, axes[0, 1], axes[1, 1], self.tr(PlotTextKey.QUADRANT_TRUE_BACKGROUND)),
         ]
 
         for sample_title, s_mask, ax_main, ax_res, true_label in sample_configs:
@@ -200,7 +225,7 @@ class QuadrantPlotter(BasePlotter):
                     capsize=1.5,
                 )
 
-            ax_main.set_ylabel("Events", fontsize=11)
+            ax_main.set_ylabel(self.tr(PlotTextKey.QUADRANT_EVENTS_YLABEL), fontsize=11)
             ax_main.grid(True, linestyle=":", alpha=0.5)
             ax_main.legend(loc="upper right", framealpha=0.9, fontsize=9)
 
@@ -209,7 +234,7 @@ class QuadrantPlotter(BasePlotter):
                 ax_main.set_ylim(bottom=0.5)
 
             ax_res.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
-            ax_res.set_ylabel(r"$N_{\mathrm{cat}} / N_{\mathrm{true}}$", fontsize=9)
+            ax_res.set_ylabel(self.tr(PlotTextKey.QUADRANT_RATIO_YLABEL), fontsize=9)
             ax_res.set_xlabel(var_display, fontsize=11)
             ax_res.set_ylim(-0.05, 1.15)
             ax_res.grid(True, linestyle=":", alpha=0.5)
@@ -349,12 +374,11 @@ class QuadrantPlotter(BasePlotter):
         mh.style.use("ATLAS")
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         region_str = self._get_region_label(result.iet, result.ieta)
-        var_label = r"Transverse Energy $E_T$ [GeV] ($E_T < 150$ GeV)" if var_name == "et" else r"Pseudorapidity $\eta$"
+        var_label = self.tr(PlotTextKey.QUADRANT_VAR_ET) if var_name == "et" else self.tr(PlotTextKey.QUADRANT_VAR_ETA)
 
         s1_name = result.strategy1_name
         s2_name = result.strategy2_name
 
-        # Left panel: Signal Class (Photons)
         if len(s1_sig_x) > 0:
             axes[0].errorbar(
                 s1_sig_x,
@@ -379,13 +403,12 @@ class QuadrantPlotter(BasePlotter):
             )
 
         axes[0].set_xlabel(var_label, fontsize=11)
-        axes[0].set_ylabel("Signal Efficiency (TPR / $P_d$)", fontsize=11)
-        axes[0].set_title(f"Signal Class (Photons) Efficiency vs {var_label}", fontsize=12, weight="bold")
+        axes[0].set_ylabel(self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_YLABEL), fontsize=11)
+        axes[0].set_title(self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_VS_TITLE, var_label=var_label), fontsize=12, weight="bold")
         axes[0].set_ylim(-0.02, 1.05)
         axes[0].grid(True, linestyle=":", alpha=0.6)
         axes[0].legend(loc="lower right", framealpha=0.9)
 
-        # Right panel: Background Class (Fakes)
         if len(s1_bg_x) > 0:
             axes[1].errorbar(
                 s1_bg_x,
@@ -410,14 +433,20 @@ class QuadrantPlotter(BasePlotter):
             )
 
         axes[1].set_xlabel(var_label, fontsize=11)
-        axes[1].set_ylabel(r"Background Efficiency (TNR / $\mathrm{Eff}_{\mathrm{bg}}$)", fontsize=11)
-        axes[1].set_title(f"Background Class (Fakes) Efficiency vs {var_label}", fontsize=12, weight="bold")
+        axes[1].set_ylabel(self.tr(PlotTextKey.QUADRANT_BG_EFF_YLABEL), fontsize=11)
+        axes[1].set_title(self.tr(PlotTextKey.QUADRANT_BG_EFF_VS_TITLE, var_label=var_label), fontsize=12, weight="bold")
         axes[1].set_ylim(-0.02, 1.05)
         axes[1].grid(True, linestyle=":", alpha=0.6)
         axes[1].legend(loc="lower right", framealpha=0.9)
 
         fig.suptitle(
-            f"Classification Efficiency vs {var_label}\n{region_str} ({s1_name} vs {s2_name})",
+            self.tr(
+                PlotTextKey.QUADRANT_EFF_SUPTITLE,
+                var_label=var_label,
+                region_str=region_str,
+                s1=s1_name,
+                s2=s2_name,
+            ),
             fontsize=13,
             weight="bold",
         )
@@ -431,7 +460,7 @@ class QuadrantPlotter(BasePlotter):
             "EfficiencyCurves",
             filename,
             file_format=file_format,
-            transparent=False
+            transparent=False,
         )
 
     def plot_regional_summary(
@@ -469,14 +498,14 @@ class QuadrantPlotter(BasePlotter):
         x = np.arange(len(regions))
         bar_width = 0.20
 
-        ax.bar(x - 1.5 * bar_width, both_correct, bar_width, label="Both Correct", color="#2ca02c")
-        ax.bar(x - 0.5 * bar_width, s1_only, bar_width, label=f"{s1_name} Only", color="#1f77b4")
-        ax.bar(x + 0.5 * bar_width, s2_only, bar_width, label=f"{s2_name} Only", color="#ff7f0e")
-        ax.bar(x + 1.5 * bar_width, both_wrong, bar_width, label="Both Wrong", color="#d62728")
+        ax.bar(x - 1.5 * bar_width, both_correct, bar_width, label=self.tr(PlotTextKey.QUADRANT_BOTH_CORRECT), color="#2ca02c")
+        ax.bar(x - 0.5 * bar_width, s1_only, bar_width, label=self.tr(PlotTextKey.QUADRANT_STRATEGY_ONLY, strategy=s1_name), color="#1f77b4")
+        ax.bar(x + 0.5 * bar_width, s2_only, bar_width, label=self.tr(PlotTextKey.QUADRANT_STRATEGY_ONLY, strategy=s2_name), color="#ff7f0e")
+        ax.bar(x + 1.5 * bar_width, both_wrong, bar_width, label=self.tr(PlotTextKey.QUADRANT_BOTH_WRONG), color="#d62728")
 
-        ax.set_ylabel("Proportion of Holdout Events", fontsize=12)
+        ax.set_ylabel(self.tr(PlotTextKey.QUADRANT_SUMMARY_YLABEL), fontsize=12)
         ax.set_title(
-            f"Regional Quadrant Distribution Summary\n{s1_name} vs {s2_name}",
+            self.tr(PlotTextKey.QUADRANT_SUMMARY_TITLE, s1=s1_name, s2=s2_name),
             fontsize=14,
             weight="bold",
         )
@@ -494,7 +523,7 @@ class QuadrantPlotter(BasePlotter):
             "Summary",
             filename,
             file_format=file_format,
-            transparent=False
+            transparent=False,
         )
 
     def plot_regional_class_efficiencies(
@@ -537,7 +566,6 @@ class QuadrantPlotter(BasePlotter):
         x = np.arange(len(regions))
         bar_width = 0.35
 
-        # Signal Class (Photons)
         axes[0].bar(
             x - 0.5 * bar_width,
             s1_sig_eff,
@@ -556,15 +584,14 @@ class QuadrantPlotter(BasePlotter):
             label=s2_name,
             color="#ff7f0e",
         )
-        axes[0].set_ylabel("Signal Efficiency (TPR / $P_d$)", fontsize=11)
-        axes[0].set_title("Signal Class (Photons) Efficiency", fontsize=12, weight="bold")
+        axes[0].set_ylabel(self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_YLABEL), fontsize=11)
+        axes[0].set_title(self.tr(PlotTextKey.QUADRANT_CLASS_EFF_SIG_TITLE), fontsize=12, weight="bold")
         axes[0].set_xticks(x)
         axes[0].set_xticklabels(regions, rotation=45, ha="right", fontsize=9)
         axes[0].set_ylim(0.0, 1.05)
         axes[0].grid(axis="y", linestyle=":", alpha=0.6)
         axes[0].legend(loc="lower right", framealpha=0.9)
 
-        # Background Class (Fakes)
         axes[1].bar(
             x - 0.5 * bar_width,
             s1_bg_eff,
@@ -583,8 +610,8 @@ class QuadrantPlotter(BasePlotter):
             label=s2_name,
             color="#ff7f0e",
         )
-        axes[1].set_ylabel(r"Background Efficiency (TNR / $\mathrm{Eff}_{\mathrm{bg}}$)", fontsize=11)
-        axes[1].set_title("Background Class (Fakes) Efficiency", fontsize=12, weight="bold")
+        axes[1].set_ylabel(self.tr(PlotTextKey.QUADRANT_BG_EFF_YLABEL), fontsize=11)
+        axes[1].set_title(self.tr(PlotTextKey.QUADRANT_CLASS_EFF_BG_TITLE), fontsize=12, weight="bold")
         axes[1].set_xticks(x)
         axes[1].set_xticklabels(regions, rotation=45, ha="right", fontsize=9)
         axes[1].set_ylim(0.0, 1.05)
@@ -592,7 +619,7 @@ class QuadrantPlotter(BasePlotter):
         axes[1].legend(loc="lower right", framealpha=0.9)
 
         fig.suptitle(
-            f"Regional Classification Efficiencies by Class\n{s1_name} vs {s2_name}",
+            self.tr(PlotTextKey.QUADRANT_CLASS_EFF_SUPTITLE, s1=s1_name, s2=s2_name),
             fontsize=13,
             weight="bold",
         )
@@ -604,7 +631,7 @@ class QuadrantPlotter(BasePlotter):
             "Summary",
             filename,
             file_format=file_format,
-            transparent=False
+            transparent=False,
         )
 
     def plot(
@@ -707,7 +734,6 @@ class QuadrantPlotter(BasePlotter):
                 saved_paths["efficiency_curves"].append(global_eta_path)
                 log.info(f"[Global] Generated full efficiency vs eta: {global_eta_path}")
 
-        # Summary plots
         summary_path = self.plot_regional_summary(results, summary_dir, file_format=file_format)
         if summary_path:
             saved_paths["summary"].append(summary_path)

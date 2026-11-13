@@ -7,14 +7,20 @@ import mplhep as mh
 mh.style.use("ATLAS")
 
 from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 
 
 class PileupPlotter(BasePlotter):
     """Visualizer for pileup sensitivity, detector drift, and vertex correlation."""
 
-    def __init__(self, name: str = "PileupPlotter") -> None:
-        """Initializes PileupPlotter with ATLAS graphic style."""
-        super().__init__(name=name)
+    def __init__(self, name: str = "PileupPlotter", language: str = "en") -> None:
+        """Initializes PileupPlotter with ATLAS graphic style and target language.
+
+        Args:
+            name: Descriptive plotter name.
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name=name, language=language)
         mh.style.use("ATLAS")
 
     def plot_efficiency_vs_mu(
@@ -136,8 +142,12 @@ class PileupPlotter(BasePlotter):
                         capsize=2,
                     )
 
-        metric_name = "Signal Efficiency ($P_D$)" if is_signal else "Background Fake Rate ($P_F$)"
-        full_title = f"{metric_name} vs. $\\langle\\mu\\rangle$"
+        metric_name = (
+            self.tr(PlotTextKey.PILEUP_SIGNAL_EFFICIENCY)
+            if is_signal
+            else self.tr(PlotTextKey.PILEUP_BACKGROUND_FAKE_RATE)
+        )
+        full_title = self.tr(PlotTextKey.PILEUP_VS_MU_TITLE, metric_name=metric_name)
         if region_label:
             full_title += f" ({region_label})"
         if title:
@@ -151,13 +161,13 @@ class PileupPlotter(BasePlotter):
         if show_ratio and ax_ratio is not None:
             ax_ratio.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
             ref_label = ref_model.get("label", "Ref")
-            ax_ratio.set_ylabel(f"Ratio to\n{ref_label}", fontsize=8)
-            ax_ratio.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
+            ax_ratio.set_ylabel(self.tr(PlotTextKey.PILEUP_RATIO_TO, ref_label=ref_label), fontsize=8)
+            ax_ratio.set_xlabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL), loc="center")
             ax_ratio.grid(True, linestyle=":", alpha=0.5)
             ax_ratio.set_ylim(0.85, 1.15)
             fig.align_ylabels([ax_main, ax_ratio])
         else:
-            ax_main.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
+            ax_main.set_xlabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL), loc="center")
 
         if output_path is not None:
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -220,8 +230,8 @@ class PileupPlotter(BasePlotter):
             full_title = f"{title} - {full_title}"
 
         ax.set_title(full_title, pad=12)
-        ax.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
-        ax.set_ylabel(f"Mean {observable_label}")
+        ax.set_xlabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL), loc="center")
+        ax.set_ylabel(self.tr(PlotTextKey.PILEUP_MEAN_OBSERVABLE_YLABEL, observable_label=observable_label))
         ax.grid(True, linestyle=":", alpha=0.5)
         ax.legend(frameon=True, fontsize=9, loc="best")
         fig.tight_layout()
@@ -266,7 +276,7 @@ class PileupPlotter(BasePlotter):
             shading="auto",
         )
         cbar = fig.colorbar(mesh, ax=ax, pad=0.02)
-        cbar.set_label("Events / Bin")
+        cbar.set_label(self.tr(PlotTextKey.PILEUP_EVENTS_PER_BIN))
 
         profile = correlation_result["profile"]
         ax.errorbar(
@@ -280,7 +290,7 @@ class PileupPlotter(BasePlotter):
             linestyle="none",
             markersize=5,
             capsize=2,
-            label=r"Mean $N_{\text{PV}} \pm \text{SEM}$",
+            label=self.tr(PlotTextKey.PILEUP_MEAN_NPV_LABEL),
             zorder=4,
         )
 
@@ -289,18 +299,23 @@ class PileupPlotter(BasePlotter):
         r_sq = correlation_result["r_squared"]
         x_fit = np.linspace(xedges[0], xedges[-1], 100)
         y_fit = slope * x_fit + intercept
-        fit_label = f"Fit: $N_{{\\text{{PV}}}} = {slope:.2f}\\langle\\mu\\rangle + {intercept:.2f}$\n($R^2 = {r_sq:.3f}$)"
+        fit_label = self.tr(
+            PlotTextKey.PILEUP_FIT_NPV_LABEL,
+            slope=slope,
+            intercept=intercept,
+            r_sq=r_sq,
+        )
         ax.plot(x_fit, y_fit, color="black", linestyle="--", linewidth=1.8, label=fit_label, zorder=5)
 
-        full_title = r"Primary Vertices $N_{\text{PV}}$ vs. $\langle\mu\rangle$"
+        full_title = self.tr(PlotTextKey.PILEUP_VERTEX_TITLE)
         if region_label:
             full_title += f" ({region_label})"
         if title:
             full_title = f"{title} - {full_title}"
 
         ax.set_title(full_title, pad=12)
-        ax.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
-        ax.set_ylabel(r"Number of Good Primary Vertices ($N_{\text{PV}}$)")
+        ax.set_xlabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL), loc="center")
+        ax.set_ylabel(self.tr(PlotTextKey.PILEUP_NPV_YLABEL))
         ax.grid(True, linestyle=":", alpha=0.5)
         ax.legend(frameon=True, fontsize=9, loc="upper left")
         fig.tight_layout()
@@ -361,7 +376,7 @@ class PileupPlotter(BasePlotter):
             shading="auto",
         )
         cbar = fig.colorbar(mesh, ax=ax, pad=0.02)
-        cbar.set_label("Signal Events / Bin")
+        cbar.set_label(self.tr(PlotTextKey.PILEUP_SIGNAL_EVENTS_PER_BIN))
 
         palette = [
             ("tab:red", "o", "-"),
@@ -402,7 +417,14 @@ class PileupPlotter(BasePlotter):
 
             y_fit = slope * x_fit + intercept
             sign = "+" if intercept >= 0 else "-"
-            fit_text = f"{name} Fit: $T(\\langle\\mu\\rangle) = {slope:.3f}\\langle\\mu\\rangle {sign} {abs(intercept):.3f}$ ($R^2 = {r2:.2f}$)"
+            fit_text = self.tr(
+                PlotTextKey.PILEUP_FIT_THRESHOLD_LABEL,
+                name=name,
+                slope=slope,
+                sign=sign,
+                abs_intercept=abs(intercept),
+                r2=r2,
+            )
             ax.plot(
                 x_fit,
                 y_fit,
@@ -413,15 +435,15 @@ class PileupPlotter(BasePlotter):
                 zorder=5,
             )
 
-        full_title = r"Discriminant $y_{\text{NN}}$ vs. $\langle\mu\rangle$ Threshold Calibration"
+        full_title = self.tr(PlotTextKey.PILEUP_THRESHOLD_CALIB_TITLE)
         if region_label:
             full_title += f" ({region_label})"
         if title:
             full_title = f"{title} - {full_title}"
 
         ax.set_title(full_title, pad=12)
-        ax.set_xlabel(r"Average Interactions Per Crossing $\langle\mu\rangle$", loc="center")
-        ax.set_ylabel(r"Neural Discriminant $y_{\text{NN}}$ (Logit)")
+        ax.set_xlabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL), loc="center")
+        ax.set_ylabel(self.tr(PlotTextKey.PILEUP_DISCRIMINANT_YLABEL))
         ax.grid(True, linestyle=":", alpha=0.5)
         ax.legend(frameon=True, fontsize=8, loc="upper right")
         fig.tight_layout()

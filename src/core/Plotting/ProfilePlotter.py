@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 from src.core.Plotting.Context import RegionPlotContext
 from src.utils import norm1
 
@@ -10,16 +11,20 @@ from src.utils import norm1
 class ProfileMeanEnergyPlotter(BasePlotter):
     """Generates average normalized energy profile curves across calorimeter subdetector rings."""
 
-    def __init__(self) -> None:
-        """Initializes the ProfileMeanEnergyPlotter."""
-        super().__init__(name="ProfileMeanEnergyPlotter")
+    def __init__(self, language: str = "en") -> None:
+        """Initializes the ProfileMeanEnergyPlotter.
+
+        Args:
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name="ProfileMeanEnergyPlotter", language=language)
 
     def plot(
         self,
         context: RegionPlotContext,
         x_rings: Optional[np.ndarray] = None,
         plot_name: str = "RingsMeanProfiles_NeuralRinger",
-        plot_title: str = "Average Energy Profile in the Rings - NeuralRinger",
+        plot_title: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
         """Renders and saves the mean energy profile comparing signal vs background.
@@ -28,12 +33,14 @@ class ProfileMeanEnergyPlotter(BasePlotter):
             context: RegionPlotContext with kinematic region data.
             x_rings: Optional explicit ring array (defaults to context.x_holdout_rings).
             plot_name: Suffix string for output PDF naming.
-            plot_title: Chart title text.
+            plot_title: Optional custom chart title text.
             **kwargs: Extra plotting parameters.
 
         Returns:
             Absolute file path of the generated PDF figure.
         """
+        lang = self._resolve_language(context)
+        resolved_title = plot_title if plot_title is not None else self.tr(PlotTextKey.PROFILE_TITLE, language=lang)
         rings_data = x_rings if x_rings is not None else context.x_holdout_rings
         y_holdout = context.y_holdout
         ring_index = context.ring_indexes
@@ -67,7 +74,7 @@ class ProfileMeanEnergyPlotter(BasePlotter):
         ]
         subdet_colors: List[str] = ["#1b9e77", "#d95f09", "#7570b3", "#e7298a", "#66a61e"]
 
-        fig, ax = plt.subplots(figsize=(10, 5), clear=True, num=1)
+        fig, ax = plt.subplots(figsize=(10, 5))
 
         ax.errorbar(
             x_axis,
@@ -82,7 +89,7 @@ class ProfileMeanEnergyPlotter(BasePlotter):
             capsize=2,
             ecolor="navy",
             color="navy",
-            label="Photons",
+            label=self.tr(PlotTextKey.PROFILE_SIGNAL_LABEL, language=lang),
         )
         ax.errorbar(
             x_axis,
@@ -97,7 +104,7 @@ class ProfileMeanEnergyPlotter(BasePlotter):
             capsize=2,
             ecolor="darkorange",
             color="darkorange",
-            label="Hadronic Jets",
+            label=self.tr(PlotTextKey.PROFILE_BACKGROUND_LABEL, language=lang),
         )
 
         for x_pos, name, color in zip(subdet_x, subdet_names, subdet_colors):
@@ -113,8 +120,8 @@ class ProfileMeanEnergyPlotter(BasePlotter):
                 color=color,
             )
 
-        ax.set_xlabel("Calorimeter Ring Index", fontsize=13)
-        ax.set_ylabel("Normalized Energy", fontsize=13)
+        ax.set_xlabel(self.tr(PlotTextKey.PROFILE_XLABEL, language=lang), fontsize=13)
+        ax.set_ylabel(self.tr(PlotTextKey.PROFILE_YLABEL, language=lang), fontsize=13)
 
         ticks_step = 10 if n_rings >= 50 else 5
         ticks_loc = np.arange(0, n_rings + 1, ticks_step)
@@ -126,7 +133,7 @@ class ProfileMeanEnergyPlotter(BasePlotter):
         ax.set_ylim(-0.02, y_max * 1.5)
         ax.grid(True, linestyle="--", alpha=0.6)
         ax.legend(fontsize=10, loc="upper right")
-        ax.set_title(plot_title, fontsize=14)
+        ax.set_title(resolved_title, fontsize=14)
         fig.tight_layout()
 
         filename = f"et{context.iet}.eta{context.ieta}.{plot_name}.pdf"

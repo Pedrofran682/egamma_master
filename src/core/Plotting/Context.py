@@ -6,6 +6,7 @@ import torch.nn as nn
 
 
 from src.core.Interfaces.BaseTrainer import BaseTrainer
+from src.core.Plotting.Localization import PlotTranslator
 
 
 @dataclass
@@ -21,6 +22,7 @@ class RegionPlotContext:
         test_indices: Sample indices corresponding to the holdout test set.
         trainer: Optional reference to model trainer.
         model: Optional trained PyTorch model instance.
+        language: Language code ('en' or 'pt') used for localized plot rendering.
     """
 
     iet: int
@@ -31,6 +33,10 @@ class RegionPlotContext:
     test_indices: np.ndarray | None = None
     trainer: BaseTrainer | None = None
     model: nn.Module | None = None
+    language: str = "en"
+
+    def __post_init__(self) -> None:
+        self.language = PlotTranslator.validate_language(self.language)
 
     @property
     def x_holdout_full(self) -> np.ndarray:
@@ -78,4 +84,9 @@ class MetricPlotContext:
     history_data: dict[str, Any] | None = None
     callback_metrics: dict[str, Any] | None = None
     all_training_results: Any = None
+
+    @property
+    def language(self) -> str:
+        """Active language code inherited from region_context."""
+        return self.region_context.language
 

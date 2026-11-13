@@ -259,6 +259,107 @@ class TestMetricPlotter(unittest.TestCase):
         saved_path = plotter.plot(self.context, all_training_results=df)
         self.assertIsNone(saved_path)
 
+    def test_run_plots_parser_lang_and_removed_ringer_flags(self) -> None:
+        from scripts.run_plots import parser as plot_parser
+
+        parsed_default = plot_parser.parse_args(["results/test"])
+        self.assertEqual(parsed_default.lang, "en")
+
+        parsed_both = plot_parser.parse_args(["results/test", "--lang", "both"])
+        self.assertEqual(parsed_both.lang, "both")
+
+        with self.assertRaises(SystemExit):
+            plot_parser.parse_args(["results/test", "--plot_ringer"])
+
+    def test_run_roc_plots_parser_lang_flag(self) -> None:
+        from scripts.run_roc_plots import parser as roc_parser
+
+        parsed_default = roc_parser.parse_args(["--results_path", "results/"])
+        self.assertEqual(parsed_default.lang, "en")
+
+        parsed_pt = roc_parser.parse_args(["--results_path", "results/", "--lang", "pt"])
+        self.assertEqual(parsed_pt.lang, "pt")
+
+    def test_plotter_runner_bilingual_both_subfolders(self) -> None:
+        from pathlib import Path
+
+        results_dir = os.path.join(self.temp_dir.name, "bilingual_results")
+        os.makedirs(results_dir, exist_ok=True)
+        valid_file = os.path.join(results_dir, "repeat0.fold_idx0.iet1.ieta1.pkl")
+        pd.DataFrame(
+            [
+                {
+                    "fold": 0,
+                    "reapet": 1,
+                    "best_sp_value": 0.90,
+                    "history": {
+                        "train_loss": [0.5, 0.3],
+                        "val_loss": [0.6, 0.4],
+                        "train_acc": [0.8, 0.86],
+                        "val_acc": [0.75, 0.84],
+                        "callbackMetrics": {
+                            "pd": [0.82, 0.91],
+                            "fa": [0.18, 0.09],
+                            "sp": [0.82, 0.90],
+                            "auc_score": 0.95,
+                            "best_knee_point": 1,
+                        },
+                    },
+                }
+            ]
+        ).to_pickle(valid_file)
+
+        out_dir = os.path.join(self.temp_dir.name, "bilingual_out")
+        runner = PlotterRunner(
+            results_path=results_dir,
+            output_dir=out_dir,
+            language="both",
+        )
+        runner.execute()
+
+        for lang in ("en", "pt"):
+            lang_dir = Path(out_dir) / lang
+            self.assertTrue(lang_dir.is_dir())
+            self.assertTrue(any(lang_dir.rglob("*.pdf")))
+
+    def test_plot_manager_bilingual_both_and_single_flat(self) -> None:
+        from pathlib import Path
+
+        df = pd.DataFrame(
+            [
+                {
+                    "fold": 0,
+                    "reapet": 1,
+                    "best_sp_value": 0.90,
+                    "history": {
+                        "train_loss": [0.5, 0.3],
+                        "val_loss": [0.6, 0.4],
+                        "train_acc": [0.8, 0.86],
+                        "val_acc": [0.75, 0.84],
+                        "callbackMetrics": {
+                            "pd": [0.82, 0.91],
+                            "fa": [0.18, 0.09],
+                            "sp": [0.82, 0.90],
+                            "auc_score": 0.95,
+                            "best_knee_point": 1,
+                        },
+                    },
+                }
+            ]
+        )
+
+        flat_dir = Path(self.temp_dir.name) / "flat_pt"
+        PlotManager(language="pt").run_metrics_for_region(df, str(flat_dir), iet=1, ieta=2)
+        self.assertFalse((flat_dir / "pt").exists())
+        self.assertTrue(any(flat_dir.rglob("*.pdf")))
+
+        both_dir = Path(self.temp_dir.name) / "both_dir"
+        PlotManager(language="both").run_metrics_for_region(df, str(both_dir), iet=1, ieta=2)
+        self.assertTrue((both_dir / "en").is_dir())
+        self.assertTrue((both_dir / "pt").is_dir())
+        self.assertTrue(any((both_dir / "en").rglob("*.pdf")))
+        self.assertTrue(any((both_dir / "pt").rglob("*.pdf")))
+
 
 if __name__ == "__main__":
     unittest.main()

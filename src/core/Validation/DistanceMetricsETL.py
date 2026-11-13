@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import pandas as pd
 
+from src.core.Validation.LatexTableFormatter import LatexTableFormatter
+
 
 class DistanceMetricsETL:
     """ETL processor for distance metric CSV tables generated during validation."""
@@ -58,7 +60,6 @@ class DistanceMetricsETL:
             for d in set(target_dirs):
                 matched_files.extend(sorted(d.glob(self._file_pattern)))
 
-        # Deduplicate while preserving order
         seen = set()
         unique_files = []
         for f in matched_files:
@@ -236,7 +237,9 @@ class DistanceMetricsETL:
         if id_cols is not None:
             for col in id_cols:
                 if col in df.columns:
-                    formatted[col] = df[col].apply(lambda s: str(s).replace("_", r"\_"))
+                    formatted[col] = df[col].apply(
+                        lambda s: LatexTableFormatter.escape_math_aware(str(s))
+                    )
 
         norm_specs: List[Tuple[str, str, str]] = []
         for item in pairs:
@@ -250,7 +253,9 @@ class DistanceMetricsETL:
         for col_name, val_col, unc_col in norm_specs:
             if val_col in df.columns and unc_col in df.columns:
                 formatted[col_name] = [
-                    f"${val:.{precision}f} \\pm {unc:.{precision}f}$"
+                    LatexTableFormatter.format_value_with_uncertainty(
+                        val, unc, precision=precision
+                    )
                     for val, unc in zip(df[val_col], df[unc_col])
                 ]
 

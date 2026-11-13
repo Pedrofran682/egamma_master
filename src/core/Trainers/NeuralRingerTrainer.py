@@ -1,13 +1,11 @@
 import logging
 import os
 from datetime import datetime
-from typing import Any, List, Tuple
-import numpy as np
+from typing import Any
 import torch
 from sklearn.model_selection import ParameterGrid
 
 from src.core.Callbacks.SPCallbackPyTorch import SPCallbackPyTorch
-from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
 from src.core.Datasets.SplitManifest import SplitManifest
 from src.core.Interfaces.BaseTrainer import BaseTrainer
 from src.core.Trainers.FoldTrainer import FoldTrainer
@@ -42,6 +40,7 @@ class NeuralRingerTrainer(BaseTrainer):
             config: NeuralRingerTrainerConfiguration instance.
         """
         self.config: NeuralRingerTrainerConfiguration = config
+        self._apply_debug_overrides()
         self.use_cuda: bool = torch.cuda.is_available()
         self._device: torch.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.factory: TrainingFactory = TrainingFactory(self.config, self.device)
@@ -52,6 +51,12 @@ class NeuralRingerTrainer(BaseTrainer):
         self._full_dataset: Any = get_instance(self.config.dataset)
         self._full_dataset.config = config
         self.results_folder_path: str = ""
+
+    def _apply_debug_overrides(self) -> None:
+        if self.config.debug:
+            log.warning("#### EXECUTING ON DEBUG MODE. ####")
+            self.config.epochs = 2
+            self.config.n_initializations = 1
 
     @property
     def device(self) -> torch.device:
@@ -68,11 +73,7 @@ class NeuralRingerTrainer(BaseTrainer):
     @full_dataset.setter
     def full_dataset(self, value: Any) -> None:
         self._full_dataset = value
-
-        if self.config.debug:
-            log.warning("#### EXECUTING ON DEBUG MODE. ####")
-            self.config.epochs = 2
-            self.config.n_initializations = 1
+        self._apply_debug_overrides()
 
     def run(self) -> None:
         """Runs training across all specified transverse energy (ET) and pseudorapidity (eta) regions."""
@@ -186,39 +187,3 @@ class NeuralRingerTrainer(BaseTrainer):
                 )
 
         return path
-
-
-    def generate_folds_with_holdout(
-        self, features: np.ndarray, labels: np.ndarray, test_fold_idx: int = 0
-    ) -> Tuple[np.ndarray, List[Tuple[np.ndarray, np.ndarray]]]:
-        """Splits features and labels into a holdout test partition and cross-validation iterable.
-
-        Args:
-            features: Input features array.
-            labels: Binary labels array.
-            test_fold_idx: Index of the fold selected as holdout test.
-
-        Returns:
-            Tuple of (holdout_indices, cv_train_val_iterable).
-
-        Raises:
-            ValueError: If test_fold_idx is outside split boundaries.
-        """
-        all_folds = [test_idx for _, test_idx in self.kfold.split(features, labels)]
-        if not (0 <= test_fold_idx < self.kfold.get_n_splits()):
-            raise ValueError(
-                f"test_fold_idx must be between 0 and {self.kfold.get_n_splits() - 1}"
-            )
-
-        holdout_indices = all_folds[test_fold_idx]
-        remaining_folds = [
-            fold for index, fold in enumerate(all_folds) if index != test_fold_idx
-        ]
-        cv_iterable = []
-        for index in range(len(remaining_folds)):
-            val_indices = remaining_folds[index]
-            train_folds = [fold for j, fold in enumerate(remaining_folds) if j != index]
-            train_indices = np.concatenate(train_folds)
-            cv_iterable.append((train_indices, val_indices))
-
-        return holdout_indices, cv_iterable

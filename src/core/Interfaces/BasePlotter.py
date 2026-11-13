@@ -1,11 +1,12 @@
 import os
 import pathlib
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional, Union
 import matplotlib.pyplot as plt
 
 if TYPE_CHECKING:
     from src.core.Plotting.Context import RegionPlotContext
+    from src.core.Plotting.Localization import PlotTextKey
 from src.utils import create_folder
 
 
@@ -14,15 +15,69 @@ class BasePlotter(ABC):
 
     Attributes:
         name: Identifier name for the plotter instance.
+        language: Active language code ('en' or 'pt') for plot text localization.
     """
 
-    def __init__(self, name: str) -> None:
-        """Initializes the plotter with a name.
+    def __init__(self, name: Optional[str] = None, language: str = "en") -> None:
+        """Initializes the plotter with a name and localization language.
 
         Args:
-            name: Descriptive name of the plotter.
+            name: Descriptive name of the plotter (defaults to class name).
+            language: Target language code ('en' or 'pt').
         """
-        self.name: str = name
+        self.name: str = name if name is not None else self.__class__.__name__
+        self.language: str = self._get_translator().validate_language(language)
+
+    @staticmethod
+    def _get_translator() -> Any:
+        from src.core.Plotting.Localization import PlotTranslator
+
+        return PlotTranslator
+
+    def _resolve_language(self, context: Any = None, language: Optional[str] = None) -> str:
+        """Resolves the active language from explicit argument, context, or plotter default.
+
+        Args:
+            context: Optional plot context object carrying a language attribute.
+            language: Optional explicit language override.
+
+        Returns:
+            Validated single-language code ('en' or 'pt').
+        """
+        translator = self._get_translator()
+        if language is not None:
+            return translator.validate_language(language)
+        if context is not None:
+            ctx_lang = getattr(context, "language", None)
+            if ctx_lang is None and hasattr(context, "region_context"):
+                ctx_lang = getattr(context.region_context, "language", None)
+            if ctx_lang is not None and ctx_lang != "en":
+                return translator.validate_language(ctx_lang)
+        return translator.validate_language(self.language)
+
+    def tr(
+        self,
+        key: Union["PlotTextKey", str],
+        language: Optional[str] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Translates a localization key using the provided or configured language.
+
+        Args:
+            key: Translation lookup key in PlotTranslator.TRANSLATIONS.
+            language: Optional language override ('en' or 'pt').
+            **kwargs: Optional format placeholders interpolated into the template.
+
+        Returns:
+            Localized and formatted text string.
+        """
+        translator = self._get_translator()
+        target_lang = (
+            translator.validate_language(language)
+            if language is not None
+            else translator.validate_language(self.language)
+        )
+        return translator.translate(key, language=target_lang, **kwargs)
 
     @abstractmethod
     def plot(self, context: Any, **kwargs: Any) -> Any:

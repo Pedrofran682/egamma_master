@@ -5,15 +5,20 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+from src.core.Plotting.Localization import BilingualPlotOrchestrator
 from src.core.Plotting.QuadrantPlotter import QuadrantPlotter
 from src.core.Validation.QuadrantAnalyzer import QuadrantAnalyzer
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 log = logging.getLogger("QuadrantAnalysis")
+
+
+def _configure_logging() -> None:
+    """Configures console logging format when running as a CLI script."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 parser = argparse.ArgumentParser(
     prog="QuadrantAnalysis",
@@ -132,6 +137,13 @@ parser.add_argument(
     type=int,
     help="Filter to specific eta bin index.",
 )
+parser.add_argument(
+    "--lang",
+    required=False,
+    default="en",
+    choices=["en", "pt", "both"],
+    help="Target language for plot labels and titles (en, pt, or both).",
+)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -140,6 +152,7 @@ def main(args: argparse.Namespace) -> None:
     Args:
         args: Parsed command-line arguments.
     """
+    _configure_logging()
     if args.mode == "model_vs_model":
         if args.data_path2 is None:
             parser.error("--data_path2 is required when --mode is 'model_vs_model'.")
@@ -236,19 +249,24 @@ def main(args: argparse.Namespace) -> None:
         log.info("-" * 144)
 
     log.info(f"Generating trigger shower shape histograms and efficiency curves under: {output_dir}")
-    plotter = QuadrantPlotter()
     plot_results = list(regional_results)
     if global_result is not None:
         plot_results.append(global_result)
 
-    saved_paths = plotter.plot(
-        results=plot_results,
-        output_dir=output_dir,
-        file_format=args.file_format,
-        log_y=args.log_y,
-    )
+    orchestrator = BilingualPlotOrchestrator(language=args.lang)
 
-    total_figures = sum(len(paths) for paths in saved_paths.values())
+    def _render_language(lang: str, resolved_dir: pathlib.Path) -> int:
+        plotter = QuadrantPlotter(language=lang)
+        saved_paths = plotter.plot(
+            results=plot_results,
+            output_dir=resolved_dir,
+            file_format=args.file_format,
+            log_y=args.log_y,
+        )
+        return sum(len(paths) for paths in saved_paths.values())
+
+    per_lang_counts = orchestrator.orchestrate(output_dir, _render_language)
+    total_figures = sum(per_lang_counts.values())
     log.info(f"Completed! Total generated figures: {total_figures} under {output_dir}")
     log.info("-" * 78)
     log.info(f"Saving tabular results with strategy metrics under: {output_dir}")

@@ -23,7 +23,7 @@ from src.core.Validation.FastPhotonCutEvaluator import (
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
 from src.core.Validation.ResultAggregator import ResultAggregator
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
-from src.utils import get_et_eta
+from src.utils import compute_sp_metric, extract_feature_values, get_et_eta
 
 log = logging.getLogger(__name__)
 
@@ -69,11 +69,7 @@ class StrategyMetrics:
         pf = float(fp / n_bg) if n_bg > 0 else 0.0
         eff = float((tp + tn) / total) if total > 0 else 0.0
 
-        sp = (
-            float(np.sqrt(np.sqrt(pd * (1.0 - pf)) * (0.5 * (pd + (1.0 - pf)))))
-            if (pd >= 0.0 and pf <= 1.0)
-            else 0.0
-        )
+        sp = float(compute_sp_metric(pd, pf))
 
         return cls(
             pd=pd,
@@ -451,7 +447,11 @@ class QuadrantAnalyzer:
                 & (self.reference_eff_df["eta_bin"] == ieta)
             ]
             if not ref_row.empty:
-                return float(ref_row["eff_sig_loose"].values[0])
+                col_name = f"eff_sig_{self.working_point.lower()}"
+                if col_name not in self.reference_eff_df.columns:
+                    col_name = "eff_sig_loose"
+                if col_name in self.reference_eff_df.columns:
+                    return float(ref_row[col_name].values[0])
         return self.default_target_pd
 
     @staticmethod
@@ -589,12 +589,10 @@ class QuadrantAnalyzer:
             safe_et = np.where(et != 0.0, et, 1.0)
             shapes["Rhad"] = np.where(et != 0.0, ehad1 / safe_et, 0.0)
 
-        if "trig_L2_calo_emaxs1" in name_to_idx and "trig_L2_calo_e2tsts1" in name_to_idx:
-            emaxs1 = features_full[:, name_to_idx["trig_L2_calo_emaxs1"]]
-            e2tsts1 = features_full[:, name_to_idx["trig_L2_calo_e2tsts1"]]
-            denom = emaxs1 + e2tsts1
-            safe_denom = np.where(denom != 0.0, denom, 1.0)
-            shapes["Eratio"] = np.where(denom != 0.0, (emaxs1 - e2tsts1) / safe_denom, 0.0)
+        try:
+            shapes["Eratio"] = extract_feature_values(features_full, feature_names, "Eratio")
+        except KeyError:
+            pass
 
         return shapes
 

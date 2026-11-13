@@ -3,6 +3,8 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 
+from src.core.Validation.LatexTableFormatter import LatexTableFormatter
+
 
 class QuadrantTableConsolidator:
     """Consolidates regional quadrant analysis results into formatted summary tables."""
@@ -164,15 +166,14 @@ class QuadrantTableConsolidator:
         precision: int = 2,
         math_delimiters: bool = True,
     ) -> str:
-        if pd.isna(val):
-            return "-"
-
-        if pd.isna(err):
-            content = f"{val:.{precision}f}"
-        else:
-            content = f"{val:.{precision}f} \\pm {err:.{precision}f}"
-
-        return f"${content}$" if math_delimiters else content
+        return LatexTableFormatter.format_value_with_uncertainty(
+            val=val,
+            err=err,
+            precision=precision,
+            math_delimiters=math_delimiters,
+            nan_placeholder="-",
+            allow_missing_err=True,
+        )
 
     def build_et_grid_table(
         self,
@@ -383,23 +384,9 @@ class QuadrantTableConsolidator:
                 column_format="l c c c",
             )
 
-        caption_block = f"\\caption{{{caption}}}\n" if caption else ""
-        label_block = f"\\label{{{label}}}\n" if label else ""
-
-        if resize_box and isinstance(df.columns, pd.MultiIndex):
-            wrapped_body = (
-                "\\resizebox{\\textwidth}{!}{%\n"
-                f"{latex_body}"
-                "}\n"
-            )
-        else:
-            wrapped_body = latex_body
-
-        return (
-            "\\begin{table}[htbp]\n"
-            "\\centering\n"
-            f"{caption_block}"
-            f"{label_block}"
-            f"{wrapped_body}"
-            "\\end{table}\n"
+        return LatexTableFormatter.wrap_booktabs_environment(
+            tabular_body=latex_body,
+            caption=caption,
+            label=label,
+            resize_to_textwidth=bool(resize_box and isinstance(df.columns, pd.MultiIndex)),
         )

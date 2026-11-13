@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 
 from src.core.Interfaces.BaseEvaluator import BaseEvaluator
+from src.utils import compute_sp_metric
 
 log = logging.getLogger()
 
@@ -75,9 +76,7 @@ class HoldoutEvaluationResult:
         """Continuous model pre-sigmoid logit scores."""
         if self.predicted_logits is not None:
             return self.predicted_logits
-        eps = 1e-7
-        p_clamped = np.clip(self.predicted_probabilities, eps, 1.0 - eps)
-        return np.log(p_clamped / (1.0 - p_clamped))
+        return HoldoutEvaluator._probs_to_logits(self.predicted_probabilities)
 
     @property
     def global_acc(self) -> float:
@@ -133,11 +132,7 @@ class HoldoutEvaluationResult:
     @property
     def sp(self) -> float:
         """SP index under calibrated cut."""
-        pd_val = self.pd
-        pf_val = self.false_alarm_probability
-        if pd_val >= 0.0 and pf_val <= 1.0:
-            return float(np.sqrt(np.sqrt(pd_val * (1.0 - pf_val)) * (0.5 * (pd_val + (1.0 - pf_val)))))
-        return 0.0
+        return float(compute_sp_metric(self.pd, self.false_alarm_probability))
 
     @property
     def auc(self) -> float:
@@ -230,9 +225,7 @@ class HoldoutEvaluator(BaseEvaluator):
 
             predictions_calibrated_cut = (predicted_probabilities > calibrated_decision_threshold).astype(int)
 
-            eps = 1e-7
-            p_clamped = np.clip(predicted_probabilities, eps, 1.0 - eps)
-            predicted_logits = np.log(p_clamped / (1.0 - p_clamped))
+            predicted_logits = self._probs_to_logits(predicted_probabilities)
 
         return HoldoutEvaluationResult(
             holdout_features_full=holdout_features_full,
@@ -250,6 +243,19 @@ class HoldoutEvaluator(BaseEvaluator):
             false_alarm_probability=false_alarm_probability,
             predicted_logits=predicted_logits,
         )
+
+    @staticmethod
+    def _probs_to_logits(probs: np.ndarray) -> np.ndarray:
+        """Convert bounded probability scores to pre-sigmoid logit values.
+
+        Args:
+            probs: Array of predicted probabilities in [0, 1].
+
+        Returns:
+            Array of corresponding logit scores.
+        """
+        p_clamped = np.clip(probs, 1e-7, 1.0 - 1e-7)
+        return np.log(p_clamped / (1.0 - p_clamped))
 
     @staticmethod
     def predict_logits(
@@ -271,6 +277,4 @@ class HoldoutEvaluator(BaseEvaluator):
         with torch.no_grad():
             tensor_x = torch.from_numpy(features).float().to(device)
             probabilities = model(tensor_x).detach().cpu().numpy().flatten()
-            eps = 1e-7
-            p_clamped = np.clip(probabilities, eps, 1.0 - eps)
-            return np.log(p_clamped / (1.0 - p_clamped))
+            return HoldoutEvaluator._probs_to_logits(probabilities)

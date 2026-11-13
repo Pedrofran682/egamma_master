@@ -6,6 +6,7 @@ import pandas as pd
 import seaborn as sns
 
 from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 from src.utils import create_folder
 
 DEFAULT_ET_INTERVALS: Dict[int, str] = {
@@ -33,14 +34,16 @@ class RegionDistributionPlotter(BasePlotter):
         self,
         et_intervals: Optional[Dict[int, str]] = None,
         eta_intervals: Optional[Dict[int, str]] = None,
+        language: str = "en",
     ) -> None:
         """Initializes the RegionDistributionPlotter with kinematic interval mappings.
 
         Args:
             et_intervals: Optional dictionary mapping ET bin indices to physical intervals.
             eta_intervals: Optional dictionary mapping eta bin indices to physical intervals.
+            language: Target language code ('en' or 'pt').
         """
-        super().__init__(name="RegionDistributionPlotter")
+        super().__init__(name="RegionDistributionPlotter", language=language)
         self.et_intervals: Dict[int, str] = et_intervals or DEFAULT_ET_INTERVALS
         self.eta_intervals: Dict[int, str] = eta_intervals or DEFAULT_ETA_INTERVALS
 
@@ -75,10 +78,10 @@ class RegionDistributionPlotter(BasePlotter):
         saved_figure_paths["composite_grid"] = composite_grid_path
 
         metric_configurations = [
-            ("background_count", "Background (Class 0) Event Count", "Blues", ".0f"),
-            ("signal_count", "Signal (Class 1) Event Count", "Greens", ".0f"),
-            ("total_events", "Total Event Count", "Purples", ".0f"),
-            ("signal_fraction", "Signal Fraction (Class 1 / Total)", "YlGnBu", ".2%"),
+            ("background_count", self.tr(PlotTextKey.REGION_DIST_BACKGROUND_COUNT_TITLE), "Blues", ".0f"),
+            ("signal_count", self.tr(PlotTextKey.REGION_DIST_SIGNAL_COUNT_TITLE), "Greens", ".0f"),
+            ("total_events", self.tr(PlotTextKey.REGION_DIST_TOTAL_EVENTS_TITLE), "Purples", ".0f"),
+            ("signal_fraction", self.tr(PlotTextKey.REGION_DIST_SIGNAL_FRACTION_TITLE), "YlGnBu", ".2%"),
         ]
 
         for metric_column, subplot_title, colormap_name, format_specifier in metric_configurations:
@@ -117,10 +120,10 @@ class RegionDistributionPlotter(BasePlotter):
         """
         composite_figure, subplot_axes = plt.subplots(2, 2, figsize=(18, 14))
         metric_configurations = [
-            ("background_count", "Background (Class 0) Counts", "Blues", ".0f"),
-            ("signal_count", "Signal (Class 1) Counts", "Greens", ".0f"),
-            ("total_events", "Total Counts", "Purples", ".0f"),
-            ("signal_fraction", "Signal Fraction (Class 1 / Total)", "YlGnBu", ".2%"),
+            ("background_count", self.tr(PlotTextKey.REGION_DIST_BACKGROUND_COUNT_SHORT), "Blues", ".0f"),
+            ("signal_count", self.tr(PlotTextKey.REGION_DIST_SIGNAL_COUNT_SHORT), "Greens", ".0f"),
+            ("total_events", self.tr(PlotTextKey.REGION_DIST_TOTAL_EVENTS_SHORT), "Purples", ".0f"),
+            ("signal_fraction", self.tr(PlotTextKey.REGION_DIST_SIGNAL_FRACTION_TITLE), "YlGnBu", ".2%"),
         ]
 
         for current_axis, (metric_column, subplot_title, colormap_name, format_specifier) in zip(
@@ -136,7 +139,7 @@ class RegionDistributionPlotter(BasePlotter):
             )
 
         composite_figure.suptitle(
-            "Data Distribution by Class across Kinematic Regions",
+            self.tr(PlotTextKey.REGION_DIST_GRID_SUPTITLE),
             fontsize=16,
             weight="bold",
         )
@@ -194,7 +197,7 @@ class RegionDistributionPlotter(BasePlotter):
             yticklabels=y_tick_labels,
         )
         subplot_axis.set_title(subplot_title, fontsize=12, pad=10)
-        subplot_axis.set_xlabel(r"$|\eta|$ Interval", fontsize=11)
-        subplot_axis.set_ylabel(r"$E_T$ Interval", fontsize=11)
+        subplot_axis.set_xlabel(self.tr(PlotTextKey.REGION_DIST_XLABEL), fontsize=11)
+        subplot_axis.set_ylabel(self.tr(PlotTextKey.REGION_DIST_YLABEL), fontsize=11)
         subplot_axis.tick_params(axis="x", rotation=30)
         subplot_axis.tick_params(axis="y", rotation=0)

@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -33,7 +33,7 @@ def get_best_sp_model(
         Tuple containing the instantiated model with loaded weights and the record series.
     """
     if not (training_results_list.shape[0] > 0):
-        log.error("A lista de resultados de treinamento está vazia.")
+        log.error("Training results list is empty.")
         return None, None
 
     highest_sp_model_info = training_results_list.iloc[
@@ -45,8 +45,8 @@ def get_best_sp_model(
         best_overall_sp_model.load_state_dict(highest_sp_model_info["best_weights"])
         return best_overall_sp_model, highest_sp_model_info
     except Exception as e:
-        log.info(
-            f"Não foi possível carregar o modelo com os pesos fornecidos. Motivo: {e}"
+        log.error(
+            f"Could not load the model with the provided weights. Reason: {e}"
         )
         raise e
 
@@ -393,9 +393,39 @@ def save_table(
     return csv_path
 
 
+def compute_sp_metric(
+    pd_val: Union[float, np.ndarray],
+    pf_val: Union[float, np.ndarray],
+) -> Union[float, np.ndarray]:
+    """Compute the ATLAS SP index from signal detection efficiency and false alarm rate.
+
+    Args:
+        pd_val: Probability of detection (true positive rate).
+        pf_val: Probability of false alarm (false positive rate).
+
+    Returns:
+        Computed SP index as a float or NumPy array.
+    """
+    is_array = isinstance(pd_val, np.ndarray) or isinstance(pf_val, np.ndarray)
+    pd_arr = np.asarray(pd_val, dtype=float)
+    pf_arr = np.asarray(pf_val, dtype=float)
+    valid = (pd_arr >= 0.0) & (pf_arr <= 1.0)
+    safe_pd = np.where(valid, pd_arr, 0.0)
+    safe_one_minus_pf = np.where(valid, 1.0 - pf_arr, 0.0)
+    sp = np.where(
+        valid,
+        np.sqrt(
+            np.sqrt(np.maximum(0.0, safe_pd * safe_one_minus_pf))
+            * (0.5 * np.maximum(0.0, safe_pd + safe_one_minus_pf))
+        ),
+        0.0,
+    )
+    return sp if is_array else float(sp)
+
+
 def extract_feature_values(
     features: np.ndarray,
-    names: np.ndarray,
+    names: Union[np.ndarray, Sequence[str]],
     feat_name: str,
 ) -> np.ndarray:
     """Extracts raw feature column or calculates derived physics variables like Eratio.
@@ -503,6 +533,31 @@ def compute_wasserstein_with_uncertainty(
     return w_dist, w_unc
 
 
+def _compute_shared_bin_edges(
+    p_clean: np.ndarray,
+    q_clean: np.ndarray,
+    n_bins: int,
+) -> Optional[np.ndarray]:
+    """Compute shared histogram bin edges from 0.5-99.5 percentiles of combined samples.
+
+    Args:
+        p_clean: Finite reference sample array.
+        q_clean: Finite evaluation sample array.
+        n_bins: Number of histogram bins.
+
+    Returns:
+        Array of bin edges of length ``n_bins + 1``, or None if inputs are empty or ``n_bins <= 0``.
+    """
+    if len(p_clean) == 0 or len(q_clean) == 0 or n_bins <= 0:
+        return None
+    all_vals = np.concatenate([p_clean, q_clean])
+    low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
+    if low >= high:
+        low -= 1.0
+        high += 1.0
+    return np.linspace(low, high, n_bins + 1)
+
+
 def _estimate_empirical_pmf(
     sample_ref: np.ndarray,
     sample_eval: np.ndarray,
@@ -513,13 +568,11 @@ def _estimate_empirical_pmf(
     sample_ref = sample_ref[np.isfinite(sample_ref)]
     sample_eval = sample_eval[np.isfinite(sample_eval)]
 
-    if isinstance(bins, int):
-        all_vals = np.concatenate([sample_ref, sample_eval])
-        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
-        if low >= high:
-            low -= 1.0
-            high += 1.0
-        bin_edges = np.linspace(low, high, bins + 1)
+    if isinstance(bins, (int, np.integer)):
+        computed_edges = _compute_shared_bin_edges(sample_ref, sample_eval, int(bins))
+        if computed_edges is None:
+            raise ValueError("Cannot compute bin edges from empty samples or non-positive bin count.")
+        bin_edges = computed_edges
     else:
         bin_edges = np.asarray(bins, dtype=float)
 
@@ -557,18 +610,15 @@ def compute_kl_divergence_with_uncertainty(
     if len(sample_ref) == 0 or len(sample_eval) == 0:
         return 0.0, 0.0
 
-    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=bins, epsilon=epsilon)
-    kl_stat = float(np.sum(special.rel_entr(p, q)))
-
-    if isinstance(bins, int):
-        all_vals = np.concatenate([sample_ref, sample_eval])
-        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
-        if low >= high:
-            low -= 1.0
-            high += 1.0
-        fixed_bin_edges = np.linspace(low, high, bins + 1)
+    if isinstance(bins, (int, np.integer)):
+        fixed_bin_edges = _compute_shared_bin_edges(sample_ref, sample_eval, int(bins))
+        if fixed_bin_edges is None:
+            return 0.0, 0.0
     else:
-        fixed_bin_edges = bins
+        fixed_bin_edges = np.asarray(bins, dtype=float)
+
+    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=fixed_bin_edges, epsilon=epsilon)
+    kl_stat = float(np.sum(special.rel_entr(p, q)))
 
     rng = np.random.default_rng(random_seed)
     n_ref = len(sample_ref)
@@ -611,19 +661,16 @@ def compute_js_divergence_with_uncertainty(
     if len(sample_ref) == 0 or len(sample_eval) == 0:
         return 0.0, 0.0
 
-    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=bins, epsilon=epsilon)
+    if isinstance(bins, (int, np.integer)):
+        fixed_bin_edges = _compute_shared_bin_edges(sample_ref, sample_eval, int(bins))
+        if fixed_bin_edges is None:
+            return 0.0, 0.0
+    else:
+        fixed_bin_edges = np.asarray(bins, dtype=float)
+
+    p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=fixed_bin_edges, epsilon=epsilon)
     m = 0.5 * (p + q)
     js_stat = float((0.5 * np.sum(special.rel_entr(p, m)) + 0.5 * np.sum(special.rel_entr(q, m))) / np.log(2))
-
-    if isinstance(bins, int):
-        all_vals = np.concatenate([sample_ref, sample_eval])
-        low, high = float(np.percentile(all_vals, 0.5)), float(np.percentile(all_vals, 99.5))
-        if low >= high:
-            low -= 1.0
-            high += 1.0
-        fixed_bin_edges = np.linspace(low, high, bins + 1)
-    else:
-        fixed_bin_edges = bins
 
     rng = np.random.default_rng(random_seed)
     n_ref = len(sample_ref)

@@ -72,7 +72,6 @@ class FoldTrainer:
             "val_loss": [],
             "val_acc": [],
             "callbackMetrics": [],
-            "reapet": [],
         }
 
         for epoch in range(1, epochs + 1):

@@ -7,15 +7,157 @@ import mplhep as mh
 mh.style.use("ATLAS")
 
 from src.core.Interfaces.BasePlotter import BasePlotter
+from src.core.Plotting.Localization import PlotTextKey
 
 
 class FeatureDistributionPlotter(BasePlotter):
     """Generates two-panel feature distribution and selection ratio plots."""
 
-    def __init__(self, name: str = "FeatureDistributionPlotter") -> None:
-        """Initializes the plotter with ATLAS style."""
-        super().__init__(name=name)
+    def __init__(self, name: str = "FeatureDistributionPlotter", language: str = "en") -> None:
+        """Initializes the plotter with ATLAS style and target language.
+
+        Args:
+            name: Descriptive plotter name.
+            language: Target language code ('en' or 'pt').
+        """
+        super().__init__(name=name, language=language)
         mh.style.use("ATLAS")
+
+    def _render_feature_panels(
+        self,
+        ax_main: plt.Axes,
+        ax_res: plt.Axes,
+        feature_data: Dict[str, Any],
+        feature_name: str,
+        region_key: str = "",
+        is_signal: bool = True,
+        log_y: bool = False,
+        ratio_ylabel_fontsize: int = 9,
+        legend_fontsize: int = 9,
+    ) -> None:
+        """Populates upper distribution and lower selection-ratio axes for one feature."""
+        bin_centers = feature_data["bin_centers"]
+        true_counts = feature_data["true_counts"]
+        true_err = np.sqrt(true_counts)
+        display_title = feature_data.get("display_title", feature_name)
+        class_label = (
+            self.tr(PlotTextKey.FEATURE_DIST_TRUE_SIGNAL)
+            if is_signal
+            else self.tr(PlotTextKey.FEATURE_DIST_TRUE_BACKGROUND)
+        )
+
+        ax_main.plot(
+            bin_centers,
+            true_counts,
+            "o",
+            color="black",
+            markersize=4,
+            zorder=5,
+            label=class_label,
+        )
+
+        for m in feature_data["models"]:
+            counts = m["counts"]
+            errors = m["errors"]
+            color = m.get("color", "tab:blue")
+            marker = m.get("marker", "o")
+            is_ml = m.get("is_ml", True)
+            label = m.get("label", m.get("name", ""))
+
+            main_kwargs = (
+                {
+                    "markerfacecolor": color,
+                    "markeredgecolor": color,
+                    "linestyle": "-",
+                    "markersize": 5,
+                }
+                if is_ml
+                else {
+                    "markerfacecolor": "none",
+                    "markeredgecolor": color,
+                    "markeredgewidth": 1.8,
+                    "linestyle": "--",
+                    "markersize": 6,
+                }
+            )
+            ax_main.errorbar(
+                bin_centers,
+                counts,
+                yerr=errors,
+                fmt=marker,
+                color=color,
+                linewidth=1.5,
+                capsize=2,
+                label=label,
+                **main_kwargs,
+            )
+
+            with np.errstate(divide="ignore", invalid="ignore"):
+                ratio = np.where(true_counts > 0, counts / true_counts, np.nan)
+                rel_m = np.where(counts > 0, errors / counts, 0.0)
+                rel_true = np.where(true_counts > 0, true_err / true_counts, 0.0)
+                ratio_err = ratio * np.sqrt(rel_m**2 + rel_true**2)
+
+            res_kwargs = (
+                {
+                    "markerfacecolor": color,
+                    "markeredgecolor": color,
+                    "linestyle": "-",
+                    "markersize": 4,
+                }
+                if is_ml
+                else {
+                    "markerfacecolor": "none",
+                    "markeredgecolor": color,
+                    "markeredgewidth": 1.5,
+                    "linestyle": "--",
+                    "markersize": 5,
+                }
+            )
+            ax_res.errorbar(
+                bin_centers,
+                ratio,
+                yerr=ratio_err,
+                fmt=marker,
+                color=color,
+                linewidth=1.2,
+                capsize=2,
+                **res_kwargs,
+            )
+
+        ax_res.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
+        ax_res.set_ylabel(self.tr(PlotTextKey.FEATURE_DIST_RATIO_YLABEL), fontsize=ratio_ylabel_fontsize)
+        ax_res.set_xlabel(display_title, loc="center")
+        ax_res.grid(True, linestyle=":", alpha=0.5)
+
+        if is_signal:
+            ax_res.set_ylim(0.0, 1.25)
+        else:
+            ax_res.set_ylim(bottom=0.0)
+
+        prefix = (
+            self.tr(PlotTextKey.FEATURE_DIST_PREFIX_SIGNAL)
+            if is_signal
+            else self.tr(PlotTextKey.FEATURE_DIST_PREFIX_BACKGROUND)
+        )
+        title_suffix = f" ({region_key})" if region_key else ""
+        ax_main.set_title(
+            self.tr(
+                PlotTextKey.FEATURE_DIST_SUBPLOT_TITLE,
+                prefix=prefix,
+                display_title=display_title,
+                title_suffix=title_suffix,
+            ),
+            pad=12,
+        )
+        ax_main.set_ylabel(self.tr(PlotTextKey.FEATURE_DIST_EVENTS_YLABEL, prefix=prefix))
+        plt.setp(ax_main.get_xticklabels(), visible=False)
+
+        if log_y:
+            ax_main.set_yscale("log")
+            ax_main.set_ylim(bottom=0.5)
+
+        ax_main.legend(frameon=True, fontsize=legend_fontsize)
 
     def plot_single_feature(
         self,
@@ -49,118 +191,17 @@ class FeatureDistributionPlotter(BasePlotter):
             gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08},
         )
 
-        bin_centers = feature_data["bin_centers"]
-        true_counts = feature_data["true_counts"]
-        true_err = np.sqrt(true_counts)
-        display_title = feature_data.get("display_title", feature_name)
-        class_label = "True Signal" if is_signal else "True Background"
-
-        ax_main.plot(
-            bin_centers,
-            true_counts,
-            "o",
-            color="black",
-            markersize=4,
-            zorder=5,
-            label=class_label,
+        self._render_feature_panels(
+            ax_main=ax_main,
+            ax_res=ax_res,
+            feature_data=feature_data,
+            feature_name=feature_name,
+            region_key=region_key,
+            is_signal=is_signal,
+            log_y=log_y,
+            ratio_ylabel_fontsize=9,
+            legend_fontsize=9,
         )
-
-        for m in feature_data["models"]:
-            counts = m["counts"]
-            errors = m["errors"]
-            color = m.get("color", "tab:blue")
-            marker = m.get("marker", "o")
-            is_ml = m.get("is_ml", True)
-            label = m.get("label", m.get("name", ""))
-
-            if is_ml:
-                ax_main.errorbar(
-                    bin_centers,
-                    counts,
-                    yerr=errors,
-                    fmt=marker,
-                    color=color,
-                    markerfacecolor=color,
-                    markeredgecolor=color,
-                    linestyle="-",
-                    linewidth=1.5,
-                    markersize=5,
-                    capsize=2,
-                    label=label,
-                )
-            else:
-                ax_main.errorbar(
-                    bin_centers,
-                    counts,
-                    yerr=errors,
-                    fmt=marker,
-                    color=color,
-                    markerfacecolor="none",
-                    markeredgecolor=color,
-                    markeredgewidth=1.8,
-                    linestyle="--",
-                    linewidth=1.5,
-                    markersize=6,
-                    capsize=2,
-                    label=label,
-                )
-
-            with np.errstate(divide="ignore", invalid="ignore"):
-                ratio = np.where(true_counts > 0, counts / true_counts, np.nan)
-                rel_m = np.where(counts > 0, errors / counts, 0.0)
-                rel_true = np.where(true_counts > 0, true_err / true_counts, 0.0)
-                ratio_err = ratio * np.sqrt(rel_m**2 + rel_true**2)
-
-            if is_ml:
-                ax_res.errorbar(
-                    bin_centers,
-                    ratio,
-                    yerr=ratio_err,
-                    fmt=marker,
-                    color=color,
-                    markerfacecolor=color,
-                    markeredgecolor=color,
-                    linestyle="-",
-                    linewidth=1.2,
-                    markersize=4,
-                    capsize=2,
-                )
-            else:
-                ax_res.errorbar(
-                    bin_centers,
-                    ratio,
-                    yerr=ratio_err,
-                    fmt=marker,
-                    color=color,
-                    markerfacecolor="none",
-                    markeredgecolor=color,
-                    markeredgewidth=1.5,
-                    linestyle="--",
-                    linewidth=1.2,
-                    markersize=5,
-                    capsize=2,
-                )
-
-        ax_res.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
-        ax_res.set_ylabel(r"$N_{\mathrm{sel}} / N_{\mathrm{true}}$", fontsize=9)
-        ax_res.set_xlabel(display_title, loc="center")
-        ax_res.grid(True, linestyle=":", alpha=0.5)
-
-        if is_signal:
-            ax_res.set_ylim(0.0, 1.25)
-        else:
-            ax_res.set_ylim(bottom=0.0)
-
-        prefix = "Signal" if is_signal else "Jet Leak in Signal"
-        title_suffix = f" ({region_key})" if region_key else ""
-        ax_main.set_title(f"{prefix}: {display_title}{title_suffix}", pad=12)
-        ax_main.set_ylabel(f"{prefix} Events / Bin")
-
-        if log_y:
-            ax_main.set_yscale("log")
-            ax_main.set_ylim(bottom=0.5)
-
-        ax_main.legend(frameon=True, fontsize=9)
         fig.align_ylabels([ax_main, ax_res])
 
         if output_path is not None:
@@ -209,120 +250,17 @@ class FeatureDistributionPlotter(BasePlotter):
             ax_main = fig.add_subplot(gs[r, c])
             ax_res = fig.add_subplot(gs[r + 1, c], sharex=ax_main)
 
-            s_data = plot_data[feat_name]
-            bin_centers = s_data["bin_centers"]
-            true_counts = s_data["true_counts"]
-            true_err = np.sqrt(true_counts)
-            display_title = s_data.get("display_title", feat_name)
-            class_label = "True Signal" if is_signal else "True Background"
-
-            ax_main.plot(
-                bin_centers,
-                true_counts,
-                "o",
-                color="black",
-                markersize=4,
-                zorder=5,
-                label=class_label,
+            self._render_feature_panels(
+                ax_main=ax_main,
+                ax_res=ax_res,
+                feature_data=plot_data[feat_name],
+                feature_name=feat_name,
+                region_key=region_key,
+                is_signal=is_signal,
+                log_y=log_y,
+                ratio_ylabel_fontsize=8,
+                legend_fontsize=8,
             )
-
-            for m in s_data["models"]:
-                counts = m["counts"]
-                errors = m["errors"]
-                color = m.get("color", "tab:blue")
-                marker = m.get("marker", "o")
-                is_ml = m.get("is_ml", True)
-                label = m.get("label", m.get("name", ""))
-
-                if is_ml:
-                    ax_main.errorbar(
-                        bin_centers,
-                        counts,
-                        yerr=errors,
-                        fmt=marker,
-                        color=color,
-                        markerfacecolor=color,
-                        markeredgecolor=color,
-                        linestyle="-",
-                        linewidth=1.5,
-                        markersize=5,
-                        capsize=2,
-                        label=label,
-                    )
-                else:
-                    ax_main.errorbar(
-                        bin_centers,
-                        counts,
-                        yerr=errors,
-                        fmt=marker,
-                        color=color,
-                        markerfacecolor="none",
-                        markeredgecolor=color,
-                        markeredgewidth=1.8,
-                        linestyle="--",
-                        linewidth=1.5,
-                        markersize=6,
-                        capsize=2,
-                        label=label,
-                    )
-
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    ratio = np.where(true_counts > 0, counts / true_counts, np.nan)
-                    rel_m = np.where(counts > 0, errors / counts, 0.0)
-                    rel_true = np.where(true_counts > 0, true_err / true_counts, 0.0)
-                    ratio_err = ratio * np.sqrt(rel_m**2 + rel_true**2)
-
-                if is_ml:
-                    ax_res.errorbar(
-                        bin_centers,
-                        ratio,
-                        yerr=ratio_err,
-                        fmt=marker,
-                        color=color,
-                        markerfacecolor=color,
-                        markeredgecolor=color,
-                        linestyle="-",
-                        linewidth=1.2,
-                        markersize=4,
-                        capsize=2,
-                    )
-                else:
-                    ax_res.errorbar(
-                        bin_centers,
-                        ratio,
-                        yerr=ratio_err,
-                        fmt=marker,
-                        color=color,
-                        markerfacecolor="none",
-                        markeredgecolor=color,
-                        markeredgewidth=1.5,
-                        linestyle="--",
-                        linewidth=1.2,
-                        markersize=5,
-                        capsize=2,
-                    )
-
-            ax_res.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
-            ax_res.set_ylabel(r"$N_{\mathrm{sel}} / N_{\mathrm{true}}$", fontsize=8)
-            ax_res.grid(True, linestyle=":", alpha=0.5)
-
-            if is_signal:
-                ax_res.set_ylim(0.0, 1.25)
-            else:
-                ax_res.set_ylim(bottom=0.0)
-
-            prefix = "Signal" if is_signal else "Jet Leak in Signal"
-            title_suffix = f" ({region_key})" if region_key else ""
-            ax_main.set_title(f"{prefix}: {display_title}{title_suffix}", pad=12)
-            ax_main.set_ylabel(f"{prefix} Events / Bin")
-            plt.setp(ax_main.get_xticklabels(), visible=False)
-            ax_res.set_xlabel(display_title, loc="center")
-
-            if log_y:
-                ax_main.set_yscale("log")
-                ax_main.set_ylim(bottom=0.5)
-
-            ax_main.legend(frameon=True, fontsize=8)
 
         total_grid_cells = rows * cols
         for empty_idx in range(n_features, total_grid_cells):
@@ -333,9 +271,21 @@ class FeatureDistributionPlotter(BasePlotter):
             fig.delaxes(e_main)
             fig.delaxes(e_res)
 
-        headline = "Signal (Photons)" if is_signal else "Jet Leakage in Signal"
-        suffix = f" - Region {region_key}" if region_key else ""
-        fig.suptitle(f"Holdout {headline} Selection{suffix}", fontsize=14, y=1.002)
+        headline = (
+            self.tr(PlotTextKey.FEATURE_DIST_OVERVIEW_HEADLINE_SIGNAL)
+            if is_signal
+            else self.tr(PlotTextKey.FEATURE_DIST_OVERVIEW_HEADLINE_BACKGROUND)
+        )
+        suffix = (
+            self.tr(PlotTextKey.FEATURE_DIST_REGION_SUFFIX, region_key=region_key)
+            if region_key
+            else ""
+        )
+        fig.suptitle(
+            self.tr(PlotTextKey.FEATURE_DIST_OVERVIEW_SUPTITLE, headline=headline, suffix=suffix),
+            fontsize=14,
+            y=1.002,
+        )
 
         return fig
 

@@ -1,8 +1,8 @@
 import argparse
 import logging
 import os
-import sys
 import re
+import sys
 from datetime import datetime
 from logging.config import fileConfig
 from pathlib import Path
@@ -10,30 +10,29 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core.Datasets.EgammaNpzDataset import EgammaNpzDataset
-from src.core.Plotting.Context import RegionPlotContext
 from src.core.Plotting.PlotManager import PlotManager
-from src.core.Plotting.ProfilePlotter import ProfileMeanEnergyPlotter
 from src.core.Validation.ResultAggregator import ResultAggregator
 from src.utils import get_et_eta
 
 CONFIG_FILE = "logging.ini"
 LOG_DIR = "log"
-os.makedirs(LOG_DIR, exist_ok=True)
-log_filename = f"{LOG_DIR}/plotter_{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
-
-fileConfig(
-    CONFIG_FILE,
-    defaults={"log_file_path": log_filename},
-    disable_existing_loggers=False,
-)
 log = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    """Configures file and console logging when running as a CLI script."""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_filename = f"{LOG_DIR}/plotter_{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
+    fileConfig(
+        CONFIG_FILE,
+        defaults={"log_file_path": log_filename},
+        disable_existing_loggers=False,
+    )
+
 
 parser = argparse.ArgumentParser(prog="plotter")
 parser.add_argument("results_path", type=str)
 parser.add_argument("--drive_path", default="data/", type=str, required=False)
-parser.add_argument("--percentage", default=None, type=float, required=False)
-parser.add_argument("--plot_ringer", action="store_true")
 parser.add_argument("--config", default=None, type=str, required=False)
 parser.add_argument("--output_dir", default=None, type=str, required=False)
 parser.add_argument(
@@ -54,11 +53,17 @@ parser.add_argument(
     required=False,
     help="Filter to specific eta bin index.",
 )
+parser.add_argument(
+    "--lang",
+    default="en",
+    choices=["en", "pt", "both"],
+    help="Target language for plot labels and titles (en, pt, or both).",
+)
 parser.add_argument("--debug", action="store_true")
 
 
 class PlotterRunner:
-    """Runner responsible for batch generating ringer profiles or training metric curves."""
+    """Runner responsible for batch generating training metric curves."""
 
     def __init__(
         self,
@@ -68,6 +73,7 @@ class PlotterRunner:
         config_path: Optional[str] = None,
         target_et: Optional[int] = None,
         target_eta: Optional[int] = None,
+        language: str = "en",
     ) -> None:
         """Initialize the PlotterRunner instance.
 
@@ -78,12 +84,15 @@ class PlotterRunner:
             config_path: Optional path to YAML configuration file.
             target_et: Optional ET bin index filter.
             target_eta: Optional eta bin index filter.
+            language: Target localization language ('en', 'pt', or 'both').
         """
         self.results_path: Path = Path(results_path)
         self.drive_path: str = drive_path
+        self.config_path: Optional[str] = config_path
         self.target_et: Optional[int] = target_et
         self.target_eta: Optional[int] = target_eta
-        self.plot_manager: PlotManager = PlotManager()
+        self.language: str = language
+        self.plot_manager: PlotManager = PlotManager(language=language)
 
         if output_dir:
             self.output_dir: Path = Path(output_dir)
@@ -96,41 +105,6 @@ class PlotterRunner:
             )
             self.output_dir = Path("Plots") / target_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
-    def run_ringer_profiles(self, folder_path: str, percentage: float) -> None:
-        """Generate mean energy ringer profile plots for all matching npz datasets.
-
-        Args:
-            folder_path: Output directory for the generated profile plots.
-            percentage: Percentage ratio of rings retained in the dataset.
-        """
-        data_files = [
-            os.path.join(self.drive_path, file)
-            for file in os.listdir(self.drive_path)
-            if file.endswith(".npz") and file.startswith("mc23_13TeV")
-        ]
-        dataset = EgammaNpzDataset(self.drive_path, percentage=percentage)
-        profile_plotter = ProfileMeanEnergyPlotter()
-
-        for index, file_name in enumerate(data_files):
-            et, eta = get_et_eta(file_name)
-            if self.target_et is not None and int(et) != self.target_et:
-                continue
-            if self.target_eta is not None and int(eta) != self.target_eta:
-                continue
-
-            data, target, _ = dataset[index]
-            context = RegionPlotContext(
-                iet=int(et),
-                ieta=int(eta),
-                output_dir=folder_path,
-                data=data,
-                target=target,
-            )
-            profile_plotter.plot(
-                context,
-                x_rings=data[:, dataset.indexes],
-            )
 
     def run_metrics_plots(
         self, file_path: str, folder_path: str, et: int, eta: int
@@ -145,27 +119,9 @@ class PlotterRunner:
         """
         self.plot_manager.run_metrics_from_file(file_path, folder_path, et, eta)
 
-    def execute(
-        self, plot_ringer: bool = False, percentage: Optional[float] = None
-    ) -> None:
-        """Execute plotting pipeline across all fold result files in results_path.
-
-        Args:
-            plot_ringer: If True, generate ringer profiles instead of metric curves.
-            percentage: Required ring percentage when plot_ringer is True.
-
-        Raises:
-            ValueError: If plot_ringer is True but percentage is None.
-        """
+    def execute(self) -> None:
+        """Execute metric plotting pipeline across all fold result files in results_path."""
         folder_path = str(self.output_dir)
-
-        if plot_ringer:
-            if percentage is None:
-                raise ValueError(
-                    "You must provide percentage of rings. Ex: --percentage 0.5"
-                )
-            self.run_ringer_profiles(folder_path, percentage)
-            return
 
         if self.results_path.is_file():
             et, eta = get_et_eta(str(self.results_path))
@@ -219,8 +175,9 @@ class PlotterRunner:
             )
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
+def main(args: argparse.Namespace) -> None:
+    """CLI entrypoint for training metric plot generation."""
+    _configure_logging()
     runner = PlotterRunner(
         results_path=args.results_path,
         drive_path=args.drive_path,
@@ -228,5 +185,11 @@ if __name__ == "__main__":
         config_path=args.config,
         target_et=args.et,
         target_eta=args.eta,
+        language=args.lang,
     )
-    runner.execute(plot_ringer=args.plot_ringer, percentage=args.percentage)
+    runner.execute()
+
+
+if __name__ == "__main__":
+    cli_args = parser.parse_args()
+    main(cli_args)

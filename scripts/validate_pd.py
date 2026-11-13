@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.Validation.ModelValidator import ModelValidator
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(prog="NeuralRingerValidator")
@@ -56,6 +55,13 @@ parser.add_argument(
     type=int,
     help="Filter to specific eta bin index.",
 )
+parser.add_argument(
+    "--lang",
+    required=False,
+    default="en",
+    choices=["en", "pt", "both"],
+    help="Target language for plot labels and titles (en, pt, or both).",
+)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -64,6 +70,7 @@ def main(args: argparse.Namespace) -> None:
     Args:
         args: Parsed command-line arguments.
     """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     validator = ModelValidator(
         config_path=args.config,
         data_path=args.data_path,
@@ -72,10 +79,11 @@ def main(args: argparse.Namespace) -> None:
         output_dir=args.output_dir,
         target_et=args.et,
         target_eta=args.eta,
+        language=args.lang,
     )
     validator.run()
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    main(args)
+    cli_args = parser.parse_args()
+    main(cli_args)

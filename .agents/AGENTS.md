@@ -61,21 +61,18 @@ Output folders in `results/` are timestamped automatically (`config_name<Name>_i
 ### 3. Plotting & Analysis
 - **Metric & ROC Curves**:
   ```bash
-  conda run -n egamma python scripts/run_plots.py <results_path>
-  ```
-- **Ringer Mean Energy Profiles**:
-  ```bash
-  conda run -n egamma python scripts/run_plots.py <results_path> --plot_ringer --percentage 0.5
+  conda run -n egamma python scripts/run_plots.py <results_path> [--lang en|pt|both]
   ```
 - **Comparative Multi-Model ROC Grid**:
   ```bash
-  conda run -n egamma python scripts/run_roc_plots.py --results_path results/
+  conda run -n egamma python scripts/run_roc_plots.py --results_path results/ [--lang en|pt|both]
   ```
+- **Bilingual Output (`--lang`)**: Plotting and validation scripts (`run_plots.py`, `run_roc_plots.py`, `plot_data_distribution.py`, `run_quadrant_analysis.py`, `validate_pd.py`) accept `--lang en|pt|both` (default: `en`). Single-language runs write directly to `<output_dir>/`; `--lang both` saves localized figures to `<output_dir>/en/` and `<output_dir>/pt/` via `BilingualPlotOrchestrator`.
 
 ### 4. Validation & Benchmark Cuts
-Validate trained models against standard threshold baseline selections (supports optional `--efficiencies_csv` and `--target_pd`):
+Validate trained models against standard threshold baseline selections (supports optional `--efficiencies_csv`, `--target_pd`, and `--lang`):
 ```bash
-conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/ [--efficiencies_csv <csv_path>] [--target_pd 0.9424]
+conda run -n egamma python scripts/validate_pd.py --config config/NeuralRinger/ModelV1.yaml --data_path data/ [--efficiencies_csv <csv_path>] [--target_pd 0.9424] [--lang en|pt|both]
 ```
 Calculate ATLAS baseline fast photon cut efficiencies:
 ```bash
@@ -85,7 +82,7 @@ conda run -n egamma python scripts/calculate_photon_cut_efficiency.py --data_pat
 ### 5. Regional Data Distribution Analysis
 Analyze and plot class/event distributions across $E_T$ and $\eta$ calorimeter regions:
 ```bash
-conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml
+conda run -n egamma python scripts/plot_data_distribution.py --config config/NeuralRinger/ModelV1.yaml [--lang en|pt|both]
 ```
 
 ### 6. Quadrant Analysis (Model Comparison & Cut-Based Benchmark)
@@ -101,6 +98,7 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     [--threshold_mode calibrated|default] \
     [--target_pd 0.9424] \
     [--efficiencies_csv <csv_path>] \
+    [--lang en|pt|both] \
     [--output_dir Plots/quandrantic_analysis]
 
 # Model vs Cut-Based Selection comparison
@@ -112,6 +110,7 @@ conda run -n egamma python scripts/run_quadrant_analysis.py \
     [--threshold_mode calibrated|default] \
     [--target_pd 0.9424] \
     [--efficiencies_csv <csv_path>] \
+    [--lang en|pt|both] \
     [--output_dir Plots/quandrantic_analysis_cut]
 ```
 
@@ -124,17 +123,6 @@ conda run -n egamma python scripts/run_hyperparameter_tuning.py \
     [--debug]
 ```
 
-### 8. Pileup Sensitivity Analysis
-Evaluate classifier stability, efficiency vs. $\langle\mu\rangle$, observable drifts, and $N_{\text{PV}}$ vertex calibration:
-```bash
-conda run -n egamma python scripts/run_pileup_analysis.py \
-    --config config/NeuralRinger/ModelV6_HighBatch_newExtraction_20_regions_100Rings.yaml \
-    --results_path results/<model_results_dir> \
-    --target_et 1 --target_eta 1 \
-    [--output_dir Plots/pileup_analysis] \
-    [--format png|pdf]
-```
-
 ---
 
 ## Codebase Map & File Discovery
@@ -145,11 +133,10 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
     - `BaseTrainer.py`: Abstract base class for trainers defining `device`, `full_dataset`, and `run()`.
     - `BaseResultAggregator.py`: Abstract base class for result aggregation and model discovery.
     - `BaseEvaluator.py`: Abstract base class for holdout evaluation.
-    - `BasePlotter.py`: Abstract base classes `BasePlotter` and `BaseMetricPlotter`.
+    - `BasePlotter.py` (`src/core/Interfaces/BasePlotter.py`): Abstract base classes `BasePlotter` (with `language` and `tr()` translation helper) and `BaseMetricPlotter`.
     - `BaseHyperparameterTuner.py`: Abstract base class for hyperparameter search orchestrators.
   - `Datasets/`:
     - `EgammaNpzDataset.py`: Custom PyTorch Dataset reading `.npz` calorimeter ring data; exposes `feature_names`.
-    - `EgammaNpzDatasetNoTargetOrigin.py`: Dataset variant omitting target origin extraction.
     - `SplitManifest.py`: Cross-validation data partitioning, manifest caching, and deterministic loading with operational logging.
   - `Trainers/`:
     - `NeuralRingerTrainer.py`: High-level training lifecycle orchestrator.
@@ -160,8 +147,8 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
     - `GridSearchTuner.py`: Orchestrator executing hyperparameter search trials and summarizing ranked outcomes.
     - `TuningConfiguration.py`: Pydantic schema validating tuning configuration YAML and building discrete trial configurations.
   - `Plotting/`:
-    - `PlotManager.py`: Coordinator dispatching plotting routines.
-    - `BasePlotter.py`: Abstract base class for all plotters.
+    - `PlotManager.py`: Coordinator dispatching plotting routines across configured `--lang` targets.
+    - `Localization.py`: Bilingual (`en`/`pt`) translation catalog and multi-language output orchestrator (`PlotTranslator`, `BilingualPlotOrchestrator`).
     - `QuadrantPlotter.py`: 2x2 contingency matrix heatmaps, score scatter partitions, and regional summaries for quadrant analysis.
     - `FeatureDistributionPlotter.py`: 2-panel feature distributions with synchronized selection ratio subplots ($N_{\text{sel}} / N_{\text{true}}$) and overview grid generator.
     - `PileupPlotter.py`: 2-panel efficiency vs. $\langle\mu\rangle$ curves with ratio panel, shower shape & ring profile drift vs $\langle\mu\rangle$, and 2D $N_{\text{PV}}$ vs $\langle\mu\rangle$ density correlation heatmap.
@@ -169,7 +156,7 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
     - `MetricPlotter.py`: Training loss, SP, and ROC curve plotters.
     - `RegionDistributionPlotter.py`: 2D heatmap generator for event and class distributions across $E_T$ and $\eta$ bins.
     - `LegacyPlotter.py`: Convolutional feature slice and saliency map visualizers.
-    - `Context.py`: Dataclasses encapsulating plotting state (`RegionPlotContext`, `FoldPlotContext`).
+    - `Context.py`: Dataclasses encapsulating plotting state (`RegionPlotContext`, `MetricPlotContext`).
   - `Validation/`:
     - `ModelValidator.py`: End-to-end evaluation pipeline comparing neural models against baseline threshold cuts, evaluating both regional and global efficiency curves.
     - `QuadrantAnalyzer.py`: Holdout test evaluator comparing two models into 4 performance quadrants per region and globally (supports `strategy1_alias` and `strategy2_alias`).
@@ -181,6 +168,7 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
     - `ResultAggregator.py`: Utility aggregating `.pkl` fold outputs and querying best regional models.
     - `QuadrantTableConsolidator.py`: Consolidates regional quadrant metrics (`SP`, `PF`, `PD` as percentages) into 2D $E_T \times |\eta|$ LaTeX grid tables and CSV exports.
     - `DistanceMetricsETL.py`: ETL processor discovering, parsing (`ET`, `ETA`, `ExecutionFolder`), and consolidating `*distance_metrics_*.csv` tables across validation execution runs into unified DataFrames.
+    - `LatexTableFormatter.py`: Centralized LaTeX `booktabs` table formatter (`LatexTableFormatter`, `format_value_with_uncertainty`, `wrap_booktabs_environment`) shared across consolidators and `notebooks/format_latex_tables.ipynb`.
   - `Callbacks/`:
     - `SPCallbackPyTorch.py`: PyTorch callback calculating ROC, SP metric, knee operating points, and early stopping.
 - **`src/Models/`**:
@@ -199,8 +187,9 @@ conda run -n egamma python scripts/run_pileup_analysis.py \
   - `validate_results.ipynb`: Interactive Jupyter notebook for validation inspection and plotting.
   - `consolidate_quadrant_tables.ipynb`: Interactive Jupyter notebook consolidating quadrant metrics into 2D LaTeX grid tables.
   - `analyse_distance_metrics.ipynb`: Interactive Jupyter notebook executing `DistanceMetricsETL` to aggregate, summarize, query, and export distance metrics across validation runs.
+  - `format_latex_tables.ipynb`: Interactive Jupyter notebook using `LatexTableFormatter` to render publication-ready `booktabs` LaTeX tables.
 - **`scripts/`**:
-  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `run_pileup_analysis.py`, `runner.sh`).
+  - Standalone entrypoint runners (`run_plots.py`, `run_roc_plots.py`, `validate_pd.py`, `plot_data_distribution.py`, `calculate_photon_cut_efficiency.py`, `runner.sh`).
 - **`tests/`**:
   - Organized to mirror `src/`:
     - `core/datasets/`: Manifest, consolidation, and ROOT generator tests.

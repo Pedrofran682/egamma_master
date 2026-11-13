@@ -14,6 +14,7 @@ from src.core.Validation.FastPhotonCutEvaluator import (
     UserKinematicGrid,
 )
 from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
+from src.core.Validation.LatexTableFormatter import LatexTableFormatter
 from src.core.Validation.PileupAnalyzer import PileupAnalyzer
 from src.core.Validation.PileupThresholdCalibrator import PileupThresholdCalibrator
 from src.core.Validation.QuadrantAnalyzer import StrategyMetrics
@@ -337,17 +338,15 @@ class RegionalOperatingPointsConsolidator:
         math_delimiters: bool = True,
         bold: bool = False,
     ) -> str:
-        if np.isnan(value) or np.isnan(uncertainty):
-            return "-"
-        val_str = f"{value:.{precision}f}"
-        err_str = f"{uncertainty:.{precision}f}"
-        if decimal_comma:
-            val_str = val_str.replace(".", "{,}")
-            err_str = err_str.replace(".", "{,}")
-        core = f"{val_str} \\pm {err_str}"
-        if bold:
-            core = f"\\mathbf{{{val_str} \\pm {err_str}}}"
-        return f"${core}$" if math_delimiters else core
+        return LatexTableFormatter.format_value_with_uncertainty(
+            val=value,
+            err=uncertainty,
+            precision=precision,
+            bold=bold,
+            decimal_comma=decimal_comma,
+            math_delimiters=math_delimiters,
+            nan_placeholder="-",
+        )
 
     def build_grid_table(
         self,
@@ -430,7 +429,7 @@ class RegionalOperatingPointsConsolidator:
                         row_cells.extend(["-", "-", "-"])
                 rows_data.append(row_cells)
 
-        multi_index = pd.MultiIndex.from_tuples(index_tuples, names=["eta", "Método"])
+        multi_index = pd.MultiIndex.from_tuples(index_tuples, names=["eta", "Method"])
         return pd.DataFrame(rows_data, index=multi_index, columns=multi_cols)
 
     def to_latex_snippet(
@@ -467,22 +466,9 @@ class RegionalOperatingPointsConsolidator:
 
         et_labels = sorted(list(set(col[0] for col in df.columns)), key=lambda x: str(x))
         n_ets = len(et_labels)
-        total_cols = 2 + 3 * n_ets
         col_align = "|c|l|" + "|".join(["ccc"] * n_ets) + "|"
 
-        lines: List[str] = []
-        lines.append("\\begin{table}[htbp]")
-        lines.append("\\centering")
-        if caption:
-            lines.append(f"\\caption{{{caption}}}")
-        if label:
-            lines.append(f"\\label{{{label}}}")
-
-        if resize_box:
-            lines.append("\\resizebox{\\textwidth}{!}{%")
-
-        lines.append(f"\\begin{{tabular}}{{{col_align}}}")
-        lines.append("\\hline")
+        lines: List[str] = [f"\\begin{{tabular}}{{{col_align}}}", "\\hline"]
 
         header_top = " & "
         for et in et_labels:
@@ -490,7 +476,7 @@ class RegionalOperatingPointsConsolidator:
         header_top += " \\\\"
         lines.append(header_top)
 
-        header_sub = " & Método"
+        header_sub = " & Method"
         for _ in range(n_ets):
             header_sub += " & $P_D[\\%]$ & $SP[\\%]$ & $P_F[\\%]$"
         header_sub += " \\\\"
@@ -510,10 +496,12 @@ class RegionalOperatingPointsConsolidator:
             lines.append("\\hline")
 
         lines.append("\\end{tabular}")
-        if resize_box:
-            lines.append("}")
-        lines.append("\\end{table}")
-        return "\n".join(lines) + "\n"
+        return LatexTableFormatter.wrap_booktabs_environment(
+            tabular_body="\n".join(lines),
+            caption=caption,
+            label=label,
+            resize_to_textwidth=resize_box,
+        )
 
     def export_parquet(
         self,

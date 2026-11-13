@@ -66,6 +66,7 @@ def test_build_grid_table(mock_consolidator: RegionalOperatingPointsConsolidator
     grid = mock_consolidator.build_grid_table(as_percentage=True, precision=2)
     assert isinstance(grid.columns, pd.MultiIndex)
     assert isinstance(grid.index, pd.MultiIndex)
+    assert list(grid.index.names) == ["eta", "Method"]
     assert len(grid.index) == 2 * 3
     assert len(grid.columns) == 2 * 3
 
@@ -75,7 +76,8 @@ def test_to_latex_snippet(mock_consolidator: RegionalOperatingPointsConsolidator
     assert "\\begin{table}" in latex
     assert "\\resizebox{\\textwidth}{!}" in latex
     assert "\\multirow{3}{*}{$\\eta_0$}" in latex
-    assert "Método" in latex
+    assert "Method" in latex
+    assert "Método" not in latex
     assert "$P_D[\\%]$" in latex
     assert "\\end{tabular}" in latex
     assert "\\end{table}" in latex
