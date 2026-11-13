@@ -87,11 +87,13 @@ def test_etl_pipeline(temp_validation_dir: pathlib.Path):
     assert "ET" in consolidated_df.columns
     assert "ETA" in consolidated_df.columns
     assert "ExecutionFolder" in consolidated_df.columns
+    assert "FolderPath" in consolidated_df.columns
     assert "MetricType" in consolidated_df.columns
 
     assert set(consolidated_df["ET"].unique()) == {1, 2}
     assert set(consolidated_df["ETA"].unique()) == {1, 3}
     assert consolidated_df["ExecutionFolder"].iloc[0] == temp_validation_dir.name
+    assert consolidated_df["FolderPath"].iloc[0] == str(temp_validation_dir / "Tables")
 
     summary = etl.get_summary(consolidated_df)
     assert not summary.empty
@@ -126,6 +128,7 @@ def test_evaluate_distribution_equivalence():
 
 def test_format_latex_table():
     test_df = pd.DataFrame({
+        "FolderPath": ["/tmp/run_1/Tables"],
         "Feature": ["trig_L2_calo_et"],
         "Comparison": ["Model1 vs Model2"],
         "KS Distance (D)": [0.0123],
@@ -146,6 +149,15 @@ def test_format_latex_table():
     assert formatted_df["KS Distance ($D$)"].iloc[0] == r"$0.0123 \pm 0.0045$"
     assert r"\begin{tabular}" in latex_str
     assert r"$0.0123 \pm 0.0045$" in latex_str
+
+    formatted_with_folder, latex_with_folder = DistanceMetricsETL.format_latex_table(
+        test_df,
+        precision=4,
+        id_cols=["FolderPath", "Feature", "Comparison"],
+    )
+    assert "FolderPath" in formatted_with_folder.columns
+    assert formatted_with_folder["FolderPath"].iloc[0] == r"/tmp/run\_1/Tables"
+    assert r"/tmp/run\_1/Tables" in latex_with_folder
 
 
 def test_format_table_with_uncertainties():

@@ -117,7 +117,7 @@ class DistanceMetricsETL:
         return name
 
     def load_single_csv(self, file_path: Union[str, Path]) -> pd.DataFrame:
-        """Loads a single CSV, parsing and appending ET, ETA, and ExecutionFolder columns.
+        """Loads a single CSV, parsing and appending ET, ETA, ExecutionFolder, and FolderPath columns.
 
         Args:
             file_path: Path to the CSV file.
@@ -134,6 +134,7 @@ class DistanceMetricsETL:
         df["ET"] = et
         df["ETA"] = eta
         df["ExecutionFolder"] = execution_folder
+        df["FolderPath"] = str(path.parent)
         df["MetricType"] = metric_type
         return df
 
@@ -144,20 +145,25 @@ class DistanceMetricsETL:
             Consolidated DataFrame with all records and added columns.
         """
         if not self._discovered_files:
-            return pd.DataFrame(columns=["ET", "ETA", "ExecutionFolder", "MetricType"])
+            return pd.DataFrame(columns=["ET", "ETA", "ExecutionFolder", "FolderPath", "MetricType"])
 
         dfs = [self.load_single_csv(f) for f in self._discovered_files]
         consolidated = pd.concat(dfs, ignore_index=True)
         return consolidated
 
     def get_summary(self, df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        """Generates a summary of loaded records grouped by ExecutionFolder, ET, and ETA."""
+        """Generates a summary of loaded records grouped by ExecutionFolder, FolderPath, ET, and ETA."""
         target_df = df if df is not None else self.extract_and_consolidate()
         if target_df.empty:
             return pd.DataFrame()
 
+        group_cols = (
+            ["ExecutionFolder", "FolderPath", "ET", "ETA", "MetricType"]
+            if "FolderPath" in target_df.columns
+            else ["ExecutionFolder", "ET", "ETA", "MetricType"]
+        )
         summary = (
-            target_df.groupby(["ExecutionFolder", "ET", "ETA", "MetricType"])
+            target_df.groupby(group_cols)
             .size()
             .reset_index(name="RecordCount")
         )
@@ -273,6 +279,7 @@ class DistanceMetricsETL:
         precision: int = 4,
         features: Optional[List[str]] = None,
         comparisons: Optional[List[str]] = None,
+        id_cols: Optional[List[str]] = None,
     ) -> Tuple[pd.DataFrame, str]:
         """Formats distance metrics and uncertainties into a LaTeX table representation (Legacy).
 
@@ -281,6 +288,7 @@ class DistanceMetricsETL:
             precision: Decimal precision for floating point numbers.
             features: Optional filter for specific feature names.
             comparisons: Optional filter for specific comparison strings.
+            id_cols: Optional identifier columns to preserve (defaults to ['Feature', 'Comparison']).
 
         Returns:
             Tuple of (formatted_dataframe, latex_table_string).
@@ -301,9 +309,9 @@ class DistanceMetricsETL:
         return DistanceMetricsETL.format_table_with_uncertainties(
             df=filtered,
             pairs=metric_specs,
-            id_cols=["Feature", "Comparison"],
+            id_cols=id_cols if id_cols is not None else ["Feature", "Comparison"],
             precision=precision,
-            column_format="l l c c c c",
+            column_format="l l c c c c" if id_cols is None else None,
         )
 
 
