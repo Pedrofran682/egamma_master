@@ -26,6 +26,8 @@ def mock_consolidator(tmp_path: Path) -> RegionalOperatingPointsConsolidator:
             }
             self._records = []
             self._training_records = []
+            self._athena_matched_records = []
+            athena_aliases = self._athena_matched_method_aliases()
             for et in range(2):
                 for eta in range(2):
                     self._training_records.append(
@@ -46,7 +48,34 @@ def mock_consolidator(tmp_path: Path) -> RegionalOperatingPointsConsolidator:
                             "std_rep_sp": 0.0020,
                         }
                     )
+                    self._athena_matched_records.append(self._training_records[-1])
                     for m_key in self.DEFAULT_METHOD_KEYS:
+                        sp_val = 0.9580 if m_key == "pileup_corrected_cut" else 0.9410
+                        self._athena_matched_records.append(
+                            {
+                                "iet": et,
+                                "ieta": eta,
+                                "method_key": m_key,
+                                "method": athena_aliases[m_key],
+                                "target_pd": 0.9350,
+                                "decision_threshold": "0.1000",
+                                "pd": 0.9350,
+                                "pd_uncertainty": 0.0030,
+                                "sp": sp_val,
+                                "sp_uncertainty": 0.0028,
+                                "pf": 0.0420,
+                                "pf_uncertainty": 0.0019,
+                                "eff": 0.9350,
+                                "eff_uncertainty": 0.0025,
+                                "bg_eff": 0.9580,
+                                "bg_eff_uncertainty": 0.0019,
+                                "tp": 935,
+                                "fp": 42,
+                                "tn": 958,
+                                "fn": 65,
+                                "total": 2000,
+                            }
+                        )
                         self._records.append(
                             {
                                 "iet": et,
@@ -221,3 +250,25 @@ def test_build_training_grid_table_and_latex(
     assert "Training Best SP" in latex
     assert "$0.00 \\le |\\eta| < 0.80$" in latex
     assert "$20 \\le E_T < 30\\,\\text{GeV}$" in latex
+
+
+def test_build_athena_matched_comparison_grid_table_and_latex(
+    mock_consolidator: RegionalOperatingPointsConsolidator,
+) -> None:
+    grid = mock_consolidator.build_athena_matched_comparison_grid_table(
+        as_percentage=True, precision=2, bold_best_sp=True
+    )
+    assert len(grid.index) == 2 * 4
+    assert len(grid.columns) == 2 * 3
+    methods_in_index = list(grid.index.get_level_values(1))
+    assert "Training Best SP" in methods_in_index
+    assert "Calibrated Hard Cut (Athena Loose PD)" in methods_in_index
+    assert "Pileup-Corrected Cut T(mu) (Athena Loose PD)" in methods_in_index
+    assert "Athena Loose Cut" in methods_in_index
+    assert "\\pm" in grid.iloc[0, 0]
+    assert "\\mathbf{" in grid.iloc[2, 1]
+
+    latex = mock_consolidator.to_latex_snippet(grid_table=grid, as_percentage=True, precision=2)
+    assert "\\multirow{4}{*}{$0.00 \\le |\\eta| < 0.80$}" in latex
+    assert "Calibrated Hard Cut (Athena Loose PD)" in latex
+    assert "Pileup-Corrected Cut T(mu) (Athena Loose PD)" in latex

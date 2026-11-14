@@ -130,6 +130,7 @@ class RegionalOperatingPointsConsolidator:
 
         self._records: List[Dict[str, Any]] = []
         self._training_records: List[Dict[str, Any]] = []
+        self._athena_matched_records: List[Dict[str, Any]] = []
 
     @property
     def records(self) -> List[Dict[str, Any]]:
@@ -152,6 +153,40 @@ class RegionalOperatingPointsConsolidator:
             if not sub.empty and col_name in sub.columns:
                 return float(sub[col_name].iloc[0])
         return self.target_pd
+
+    @staticmethod
+    def _strategy_metrics_record(
+        iet: int,
+        ieta: int,
+        method_key: str,
+        method_name: str,
+        target_pd: float,
+        decision_threshold: str,
+        metrics: StrategyMetrics,
+    ) -> Dict[str, Any]:
+        return {
+            "iet": iet,
+            "ieta": ieta,
+            "method_key": method_key,
+            "method": method_name,
+            "target_pd": target_pd,
+            "decision_threshold": decision_threshold,
+            "pd": metrics.pd,
+            "pd_uncertainty": metrics.pd_uncertainty,
+            "sp": metrics.sp,
+            "sp_uncertainty": metrics.sp_uncertainty,
+            "pf": metrics.pf,
+            "pf_uncertainty": metrics.pf_uncertainty,
+            "eff": metrics.eff,
+            "eff_uncertainty": metrics.eff_uncertainty,
+            "bg_eff": metrics.bg_eff,
+            "bg_eff_uncertainty": metrics.bg_eff_uncertainty,
+            "tp": metrics.tp,
+            "fp": metrics.fp,
+            "tn": metrics.tn,
+            "fn": metrics.fn,
+            "total": metrics.total,
+        }
 
     def scan_and_evaluate(self) -> List[Dict[str, Any]]:
         """Scans all available dataset regions and extracts performance for all three methods.
@@ -297,29 +332,15 @@ class RegionalOperatingPointsConsolidator:
 
             for key, name, met, th_repr in evaluated_methods:
                 self._records.append(
-                    {
-                        "iet": iet,
-                        "ieta": ieta,
-                        "method_key": key,
-                        "method": name,
-                        "target_pd": target_pd,
-                        "decision_threshold": th_repr,
-                        "pd": met.pd,
-                        "pd_uncertainty": met.pd_uncertainty,
-                        "sp": met.sp,
-                        "sp_uncertainty": met.sp_uncertainty,
-                        "pf": met.pf,
-                        "pf_uncertainty": met.pf_uncertainty,
-                        "eff": met.eff,
-                        "eff_uncertainty": met.eff_uncertainty,
-                        "bg_eff": met.bg_eff,
-                        "bg_eff_uncertainty": met.bg_eff_uncertainty,
-                        "tp": met.tp,
-                        "fp": met.fp,
-                        "tn": met.tn,
-                        "fn": met.fn,
-                        "total": met.total,
-                    }
+                    self._strategy_metrics_record(
+                        iet=iet,
+                        ieta=ieta,
+                        method_key=key,
+                        method_name=name,
+                        target_pd=target_pd,
+                        decision_threshold=th_repr,
+                        metrics=met,
+                    )
                 )
 
             log.info(
@@ -384,6 +405,191 @@ class RegionalOperatingPointsConsolidator:
         log.info(f"Extracted {len(self._training_records)} regional training best-SP records.")
         return self._training_records
 
+    def _athena_matched_method_aliases(self) -> Dict[str, str]:
+        wp_label = self.working_point.capitalize()
+        return {
+            self.TRAINING_METHOD_KEY: self.method_aliases.get(
+                self.TRAINING_METHOD_KEY, "Training Best SP"
+            ),
+            "calibrated_hard_cut": f"Calibrated Hard Cut (Athena {wp_label} PD)",
+            "pileup_corrected_cut": f"Pileup-Corrected Cut T(mu) (Athena {wp_label} PD)",
+            "athena_cut": self.method_aliases.get("athena_cut", f"Athena {wp_label} Cut"),
+        }
+
+    def scan_athena_matched_and_training(self) -> List[Dict[str, Any]]:
+        """Evaluates Training Best SP alongside neural cuts calibrated to full-dataset Athena PD.
+
+        Returns:
+            List of record dictionaries containing all four compared methods per region.
+        """
+        if not self.manifest.exists():
+            raise FileNotFoundError(
+                f"Split manifest not found at {self.manifest.manifest_file}."
+            )
+        self.manifest.load()
+
+        model = self.trainer.factory.create_model().to(self.device)
+        total_regions = len(self.trainer.full_dataset)
+        self._athena_matched_records = []
+        aliases = self._athena_matched_method_aliases()
+
+        for index in range(total_regions):
+            data_path = self.trainer.full_dataset.file_paths[index]
+            iet, ieta = get_et_eta(data_path)
+
+            if not self.config.is_region_allowed(iet, ieta):
+                continue
+            if not self.aggregator.has_region(iet, ieta):
+                continue
+
+            region_key = f"et_{iet}_eta_{ieta}"
+            if region_key not in self.manifest.data:
+                continue
+
+            test_indices, train_folds = self.manifest.get_region_splits(region_key)
+            test_indices_arr = np.asarray(test_indices, dtype=int)
+            if len(test_indices_arr) == 0:
+                continue
+
+            try:
+                train_metrics = self.aggregator.get_best_training_metrics_for_region(
+                    iet, ieta, cache=False
+                )
+                best_model, _, _, _ = self.aggregator.get_best_model_for_region(
+                    iet, ieta, cache=False
+                )
+                model.load_state_dict(best_model["best_weights"])
+                best_fold = int(best_model.get("fold", 0))
+                del best_model
+                model.eval()
+            except Exception as exc:
+                log.warning(f"[iet{iet}.ieta{ieta}] Failed to load best model: {exc}")
+                continue
+
+            raw_features, raw_labels, _ = self.trainer.full_dataset[index]
+            ring_indices = self.trainer.full_dataset.ring_column_indices
+            if ring_indices is None:
+                ring_indices = getattr(self.trainer.full_dataset, "indexes", None)
+
+            feature_names = getattr(self.trainer.full_dataset, "feature_names", None)
+            feature_names_list = [str(f) for f in feature_names] if feature_names is not None else []
+
+            athena_th = self.grid.get_athena_threshold_for_et_bin(iet)
+            pass_cut_full = self.cut_evaluator.evaluate_events_for_threshold(
+                data=raw_features,
+                feature_names=feature_names_list,
+                threshold=athena_th,
+                working_point=self.working_point,
+            )
+            sig_mask_full = raw_labels == 1
+            athena_pd_full = (
+                float(np.mean(pass_cut_full[sig_mask_full]))
+                if np.any(sig_mask_full)
+                else self.target_pd
+            )
+            target_pd_athena = float(np.clip(athena_pd_full, 1e-6, 1.0 - 1e-6))
+
+            preds_athena_test = pass_cut_full[test_indices_arr].astype(int)
+            holdout_labels = raw_labels[test_indices_arr]
+            metrics_athena = StrategyMetrics.from_predictions(preds_athena_test, holdout_labels)
+            del pass_cut_full, sig_mask_full, preds_athena_test
+
+            eval_res = self.evaluator.evaluate(
+                model=model,
+                data=raw_features,
+                target=raw_labels,
+                test_indices=test_indices_arr,
+                ring_column_indices=ring_indices,
+                device=self.device,
+                target_pd=target_pd_athena,
+            )
+            metrics_hard = StrategyMetrics.from_predictions(
+                eval_res.predictions_calibrated_cut, eval_res.holdout_labels
+            )
+
+            train_idx, val_idx = train_folds[best_fold]
+            calib_idx = np.concatenate([train_idx, val_idx])
+            calib_ring_features = np.ascontiguousarray(
+                raw_features[np.ix_(calib_idx, ring_indices)], dtype=np.float32
+            )
+            calib_labels = raw_labels[calib_idx]
+            mu_all = PileupAnalyzer.extract_feature(raw_features, feature_names_list, "avgmu")
+            mu_calib = mu_all[calib_idx]
+            mu_test = mu_all[test_indices_arr]
+            del raw_features, raw_labels, mu_all
+            gc.collect()
+
+            logits_calib = HoldoutEvaluator.predict_logits(
+                model, calib_ring_features, self.device, batch_size=self.evaluator.batch_size
+            )
+            sig_calib_mask = calib_labels == 1
+            calibrator = PileupThresholdCalibrator(
+                bins_mu=self.bins_mu,
+                n_bootstraps=self.n_bootstraps_pileup,
+                random_seed=42,
+            )
+            cal_wp = calibrator.calibrate_working_point(
+                mu_values=mu_calib[sig_calib_mask],
+                discriminant_values=logits_calib[sig_calib_mask],
+                target_pd=target_pd_athena,
+                working_point_name="Baseline",
+            )
+            preds_pileup = PileupThresholdCalibrator.apply_threshold(
+                eval_res.predicted_logits, mu_test, cal_wp.slope, cal_wp.intercept
+            )
+            metrics_pileup = StrategyMetrics.from_predictions(preds_pileup, eval_res.holdout_labels)
+
+            self._athena_matched_records.append(
+                {
+                    "iet": iet,
+                    "ieta": ieta,
+                    "method_key": self.TRAINING_METHOD_KEY,
+                    "method": aliases[self.TRAINING_METHOD_KEY],
+                    "target_pd": target_pd_athena,
+                    "decision_threshold": "Best SP (Train)",
+                    **train_metrics,
+                }
+            )
+            for key, met, th_repr in (
+                ("calibrated_hard_cut", metrics_hard, f"{eval_res.threshold:.4f}"),
+                (
+                    "pileup_corrected_cut",
+                    metrics_pileup,
+                    f"T(mu)={cal_wp.slope:.4f}*mu+{cal_wp.intercept:.4f}",
+                ),
+                ("athena_cut", metrics_athena, f"{athena_th:.1f} GeV"),
+            ):
+                self._athena_matched_records.append(
+                    self._strategy_metrics_record(
+                        iet=iet,
+                        ieta=ieta,
+                        method_key=key,
+                        method_name=aliases[key],
+                        target_pd=target_pd_athena,
+                        decision_threshold=th_repr,
+                        metrics=met,
+                    )
+                )
+
+            del (
+                eval_res,
+                calib_ring_features,
+                calib_labels,
+                logits_calib,
+                mu_calib,
+                mu_test,
+                preds_pileup,
+                holdout_labels,
+            )
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        log.info(
+            f"Athena-matched evaluation complete. Extracted {len(self._athena_matched_records)} records."
+        )
+        return self._athena_matched_records
+
     def build_tidy_dataframe(self) -> pd.DataFrame:
         """Returns the extracted metrics in long-form tidy DataFrame format."""
         if not self._records:
@@ -395,6 +601,12 @@ class RegionalOperatingPointsConsolidator:
         if not self._training_records:
             self.scan_training_best_sp()
         return pd.DataFrame(self._training_records)
+
+    def build_athena_matched_tidy_dataframe(self) -> pd.DataFrame:
+        """Returns the Athena-matched comparison and training best-SP records as a DataFrame."""
+        if not self._athena_matched_records:
+            self.scan_athena_matched_and_training()
+        return pd.DataFrame(self._athena_matched_records)
 
     def _format_cell(
         self,
@@ -427,6 +639,7 @@ class RegionalOperatingPointsConsolidator:
         math_delimiters: bool = True,
         bold_best_sp: bool = True,
         allow_missing_err: bool = False,
+        method_label_overrides: Optional[Dict[str, str]] = None,
     ) -> pd.DataFrame:
         if tidy_df.empty:
             raise RuntimeError("No regional evaluation records available.")
@@ -457,7 +670,11 @@ class RegionalOperatingPointsConsolidator:
         for ieta in available_etas:
             eta_label = self.ETA_LABELS_LATEX.get(ieta, f"$\\eta_{ieta}$")
             for m_key in method_keys:
-                method_name = self.method_aliases.get(m_key, m_key)
+                method_name = (
+                    method_label_overrides.get(m_key)
+                    if method_label_overrides is not None and m_key in method_label_overrides
+                    else self.method_aliases.get(m_key, m_key)
+                )
                 index_tuples.append((eta_label, method_name))
 
                 row_cells: List[str] = []
@@ -569,6 +786,38 @@ class RegionalOperatingPointsConsolidator:
             math_delimiters=math_delimiters,
             bold_best_sp=bold_best_sp,
             allow_missing_err=False,
+        )
+
+    def build_athena_matched_comparison_grid_table(
+        self,
+        as_percentage: bool = True,
+        precision: int = 2,
+        decimal_comma: bool = False,
+        math_delimiters: bool = True,
+        bold_best_sp: bool = True,
+    ) -> pd.DataFrame:
+        """Constructs a 4-row-per-eta grid comparing Training Best SP and Athena-matched cuts.
+
+        Args:
+            as_percentage: Multiply metric values and uncertainties by 100.
+            precision: Number of decimal places for formatted values.
+            decimal_comma: Use comma as decimal separator.
+            math_delimiters: Wrap expressions with LaTeX math delimiters.
+            bold_best_sp: Bold the entry with the highest SP value within each region.
+
+        Returns:
+            DataFrame with MultiIndex columns (ET Interval, Metric) and MultiIndex rows (eta, Method).
+        """
+        return self._build_grid_from_dataframe(
+            tidy_df=self.build_athena_matched_tidy_dataframe(),
+            method_keys=[self.TRAINING_METHOD_KEY, *self.DEFAULT_METHOD_KEYS],
+            as_percentage=as_percentage,
+            precision=precision,
+            decimal_comma=decimal_comma,
+            math_delimiters=math_delimiters,
+            bold_best_sp=bold_best_sp,
+            allow_missing_err=False,
+            method_label_overrides=self._athena_matched_method_aliases(),
         )
 
     def to_latex_snippet(
