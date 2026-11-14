@@ -29,19 +29,19 @@ class RegionalOperatingPointsConsolidator:
     """Consolidates operating point performance metrics across all kinematic regions."""
 
     ET_LABELS_LATEX: Dict[int, str] = {
-        0: "$E_{T0}$",
-        1: "$E_{T1}$",
-        2: "$E_{T2}$",
-        3: "$E_{T3}$",
-        4: "$E_{T4}$",
+        0: "$15 \\le E_T < 20\\,\\text{GeV}$",
+        1: "$20 \\le E_T < 30\\,\\text{GeV}$",
+        2: "$30 \\le E_T < 40\\,\\text{GeV}$",
+        3: "$40 \\le E_T < 50\\,\\text{GeV}$",
+        4: "$E_T \\ge 50\\,\\text{GeV}$",
     }
 
     ETA_LABELS_LATEX: Dict[int, str] = {
-        0: "$\\eta_0$",
-        1: "$\\eta_1$",
-        2: "$\\eta_2$",
-        3: "$\\eta_3$",
-        4: "$\\eta_4$",
+        0: "$0.00 \\le |\\eta| < 0.80$",
+        1: "$0.80 \\le |\\eta| < 1.37$",
+        2: "$1.37 \\le |\\eta| < 1.54$",
+        3: "$1.54 \\le |\\eta| < 2.37$",
+        4: "$2.37 \\le |\\eta| < 2.50$",
     }
 
     DEFAULT_METHOD_KEYS: Tuple[str, str, str] = (
@@ -49,6 +49,7 @@ class RegionalOperatingPointsConsolidator:
         "pileup_corrected_cut",
         "athena_cut",
     )
+    TRAINING_METHOD_KEY: str = "training_best_sp"
 
     def __init__(
         self,
@@ -122,11 +123,13 @@ class RegionalOperatingPointsConsolidator:
             "calibrated_hard_cut": f"Calibrated Hard Cut (Target PD: {self.target_pd*100:.2f}%)",
             "pileup_corrected_cut": f"Pileup-Corrected Cut T(mu) (Target PD)",
             "athena_cut": f"Athena {self.working_point.capitalize()} Cut",
+            "training_best_sp": "Training Best SP",
         }
         if method_aliases:
             self.method_aliases.update(method_aliases)
 
         self._records: List[Dict[str, Any]] = []
+        self._training_records: List[Dict[str, Any]] = []
 
     @property
     def records(self) -> List[Dict[str, Any]]:
@@ -342,11 +345,71 @@ class RegionalOperatingPointsConsolidator:
         log.info(f"Evaluation complete. Extracted {len(self._records)} method records.")
         return self._records
 
+    def scan_training_best_sp(self) -> List[Dict[str, Any]]:
+        """Scans regional training results and extracts metrics for the best-SP fold per region.
+
+        Returns:
+            List of record dictionaries containing best-SP training metrics per region.
+        """
+        total_regions = len(self.trainer.full_dataset)
+        self._training_records = []
+
+        for index in range(total_regions):
+            data_path = self.trainer.full_dataset.file_paths[index]
+            iet, ieta = get_et_eta(data_path)
+
+            if not self.config.is_region_allowed(iet, ieta):
+                continue
+            if not self.aggregator.has_region(iet, ieta):
+                continue
+
+            try:
+                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(
+                    iet, ieta, cache=False
+                )
+            except Exception as exc:
+                log.warning(f"[iet{iet}.ieta{ieta}] Failed to load best training model: {exc}")
+                continue
+
+            pd_val = float(best_model.get("best_pd_value", np.nan))
+            sp_val = float(best_model.get("best_sp_value", np.nan))
+            pf_val = float(best_model.get("best_fa_value", np.nan))
+            fold_idx = int(best_model.get("fold", -1))
+            del best_model
+
+            self._training_records.append(
+                {
+                    "iet": iet,
+                    "ieta": ieta,
+                    "method_key": self.TRAINING_METHOD_KEY,
+                    "method": self.method_aliases.get(self.TRAINING_METHOD_KEY, "Training Best SP"),
+                    "repeat": best_rep,
+                    "fold": fold_idx,
+                    "pd": pd_val,
+                    "pd_uncertainty": np.nan,
+                    "sp": sp_val,
+                    "sp_uncertainty": np.nan,
+                    "pf": pf_val,
+                    "pf_uncertainty": np.nan,
+                    "mean_rep_sp": mean_sp,
+                    "std_rep_sp": std_sp,
+                }
+            )
+
+        log.info(f"Extracted {len(self._training_records)} regional training best-SP records.")
+        return self._training_records
+
     def build_tidy_dataframe(self) -> pd.DataFrame:
         """Returns the extracted metrics in long-form tidy DataFrame format."""
         if not self._records:
             self.scan_and_evaluate()
         return pd.DataFrame(self._records)
+
+    def build_training_tidy_dataframe(self) -> pd.DataFrame:
+        """Returns the extracted best-SP training metrics in long-form tidy DataFrame format."""
+        if not self._training_records:
+            self.scan_training_best_sp()
+        return pd.DataFrame(self._training_records)
 
     def _format_cell(
         self,
@@ -356,6 +419,7 @@ class RegionalOperatingPointsConsolidator:
         decimal_comma: bool = False,
         math_delimiters: bool = True,
         bold: bool = False,
+        allow_missing_err: bool = False,
     ) -> str:
         return LatexTableFormatter.format_value_with_uncertainty(
             val=value,
@@ -365,7 +429,100 @@ class RegionalOperatingPointsConsolidator:
             decimal_comma=decimal_comma,
             math_delimiters=math_delimiters,
             nan_placeholder="-",
+            allow_missing_err=allow_missing_err,
         )
+
+    def _build_grid_from_dataframe(
+        self,
+        tidy_df: pd.DataFrame,
+        method_keys: List[str],
+        as_percentage: bool = True,
+        precision: int = 2,
+        decimal_comma: bool = False,
+        math_delimiters: bool = True,
+        bold_best_sp: bool = True,
+        allow_missing_err: bool = False,
+    ) -> pd.DataFrame:
+        if tidy_df.empty:
+            raise RuntimeError("No regional evaluation records available.")
+
+        df = tidy_df.copy()
+        scale = 100.0 if as_percentage else 1.0
+        df["pd_disp"] = df["pd"] * scale
+        df["pd_err_disp"] = df["pd_uncertainty"] * scale
+        df["sp_disp"] = df["sp"] * scale
+        df["sp_err_disp"] = df["sp_uncertainty"] * scale
+        df["pf_disp"] = df["pf"] * scale
+        df["pf_err_disp"] = df["pf_uncertainty"] * scale
+
+        available_ets = sorted(df["iet"].unique().astype(int))
+        available_etas = sorted(df["ieta"].unique().astype(int))
+
+        metric_names = ["P_D [%]", "SP [%]", "P_F [%]"]
+        col_tuples = []
+        for iet in available_ets:
+            et_label = self.ET_LABELS_LATEX.get(iet, f"$E_{{T{iet}}}$")
+            for m in metric_names:
+                col_tuples.append((et_label, m))
+        multi_cols = pd.MultiIndex.from_tuples(col_tuples, names=["ET", "Metric"])
+
+        index_tuples = []
+        rows_data = []
+
+        for ieta in available_etas:
+            eta_label = self.ETA_LABELS_LATEX.get(ieta, f"$\\eta_{ieta}$")
+            for m_key in method_keys:
+                method_name = self.method_aliases.get(m_key, m_key)
+                index_tuples.append((eta_label, method_name))
+
+                row_cells: List[str] = []
+                for iet in available_ets:
+                    sub_region = df[(df["iet"] == iet) & (df["ieta"] == ieta)]
+                    best_sp_val = sub_region["sp_disp"].max() if not sub_region.empty else -1.0
+
+                    row_match = sub_region[sub_region["method_key"] == m_key]
+                    if not row_match.empty:
+                        rec = row_match.iloc[0]
+                        is_best = bold_best_sp and np.isclose(rec["sp_disp"], best_sp_val, atol=1e-5)
+                        row_cells.append(
+                            self._format_cell(
+                                rec["pd_disp"],
+                                rec["pd_err_disp"],
+                                precision,
+                                decimal_comma,
+                                math_delimiters,
+                                is_best,
+                                allow_missing_err=allow_missing_err,
+                            )
+                        )
+                        row_cells.append(
+                            self._format_cell(
+                                rec["sp_disp"],
+                                rec["sp_err_disp"],
+                                precision,
+                                decimal_comma,
+                                math_delimiters,
+                                is_best,
+                                allow_missing_err=allow_missing_err,
+                            )
+                        )
+                        row_cells.append(
+                            self._format_cell(
+                                rec["pf_disp"],
+                                rec["pf_err_disp"],
+                                precision,
+                                decimal_comma,
+                                math_delimiters,
+                                is_best,
+                                allow_missing_err=allow_missing_err,
+                            )
+                        )
+                    else:
+                        row_cells.extend(["-", "-", "-"])
+                rows_data.append(row_cells)
+
+        multi_index = pd.MultiIndex.from_tuples(index_tuples, names=["eta", "Method"])
+        return pd.DataFrame(rows_data, index=multi_index, columns=multi_cols)
 
     def build_grid_table(
         self,
@@ -387,69 +544,47 @@ class RegionalOperatingPointsConsolidator:
         Returns:
             DataFrame with MultiIndex columns (ET Interval, Metric) and MultiIndex rows (eta, Method).
         """
-        tidy_df = self.build_tidy_dataframe().copy()
-        if tidy_df.empty:
-            raise RuntimeError("No regional evaluation records available.")
+        return self._build_grid_from_dataframe(
+            tidy_df=self.build_tidy_dataframe(),
+            method_keys=list(self.DEFAULT_METHOD_KEYS),
+            as_percentage=as_percentage,
+            precision=precision,
+            decimal_comma=decimal_comma,
+            math_delimiters=math_delimiters,
+            bold_best_sp=bold_best_sp,
+            allow_missing_err=False,
+        )
 
-        scale = 100.0 if as_percentage else 1.0
-        tidy_df["pd_disp"] = tidy_df["pd"] * scale
-        tidy_df["pd_err_disp"] = tidy_df["pd_uncertainty"] * scale
-        tidy_df["sp_disp"] = tidy_df["sp"] * scale
-        tidy_df["sp_err_disp"] = tidy_df["sp_uncertainty"] * scale
-        tidy_df["pf_disp"] = tidy_df["pf"] * scale
-        tidy_df["pf_err_disp"] = tidy_df["pf_uncertainty"] * scale
+    def build_training_grid_table(
+        self,
+        as_percentage: bool = True,
+        precision: int = 2,
+        decimal_comma: bool = False,
+        math_delimiters: bool = True,
+        bold_best_sp: bool = False,
+    ) -> pd.DataFrame:
+        """Constructs a 2D MultiIndex grid DataFrame containing only the best-SP training metrics.
 
-        available_ets = sorted(tidy_df["iet"].unique().astype(int))
-        available_etas = sorted(tidy_df["ieta"].unique().astype(int))
-        method_keys = list(self.DEFAULT_METHOD_KEYS)
+        Args:
+            as_percentage: Multiply metric values by 100.
+            precision: Number of decimal places for formatted values.
+            decimal_comma: Use comma as decimal separator.
+            math_delimiters: Wrap expressions with LaTeX math delimiters.
+            bold_best_sp: Bold the entry in each region.
 
-        metric_names = ["P_D [%]", "SP [%]", "P_F [%]"]
-        col_tuples = []
-        for iet in available_ets:
-            et_label = self.ET_LABELS_LATEX.get(iet, f"$E_{{T{iet}}}$")
-            for m in metric_names:
-                col_tuples.append((et_label, m))
-        multi_cols = pd.MultiIndex.from_tuples(col_tuples, names=["ET", "Metric"])
-
-        index_tuples = []
-        rows_data = []
-
-        for ieta in available_etas:
-            eta_label = self.ETA_LABELS_LATEX.get(ieta, f"$\\eta_{ieta}$")
-            for m_key in method_keys:
-                method_name = self.method_aliases[m_key]
-                index_tuples.append((eta_label, method_name))
-
-                row_cells: List[str] = []
-                for iet in available_ets:
-                    sub_region = tidy_df[(tidy_df["iet"] == iet) & (tidy_df["ieta"] == ieta)]
-                    best_sp_val = sub_region["sp_disp"].max() if not sub_region.empty else -1.0
-
-                    row_match = sub_region[sub_region["method_key"] == m_key]
-                    if not row_match.empty:
-                        rec = row_match.iloc[0]
-                        is_best = bold_best_sp and np.isclose(rec["sp_disp"], best_sp_val, atol=1e-5)
-                        row_cells.append(
-                            self._format_cell(
-                                rec["pd_disp"], rec["pd_err_disp"], precision, decimal_comma, math_delimiters, is_best
-                            )
-                        )
-                        row_cells.append(
-                            self._format_cell(
-                                rec["sp_disp"], rec["sp_err_disp"], precision, decimal_comma, math_delimiters, is_best
-                            )
-                        )
-                        row_cells.append(
-                            self._format_cell(
-                                rec["pf_disp"], rec["pf_err_disp"], precision, decimal_comma, math_delimiters, is_best
-                            )
-                        )
-                    else:
-                        row_cells.extend(["-", "-", "-"])
-                rows_data.append(row_cells)
-
-        multi_index = pd.MultiIndex.from_tuples(index_tuples, names=["eta", "Method"])
-        return pd.DataFrame(rows_data, index=multi_index, columns=multi_cols)
+        Returns:
+            DataFrame with MultiIndex columns (ET Interval, Metric) and MultiIndex rows (eta, Method).
+        """
+        return self._build_grid_from_dataframe(
+            tidy_df=self.build_training_tidy_dataframe(),
+            method_keys=[self.TRAINING_METHOD_KEY],
+            as_percentage=as_percentage,
+            precision=precision,
+            decimal_comma=decimal_comma,
+            math_delimiters=math_delimiters,
+            bold_best_sp=bold_best_sp,
+            allow_missing_err=True,
+        )
 
     def to_latex_snippet(
         self,
@@ -483,7 +618,7 @@ class RegionalOperatingPointsConsolidator:
             bold_best_sp=True,
         )
 
-        et_labels = sorted(list(set(col[0] for col in df.columns)), key=lambda x: str(x))
+        et_labels = list(dict.fromkeys(col[0] for col in df.columns))
         n_ets = len(et_labels)
         col_align = "|c|l|" + "|".join(["ccc"] * n_ets) + "|"
 

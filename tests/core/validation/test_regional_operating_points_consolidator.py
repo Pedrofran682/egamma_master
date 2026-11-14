@@ -22,10 +22,30 @@ def mock_consolidator(tmp_path: Path) -> RegionalOperatingPointsConsolidator:
                 "calibrated_hard_cut": "Calibrated Hard Cut (Target PD: 94.24%)",
                 "pileup_corrected_cut": "Pileup-Corrected Cut T(mu) (Target PD)",
                 "athena_cut": "Athena Loose Cut",
+                "training_best_sp": "Training Best SP",
             }
             self._records = []
+            self._training_records = []
             for et in range(2):
                 for eta in range(2):
+                    self._training_records.append(
+                        {
+                            "iet": et,
+                            "ieta": eta,
+                            "method_key": self.TRAINING_METHOD_KEY,
+                            "method": self.method_aliases[self.TRAINING_METHOD_KEY],
+                            "repeat": 0,
+                            "fold": 1,
+                            "pd": 0.9612,
+                            "pd_uncertainty": np.nan,
+                            "sp": 0.9550,
+                            "sp_uncertainty": np.nan,
+                            "pf": 0.0510,
+                            "pf_uncertainty": np.nan,
+                            "mean_rep_sp": 0.9520,
+                            "std_rep_sp": 0.0020,
+                        }
+                    )
                     for m_key in self.DEFAULT_METHOD_KEYS:
                         self._records.append(
                             {
@@ -79,7 +99,8 @@ def test_to_latex_snippet(mock_consolidator: RegionalOperatingPointsConsolidator
     latex = mock_consolidator.to_latex_snippet(as_percentage=True, precision=2)
     assert "\\begin{table}" in latex
     assert "\\resizebox{\\textwidth}{!}" in latex
-    assert "\\multirow{3}{*}{$\\eta_0$}" in latex
+    assert "\\multirow{3}{*}{$0.00 \\le |\\eta| < 0.80$}" in latex
+    assert "$15 \\le E_T < 20\\,\\text{GeV}$" in latex
     assert "Method" in latex
     assert "Método" not in latex
     assert "$P_D[\\%]$" in latex
@@ -151,3 +172,19 @@ def test_holdout_evaluator_batched_matches_unbatched() -> None:
     logits_full = HoldoutEvaluator.predict_logits(model, data[:, ring_cols], torch.device("cpu"), batch_size=100)
     logits_chunked = HoldoutEvaluator.predict_logits(model, data[:, ring_cols], torch.device("cpu"), batch_size=4)
     assert np.allclose(logits_full, logits_chunked)
+
+
+def test_build_training_grid_table_and_latex(
+    mock_consolidator: RegionalOperatingPointsConsolidator,
+) -> None:
+    grid = mock_consolidator.build_training_grid_table(as_percentage=True, precision=2)
+    assert len(grid.index) == 2
+    assert len(grid.columns) == 2 * 3
+    assert "$15 \\le E_T < 20\\,\\text{GeV}$" in grid.columns.get_level_values(0)
+    assert "$0.00 \\le |\\eta| < 0.80$" in grid.index.get_level_values(0)
+    assert "$96.12$" in grid.iloc[0, 0]
+
+    latex = mock_consolidator.to_latex_snippet(grid_table=grid, as_percentage=True, precision=2)
+    assert "Training Best SP" in latex
+    assert "$0.00 \\le |\\eta| < 0.80$" in latex
+    assert "$20 \\le E_T < 30\\,\\text{GeV}$" in latex
