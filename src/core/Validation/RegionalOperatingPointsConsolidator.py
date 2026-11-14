@@ -192,8 +192,12 @@ class RegionalOperatingPointsConsolidator:
                 continue
 
             try:
-                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(iet, ieta)
+                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(
+                    iet, ieta, cache=False
+                )
                 model.load_state_dict(best_model["best_weights"])
+                best_fold = int(best_model.get("fold", 0))
+                del best_model
                 model.eval()
             except Exception as exc:
                 log.warning(f"[iet{iet}.ieta{ieta}] Failed to load best model: {exc}")
@@ -223,17 +227,22 @@ class RegionalOperatingPointsConsolidator:
                 eval_res.predictions_calibrated_cut, eval_res.holdout_labels
             )
 
-            best_fold = int(best_model.get("fold", 0))
             train_idx, val_idx = train_folds[best_fold]
             calib_idx = np.concatenate([train_idx, val_idx])
 
-            calib_features = raw_features[calib_idx]
+            calib_ring_features = np.ascontiguousarray(
+                raw_features[np.ix_(calib_idx, ring_indices)], dtype=np.float32
+            )
             calib_labels = raw_labels[calib_idx]
-            calib_ring_features = calib_features[:, ring_indices]
+            mu_all = PileupAnalyzer.extract_feature(raw_features, feature_names_list, "avgmu")
+            mu_calib = mu_all[calib_idx]
+            mu_test = mu_all[test_indices_arr]
+            del raw_features, raw_labels, mu_all
+            gc.collect()
 
-            logits_calib = HoldoutEvaluator.predict_logits(model, calib_ring_features, self.device)
-            mu_calib = PileupAnalyzer.extract_feature(calib_features, feature_names_list, "avgmu")
-            mu_test = PileupAnalyzer.extract_feature(eval_res.holdout_features_full, feature_names_list, "avgmu")
+            logits_calib = HoldoutEvaluator.predict_logits(
+                model, calib_ring_features, self.device, batch_size=self.evaluator.batch_size
+            )
 
             sig_calib_mask = calib_labels == 1
             calibrator = PileupThresholdCalibrator(
@@ -315,7 +324,17 @@ class RegionalOperatingPointsConsolidator:
                 f"PileupCut(SP={metrics_pileup.sp:.4f}) | Athena(SP={metrics_athena.sp:.4f})"
             )
 
-            del raw_features, raw_labels, eval_res, calib_features, calib_labels
+            del (
+                eval_res,
+                calib_ring_features,
+                calib_labels,
+                logits_calib,
+                mu_calib,
+                mu_test,
+                preds_pileup,
+                pass_cut,
+                preds_athena,
+            )
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

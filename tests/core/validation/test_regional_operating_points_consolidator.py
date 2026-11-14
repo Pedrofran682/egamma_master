@@ -2,10 +2,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import torch
+import torch.nn as nn
 
+from src.core.Validation.HoldoutEvaluator import HoldoutEvaluator
 from src.core.Validation.RegionalOperatingPointsConsolidator import (
     RegionalOperatingPointsConsolidator,
 )
+from src.core.Validation.ResultAggregator import ResultAggregator
 
 
 @pytest.fixture
@@ -96,3 +100,54 @@ def test_export_parquet_and_latex(
     assert saved_latex.exists()
     content = saved_latex.read_text(encoding="utf-8")
     assert "\\begin{table}" in content
+
+
+def test_result_aggregator_streaming_no_cache(tmp_path: Path) -> None:
+    df_reg0 = pd.DataFrame(
+        [
+            {"repeat": 0, "fold": 0, "best_sp_value": 0.91, "best_weights": {"w": 1}},
+            {"repeat": 0, "fold": 1, "best_sp_value": 0.95, "best_weights": {"w": 2}},
+        ]
+    )
+    df_reg1 = pd.DataFrame(
+        [
+            {"repeat": 0, "fold": 0, "best_sp_value": 0.88, "best_weights": {"w": 3}},
+        ]
+    )
+    df_reg0.to_pickle(tmp_path / "results.iet0.ieta0.pkl")
+    df_reg1.to_pickle(tmp_path / "results.iet1.ieta2.pkl")
+
+    agg = ResultAggregator(tmp_path)
+    assert agg.has_region(0, 0) is True
+    assert agg.has_region(1, 2) is True
+    assert agg.has_region(4, 4) is False
+    assert agg._grouped_dfs is None
+
+    best_model, best_rep, mean_sp, _ = agg.get_best_model_for_region(0, 0, cache=False)
+    assert agg._grouped_dfs is None
+    assert best_rep == 0
+    assert best_model["best_weights"] == {"w": 2}
+    assert np.isclose(mean_sp, 0.93)
+
+
+def test_holdout_evaluator_batched_matches_unbatched() -> None:
+    torch.manual_seed(0)
+    model = nn.Sequential(nn.Linear(4, 1), nn.Sigmoid())
+    rng = np.random.default_rng(7)
+    data = rng.normal(size=(15, 6)).astype(np.float32)
+    target = np.array([1] * 8 + [0] * 7)
+    test_idx = np.arange(15)
+    ring_cols = np.array([0, 1, 2, 3])
+
+    eval_full = HoldoutEvaluator(default_target_pd=0.9, batch_size=100)
+    eval_chunked = HoldoutEvaluator(default_target_pd=0.9, batch_size=4)
+
+    res_full = eval_full.evaluate(model, data, target, test_idx, ring_cols, torch.device("cpu"))
+    res_chunked = eval_chunked.evaluate(model, data, target, test_idx, ring_cols, torch.device("cpu"))
+
+    assert np.allclose(res_full.predicted_probabilities, res_chunked.predicted_probabilities)
+    assert np.allclose(res_full.predicted_logits, res_chunked.predicted_logits)
+
+    logits_full = HoldoutEvaluator.predict_logits(model, data[:, ring_cols], torch.device("cpu"), batch_size=100)
+    logits_chunked = HoldoutEvaluator.predict_logits(model, data[:, ring_cols], torch.device("cpu"), batch_size=4)
+    assert np.allclose(logits_full, logits_chunked)

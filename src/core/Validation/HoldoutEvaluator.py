@@ -150,13 +150,39 @@ class HoldoutEvaluator(BaseEvaluator):
         default_target_pd: Fallback probability of detection target (default 0.9424).
     """
 
-    def __init__(self, default_target_pd: float = 0.9424) -> None:
+    DEFAULT_BATCH_SIZE: int = 16384
+
+    def __init__(self, default_target_pd: float = 0.9424, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         """Initializes HoldoutEvaluator with default operating point settings.
 
         Args:
             default_target_pd: Default target signal detection efficiency.
+            batch_size: Chunk size for batched model inference.
         """
         self.default_target_pd: float = default_target_pd
+        self.batch_size: int = max(1, int(batch_size))
+
+    @staticmethod
+    def _predict_probabilities_batched(
+        model: nn.Module,
+        features: np.ndarray,
+        device: torch.device,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> np.ndarray:
+        model.eval()
+        n_samples = len(features)
+        if n_samples == 0:
+            return np.empty(0, dtype=np.float32)
+
+        step = max(1, int(batch_size))
+        outputs = np.empty(n_samples, dtype=np.float32)
+        with torch.no_grad():
+            for start in range(0, n_samples, step):
+                end = min(start + step, n_samples)
+                batch_np = np.ascontiguousarray(features[start:end], dtype=np.float32)
+                batch_tensor = torch.from_numpy(batch_np).to(device)
+                outputs[start:end] = model(batch_tensor).detach().cpu().numpy().reshape(-1)
+        return outputs
 
     def evaluate(
         self,
@@ -192,40 +218,42 @@ class HoldoutEvaluator(BaseEvaluator):
         holdout_labels = target[test_indices]
         holdout_ring_features = holdout_features_full[:, ring_column_indices]
 
-        with torch.no_grad():
-            ring_features_tensor = torch.from_numpy(holdout_ring_features).float().to(device)
-            probabilities_tensor = model(ring_features_tensor)
-            predicted_probabilities = probabilities_tensor.detach().cpu().numpy().flatten()
+        predicted_probabilities = self._predict_probabilities_batched(
+            model=model,
+            features=holdout_ring_features,
+            device=device,
+            batch_size=self.batch_size,
+        )
 
-            predictions_default_threshold = (predicted_probabilities > 0.5).astype(int)
+        predictions_default_threshold = (predicted_probabilities > 0.5).astype(int)
 
-            accuracy_default_threshold = float(np.mean(predictions_default_threshold == holdout_labels))
-            signal_efficiency_default_threshold = float(
-                np.mean(predictions_default_threshold[holdout_labels == 1] == 1)
-            )
-            background_rejection_default_threshold = float(
-                np.mean(predictions_default_threshold[holdout_labels == 0] == 0)
-            )
-            false_positive_rate = float(np.mean(predictions_default_threshold[holdout_labels == 0] == 1))
-            false_negative_rate = float(np.mean(predictions_default_threshold[holdout_labels == 1] == 0))
+        accuracy_default_threshold = float(np.mean(predictions_default_threshold == holdout_labels))
+        signal_efficiency_default_threshold = float(
+            np.mean(predictions_default_threshold[holdout_labels == 1] == 1)
+        )
+        background_rejection_default_threshold = float(
+            np.mean(predictions_default_threshold[holdout_labels == 0] == 0)
+        )
+        false_positive_rate = float(np.mean(predictions_default_threshold[holdout_labels == 0] == 1))
+        false_negative_rate = float(np.mean(predictions_default_threshold[holdout_labels == 1] == 0))
 
-            signal_probability_scores = predicted_probabilities[holdout_labels == 1]
-            background_probability_scores = predicted_probabilities[holdout_labels == 0]
+        signal_probability_scores = predicted_probabilities[holdout_labels == 1]
+        background_probability_scores = predicted_probabilities[holdout_labels == 0]
 
-            signal_cutoff_percentile = (1 - target_signal_efficiency) * 100
-            calibrated_decision_threshold = float(
-                np.percentile(signal_probability_scores, signal_cutoff_percentile)
-            )
-            false_alarm_count = int((background_probability_scores > calibrated_decision_threshold).sum())
-            false_alarm_probability = (
-                float(false_alarm_count / len(background_probability_scores))
-                if len(background_probability_scores) > 0
-                else 0.0
-            )
+        signal_cutoff_percentile = (1 - target_signal_efficiency) * 100
+        calibrated_decision_threshold = float(
+            np.percentile(signal_probability_scores, signal_cutoff_percentile)
+        )
+        false_alarm_count = int((background_probability_scores > calibrated_decision_threshold).sum())
+        false_alarm_probability = (
+            float(false_alarm_count / len(background_probability_scores))
+            if len(background_probability_scores) > 0
+            else 0.0
+        )
 
-            predictions_calibrated_cut = (predicted_probabilities > calibrated_decision_threshold).astype(int)
+        predictions_calibrated_cut = (predicted_probabilities > calibrated_decision_threshold).astype(int)
 
-            predicted_logits = self._probs_to_logits(predicted_probabilities)
+        predicted_logits = self._probs_to_logits(predicted_probabilities)
 
         return HoldoutEvaluationResult(
             holdout_features_full=holdout_features_full,
@@ -262,19 +290,23 @@ class HoldoutEvaluator(BaseEvaluator):
         model: nn.Module,
         features: np.ndarray,
         device: torch.device,
+        batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> np.ndarray:
-        """Computes raw logit scores for arbitrary input features.
+        """Computes raw logit scores for arbitrary input features in memory-bounded batches.
 
         Args:
             model: PyTorch model.
             features: Input ring features array (N, D).
             device: Computation device.
+            batch_size: Chunk size for batched inference.
 
         Returns:
             1D array of pre-sigmoid logit scores.
         """
-        model.eval()
-        with torch.no_grad():
-            tensor_x = torch.from_numpy(features).float().to(device)
-            probabilities = model(tensor_x).detach().cpu().numpy().flatten()
-            return HoldoutEvaluator._probs_to_logits(probabilities)
+        probabilities = HoldoutEvaluator._predict_probabilities_batched(
+            model=model,
+            features=features,
+            device=device,
+            batch_size=batch_size,
+        )
+        return HoldoutEvaluator._probs_to_logits(probabilities)
