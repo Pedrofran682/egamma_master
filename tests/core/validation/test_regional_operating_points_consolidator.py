@@ -37,11 +37,11 @@ def mock_consolidator(tmp_path: Path) -> RegionalOperatingPointsConsolidator:
                             "repeat": 0,
                             "fold": 1,
                             "pd": 0.9612,
-                            "pd_uncertainty": np.nan,
+                            "pd_uncertainty": 0.0045,
                             "sp": 0.9550,
-                            "sp_uncertainty": np.nan,
+                            "sp_uncertainty": 0.0032,
                             "pf": 0.0510,
-                            "pf_uncertainty": np.nan,
+                            "pf_uncertainty": 0.0021,
                             "mean_rep_sp": 0.9520,
                             "std_rep_sp": 0.0020,
                         }
@@ -126,13 +126,34 @@ def test_export_parquet_and_latex(
 def test_result_aggregator_streaming_no_cache(tmp_path: Path) -> None:
     df_reg0 = pd.DataFrame(
         [
-            {"repeat": 0, "fold": 0, "best_sp_value": 0.91, "best_weights": {"w": 1}},
-            {"repeat": 0, "fold": 1, "best_sp_value": 0.95, "best_weights": {"w": 2}},
+            {
+                "repeat": 0,
+                "fold": 0,
+                "best_sp_value": 0.91,
+                "best_pd_value": 0.92,
+                "best_fa_value": 0.08,
+                "best_weights": {"w": 1},
+            },
+            {
+                "repeat": 0,
+                "fold": 1,
+                "best_sp_value": 0.95,
+                "best_pd_value": 0.96,
+                "best_fa_value": 0.04,
+                "best_weights": {"w": 2},
+            },
         ]
     )
     df_reg1 = pd.DataFrame(
         [
-            {"repeat": 0, "fold": 0, "best_sp_value": 0.88, "best_weights": {"w": 3}},
+            {
+                "repeat": 0,
+                "fold": 0,
+                "best_sp_value": 0.88,
+                "best_pd_value": 0.90,
+                "best_fa_value": 0.10,
+                "best_weights": {"w": 3},
+            },
         ]
     )
     df_reg0.to_pickle(tmp_path / "results.iet0.ieta0.pkl")
@@ -149,6 +170,18 @@ def test_result_aggregator_streaming_no_cache(tmp_path: Path) -> None:
     assert best_rep == 0
     assert best_model["best_weights"] == {"w": 2}
     assert np.isclose(mean_sp, 0.93)
+
+    metrics = agg.get_best_training_metrics_for_region(0, 0, cache=False)
+    assert agg._grouped_dfs is None
+    assert np.isclose(metrics["sp"], 0.95)
+    assert np.isclose(metrics["pd"], 0.96)
+    assert np.isclose(metrics["pf"], 0.04)
+    assert np.isclose(metrics["sp_uncertainty"], np.std([0.91, 0.95], ddof=1))
+    assert np.isclose(metrics["pd_uncertainty"], np.std([0.92, 0.96], ddof=1))
+    assert np.isclose(metrics["pf_uncertainty"], np.std([0.08, 0.04], ddof=1))
+
+    single_fold_metrics = agg.get_best_training_metrics_for_region(1, 2, cache=False)
+    assert single_fold_metrics["sp_uncertainty"] == 0.0
 
 
 def test_holdout_evaluator_batched_matches_unbatched() -> None:
@@ -182,7 +215,7 @@ def test_build_training_grid_table_and_latex(
     assert len(grid.columns) == 2 * 3
     assert "$15 \\le E_T < 20\\,\\text{GeV}$" in grid.columns.get_level_values(0)
     assert "$0.00 \\le |\\eta| < 0.80$" in grid.index.get_level_values(0)
-    assert "$96.12$" in grid.iloc[0, 0]
+    assert "$96.12 \\pm 0.45$" in grid.iloc[0, 0]
 
     latex = mock_consolidator.to_latex_snippet(grid_table=grid, as_percentage=True, precision=2)
     assert "Training Best SP" in latex

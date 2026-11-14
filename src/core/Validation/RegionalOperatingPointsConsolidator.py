@@ -364,18 +364,12 @@ class RegionalOperatingPointsConsolidator:
                 continue
 
             try:
-                best_model, best_rep, mean_sp, std_sp = self.aggregator.get_best_model_for_region(
+                metrics = self.aggregator.get_best_training_metrics_for_region(
                     iet, ieta, cache=False
                 )
             except Exception as exc:
                 log.warning(f"[iet{iet}.ieta{ieta}] Failed to load best training model: {exc}")
                 continue
-
-            pd_val = float(best_model.get("best_pd_value", np.nan))
-            sp_val = float(best_model.get("best_sp_value", np.nan))
-            pf_val = float(best_model.get("best_fa_value", np.nan))
-            fold_idx = int(best_model.get("fold", -1))
-            del best_model
 
             self._training_records.append(
                 {
@@ -383,16 +377,7 @@ class RegionalOperatingPointsConsolidator:
                     "ieta": ieta,
                     "method_key": self.TRAINING_METHOD_KEY,
                     "method": self.method_aliases.get(self.TRAINING_METHOD_KEY, "Training Best SP"),
-                    "repeat": best_rep,
-                    "fold": fold_idx,
-                    "pd": pd_val,
-                    "pd_uncertainty": np.nan,
-                    "sp": sp_val,
-                    "sp_uncertainty": np.nan,
-                    "pf": pf_val,
-                    "pf_uncertainty": np.nan,
-                    "mean_rep_sp": mean_sp,
-                    "std_rep_sp": std_sp,
+                    **metrics,
                 }
             )
 
@@ -583,7 +568,7 @@ class RegionalOperatingPointsConsolidator:
             decimal_comma=decimal_comma,
             math_delimiters=math_delimiters,
             bold_best_sp=bold_best_sp,
-            allow_missing_err=True,
+            allow_missing_err=False,
         )
 
     def to_latex_snippet(

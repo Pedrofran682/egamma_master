@@ -96,6 +96,29 @@ class ResultAggregator(BaseResultAggregator):
             return region_key in self._grouped_dfs and not self._grouped_dfs[region_key].empty
         return bool(self._discover_region_files().get(region_key))
 
+    def _get_region_dataframe(self, et: int, eta: int, cache: bool = True) -> pd.DataFrame:
+        region_key = f"iet{et}.ieta{eta}"
+        if not cache and self._grouped_dfs is None:
+            region_files = self._discover_region_files().get(region_key, [])
+            if not region_files:
+                raise KeyError(
+                    f"No result records found for region '{region_key}' in {self.directory_path}."
+                )
+            region_df = self._load_files_to_df(region_files)
+            if region_df.empty:
+                raise KeyError(
+                    f"No result records found for region '{region_key}' in {self.directory_path}."
+                )
+            return region_df
+
+        if self._grouped_dfs is None:
+            self._grouped_dfs = self.group_and_concat()
+        if region_key not in self._grouped_dfs or self._grouped_dfs[region_key].empty:
+            raise KeyError(
+                f"No result records found for region '{region_key}' in {self.directory_path}."
+            )
+        return self._grouped_dfs[region_key]
+
     def get_best_model_for_region(
         self, et: int, eta: int, cache: bool = True
     ) -> Tuple[Dict[str, Any], int, float, float]:
@@ -117,27 +140,47 @@ class ResultAggregator(BaseResultAggregator):
         Raises:
             KeyError: If no result records exist for the specified region.
         """
-        region_key = f"iet{et}.ieta{eta}"
-        if not cache and self._grouped_dfs is None:
-            region_files = self._discover_region_files().get(region_key, [])
-            if not region_files:
-                raise KeyError(
-                    f"No result records found for region '{region_key}' in {self.directory_path}."
-                )
-            region_df = self._load_files_to_df(region_files)
-            if region_df.empty:
-                raise KeyError(
-                    f"No result records found for region '{region_key}' in {self.directory_path}."
-                )
-            return self.get_best_model_details(region_df)
+        return self.get_best_model_details(self._get_region_dataframe(et, eta, cache=cache))
 
-        if self._grouped_dfs is None:
-            self._grouped_dfs = self.group_and_concat()
-        if region_key not in self._grouped_dfs or self._grouped_dfs[region_key].empty:
-            raise KeyError(
-                f"No result records found for region '{region_key}' in {self.directory_path}."
-            )
-        return self.get_best_model_details(self._grouped_dfs[region_key])
+    def get_best_training_metrics_for_region(
+        self, et: int, eta: int, cache: bool = False
+    ) -> Dict[str, Any]:
+        """Extracts best-SP fold metrics and across-fold uncertainties for a kinematic region.
+
+        Args:
+            et: Transverse energy bin index.
+            eta: Pseudorapidity bin index.
+            cache: Whether to cache all regions in memory (`True`) or stream only this region (`False`).
+
+        Returns:
+            Dictionary with `pd`, `pd_uncertainty`, `sp`, `sp_uncertainty`, `pf`, `pf_uncertainty`,
+            `repeat`, `fold`, `mean_rep_sp`, and `std_rep_sp`.
+        """
+        region_df = self._get_region_dataframe(et, eta, cache=cache)
+        best_model, best_rep, mean_sp, std_sp = self.get_best_model_details(region_df)
+        repeat_series = self._resolve_repeat_series(region_df)
+        df_best_rep = region_df[repeat_series == best_rep]
+
+        def _fold_std(col_name: str) -> float:
+            if col_name not in df_best_rep.columns:
+                return float("nan")
+            valid = df_best_rep[col_name].dropna().astype(float)
+            if len(valid) > 1:
+                return float(valid.std(ddof=1))
+            return 0.0 if len(valid) == 1 else float("nan")
+
+        return {
+            "repeat": best_rep,
+            "fold": int(best_model.get("fold", -1)),
+            "pd": float(best_model.get("best_pd_value", float("nan"))),
+            "pd_uncertainty": _fold_std("best_pd_value"),
+            "sp": float(best_model.get("best_sp_value", float("nan"))),
+            "sp_uncertainty": _fold_std("best_sp_value"),
+            "pf": float(best_model.get("best_fa_value", float("nan"))),
+            "pf_uncertainty": _fold_std("best_fa_value"),
+            "mean_rep_sp": mean_sp,
+            "std_rep_sp": std_sp,
+        }
 
     @staticmethod
     def _resolve_repeat_series(df: pd.DataFrame) -> pd.Series:
