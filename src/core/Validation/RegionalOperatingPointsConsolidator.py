@@ -998,6 +998,7 @@ class MultiModelAthenaMatchedConsolidator:
         n_bootstraps_pileup: int = 100,
         efficiencies_csv: Optional[Union[str, Path]] = None,
         device: Optional[Union[str, torch.device]] = None,
+        include_training_best_sp: bool = True,
     ) -> None:
         """Initializes the multi-model Athena-matched consolidator.
 
@@ -1009,6 +1010,7 @@ class MultiModelAthenaMatchedConsolidator:
             n_bootstraps_pileup: Bootstrap sample count for pileup threshold fitting.
             efficiencies_csv: Optional path to reference efficiencies CSV.
             device: Computing device ('cpu', 'cuda', or torch.device).
+            include_training_best_sp: Whether to include each model's Training Best SP row.
         """
         if not model_specs:
             raise ValueError("At least one model specification must be provided.")
@@ -1024,6 +1026,7 @@ class MultiModelAthenaMatchedConsolidator:
         self.n_bootstraps_pileup = n_bootstraps_pileup
         self.efficiencies_csv = efficiencies_csv
         self.device = device
+        self.include_training_best_sp = include_training_best_sp
         self._records: List[Dict[str, Any]] = []
         self._consolidators: List[RegionalOperatingPointsConsolidator] = []
 
@@ -1032,6 +1035,10 @@ class MultiModelAthenaMatchedConsolidator:
         keys: List[str] = ["athena_cut"]
         labels: Dict[str, str] = {"athena_cut": f"Athena {wp_label} Cut"}
         for idx, spec in enumerate(self.model_specs):
+            if self.include_training_best_sp:
+                best_sp_key = f"model_{idx}_best_sp"
+                keys.append(best_sp_key)
+                labels[best_sp_key] = f"{spec.label} [Best SP]"
             hard_key = f"model_{idx}_hard_cut"
             pileup_key = f"model_{idx}_pileup_cut"
             keys.extend([hard_key, pileup_key])
@@ -1040,7 +1047,7 @@ class MultiModelAthenaMatchedConsolidator:
         return keys, labels
 
     def scan_and_evaluate(self) -> List[Dict[str, Any]]:
-        """Evaluates Hard Cut and Pileup-Corrected Cut at Athena PD for all configured models."""
+        """Evaluates Hard Cut and Pileup-Corrected Cut at Athena PD (and optionally Best SP) for all models."""
         self._records = []
         self._consolidators = []
         seen_athena_regions: set[Tuple[int, int]] = set()
@@ -1059,7 +1066,7 @@ class MultiModelAthenaMatchedConsolidator:
             )
             self._consolidators.append(consolidator)
             model_records = consolidator.scan_athena_matched_and_training(
-                include_training_best_sp=False
+                include_training_best_sp=self.include_training_best_sp
             )
 
             for rec in model_records:
@@ -1071,6 +1078,9 @@ class MultiModelAthenaMatchedConsolidator:
                     seen_athena_regions.add(region)
                     mapped_key = "athena_cut"
                     model_label = "Athena"
+                elif src_key == RegionalOperatingPointsConsolidator.TRAINING_METHOD_KEY:
+                    mapped_key = f"model_{idx}_best_sp"
+                    model_label = spec.label
                 elif src_key == "calibrated_hard_cut":
                     mapped_key = f"model_{idx}_hard_cut"
                     model_label = spec.label
