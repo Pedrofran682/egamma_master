@@ -272,3 +272,85 @@ def test_build_athena_matched_comparison_grid_table_and_latex(
     assert "\\multirow{4}{*}{$0.00 \\le |\\eta| < 0.80$}" in latex
     assert "Calibrated Hard Cut (Athena Loose PD)" in latex
     assert "Pileup-Corrected Cut T(mu) (Athena Loose PD)" in latex
+
+
+def test_build_athena_matched_without_training_best_sp(
+    mock_consolidator: RegionalOperatingPointsConsolidator,
+) -> None:
+    grid = mock_consolidator.build_athena_matched_comparison_grid_table(
+        as_percentage=True,
+        precision=2,
+        bold_best_sp=True,
+        include_training_best_sp=False,
+    )
+    assert len(grid.index) == 2 * 3
+    methods_in_index = list(grid.index.get_level_values(1))
+    assert "Training Best SP" not in methods_in_index
+    assert "Calibrated Hard Cut (Athena Loose PD)" in methods_in_index
+    assert "Pileup-Corrected Cut T(mu) (Athena Loose PD)" in methods_in_index
+    assert "Athena Loose Cut" in methods_in_index
+
+
+def test_multi_model_athena_matched_consolidator(
+    mock_consolidator: RegionalOperatingPointsConsolidator,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib
+
+    ropc_module = importlib.import_module(
+        "src.core.Validation.RegionalOperatingPointsConsolidator"
+    )
+    MultiModelAthenaMatchedConsolidator = ropc_module.MultiModelAthenaMatchedConsolidator
+
+    athena_records = [
+        rec
+        for rec in mock_consolidator._athena_matched_records
+        if rec["method_key"] != mock_consolidator.TRAINING_METHOD_KEY
+    ]
+
+    class FakeRegionalConsolidator:
+        render_grid_to_latex = staticmethod(RegionalOperatingPointsConsolidator.render_grid_to_latex)
+
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def scan_athena_matched_and_training(self, include_training_best_sp: bool = True):
+            assert include_training_best_sp is False
+            return list(athena_records)
+
+    monkeypatch.setattr(
+        ropc_module,
+        "RegionalOperatingPointsConsolidator",
+        FakeRegionalConsolidator,
+    )
+
+    multi = MultiModelAthenaMatchedConsolidator(
+        model_specs=[
+            ("Model V9 (100 Rings)", "cfg1.yaml", "res1"),
+            ("Model V9 (50 Rings)", "cfg2.yaml", "res2"),
+        ],
+        working_point="loose",
+    )
+    # Restore _build_grid_from_dataframe on a real instance for build_grid_table
+    multi.scan_and_evaluate()
+    multi._consolidators = [mock_consolidator]
+
+    tidy_df = multi.build_tidy_dataframe()
+    assert len(tidy_df) == 2 * 2 * 5  # 2x2 regions * (1 Athena + 2 models * 2 cuts)
+
+    grid = multi.build_grid_table(as_percentage=True, precision=2, bold_best_sp=True)
+    assert len(grid.index) == 2 * 5
+    methods_in_index = list(grid.index.get_level_values(1))
+    assert "Athena Loose Cut" in methods_in_index
+    assert "Model V9 (100 Rings) [Hard Cut]" in methods_in_index
+    assert "Model V9 (100 Rings) [$y_\\mathrm{cut}(\\langle\\mu\\rangle)$]" in methods_in_index
+    assert "Model V9 (50 Rings) [Hard Cut]" in methods_in_index
+    assert "Model V9 (50 Rings) [$y_\\mathrm{cut}(\\langle\\mu\\rangle)$]" in methods_in_index
+    assert "Training Best SP" not in methods_in_index
+
+    latex = multi.to_latex_snippet(grid_table=grid, as_percentage=True, precision=2)
+    assert "\\multirow{5}{*}{$0.00 \\le |\\eta| < 0.80$}" in latex
+    assert "Athena Loose Cut" in latex
+    assert "Model V9 (100 Rings) [Hard Cut]" in latex
+    assert "Model V9 (50 Rings) [$y_\\mathrm{cut}(\\langle\\mu\\rangle)$]" in latex
+

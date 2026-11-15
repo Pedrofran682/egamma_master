@@ -1,7 +1,8 @@
 import gc
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 import torch
@@ -416,11 +417,17 @@ class RegionalOperatingPointsConsolidator:
             "athena_cut": self.method_aliases.get("athena_cut", f"Athena {wp_label} Cut"),
         }
 
-    def scan_athena_matched_and_training(self) -> List[Dict[str, Any]]:
-        """Evaluates Training Best SP alongside neural cuts calibrated to full-dataset Athena PD.
+    def scan_athena_matched_and_training(
+        self,
+        include_training_best_sp: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Evaluates neural cuts calibrated to full-dataset Athena PD (optionally with Training Best SP).
+
+        Args:
+            include_training_best_sp: Whether to include the Training Best SP record per region.
 
         Returns:
-            List of record dictionaries containing all four compared methods per region.
+            List of record dictionaries containing the compared methods per region.
         """
         if not self.manifest.exists():
             raise FileNotFoundError(
@@ -452,8 +459,10 @@ class RegionalOperatingPointsConsolidator:
                 continue
 
             try:
-                train_metrics = self.aggregator.get_best_training_metrics_for_region(
-                    iet, ieta, cache=False
+                train_metrics = (
+                    self.aggregator.get_best_training_metrics_for_region(iet, ieta, cache=False)
+                    if include_training_best_sp
+                    else None
                 )
                 best_model, _, _, _ = self.aggregator.get_best_model_for_region(
                     iet, ieta, cache=False
@@ -539,17 +548,18 @@ class RegionalOperatingPointsConsolidator:
             )
             metrics_pileup = StrategyMetrics.from_predictions(preds_pileup, eval_res.holdout_labels)
 
-            self._athena_matched_records.append(
-                {
-                    "iet": iet,
-                    "ieta": ieta,
-                    "method_key": self.TRAINING_METHOD_KEY,
-                    "method": aliases[self.TRAINING_METHOD_KEY],
-                    "target_pd": target_pd_athena,
-                    "decision_threshold": "Best SP (Train)",
-                    **train_metrics,
-                }
-            )
+            if include_training_best_sp and train_metrics is not None:
+                self._athena_matched_records.append(
+                    {
+                        "iet": iet,
+                        "ieta": ieta,
+                        "method_key": self.TRAINING_METHOD_KEY,
+                        "method": aliases[self.TRAINING_METHOD_KEY],
+                        "target_pd": target_pd_athena,
+                        "decision_threshold": "Best SP (Train)",
+                        **train_metrics,
+                    }
+                )
             for key, met, th_repr in (
                 ("calibrated_hard_cut", metrics_hard, f"{eval_res.threshold:.4f}"),
                 (
@@ -602,11 +612,17 @@ class RegionalOperatingPointsConsolidator:
             self.scan_training_best_sp()
         return pd.DataFrame(self._training_records)
 
-    def build_athena_matched_tidy_dataframe(self) -> pd.DataFrame:
-        """Returns the Athena-matched comparison and training best-SP records as a DataFrame."""
+    def build_athena_matched_tidy_dataframe(
+        self,
+        include_training_best_sp: bool = True,
+    ) -> pd.DataFrame:
+        """Returns the Athena-matched comparison records (and optionally training best-SP) as a DataFrame."""
         if not self._athena_matched_records:
-            self.scan_athena_matched_and_training()
-        return pd.DataFrame(self._athena_matched_records)
+            self.scan_athena_matched_and_training(include_training_best_sp=include_training_best_sp)
+        df = pd.DataFrame(self._athena_matched_records)
+        if not include_training_best_sp and not df.empty and "method_key" in df.columns:
+            df = df[df["method_key"] != self.TRAINING_METHOD_KEY].reset_index(drop=True)
+        return df
 
     def _format_cell(
         self,
@@ -795,8 +811,9 @@ class RegionalOperatingPointsConsolidator:
         decimal_comma: bool = False,
         math_delimiters: bool = True,
         bold_best_sp: bool = True,
+        include_training_best_sp: bool = True,
     ) -> pd.DataFrame:
-        """Constructs a 4-row-per-eta grid comparing Training Best SP and Athena-matched cuts.
+        """Constructs a multi-row-per-eta grid comparing Athena-matched cuts (optionally with Training Best SP).
 
         Args:
             as_percentage: Multiply metric values and uncertainties by 100.
@@ -804,13 +821,21 @@ class RegionalOperatingPointsConsolidator:
             decimal_comma: Use comma as decimal separator.
             math_delimiters: Wrap expressions with LaTeX math delimiters.
             bold_best_sp: Bold the entry with the highest SP value within each region.
+            include_training_best_sp: Whether to include the Training Best SP row.
 
         Returns:
             DataFrame with MultiIndex columns (ET Interval, Metric) and MultiIndex rows (eta, Method).
         """
+        method_keys = (
+            [self.TRAINING_METHOD_KEY, *self.DEFAULT_METHOD_KEYS]
+            if include_training_best_sp
+            else list(self.DEFAULT_METHOD_KEYS)
+        )
         return self._build_grid_from_dataframe(
-            tidy_df=self.build_athena_matched_tidy_dataframe(),
-            method_keys=[self.TRAINING_METHOD_KEY, *self.DEFAULT_METHOD_KEYS],
+            tidy_df=self.build_athena_matched_tidy_dataframe(
+                include_training_best_sp=include_training_best_sp
+            ),
+            method_keys=method_keys,
             as_percentage=as_percentage,
             precision=precision,
             decimal_comma=decimal_comma,
@@ -818,6 +843,53 @@ class RegionalOperatingPointsConsolidator:
             bold_best_sp=bold_best_sp,
             allow_missing_err=False,
             method_label_overrides=self._athena_matched_method_aliases(),
+        )
+
+    @staticmethod
+    def render_grid_to_latex(
+        df: pd.DataFrame,
+        caption: Optional[str] = None,
+        label: Optional[str] = None,
+        resize_box: bool = True,
+    ) -> str:
+        """Renders a pre-built 2D MultiIndex grid DataFrame into a LaTeX tabular snippet."""
+        et_labels = list(dict.fromkeys(col[0] for col in df.columns))
+        n_ets = len(et_labels)
+        col_align = "|c|l|" + "|".join(["ccc"] * n_ets) + "|"
+
+        lines: List[str] = [f"\\begin{{tabular}}{{{col_align}}}", "\\hline"]
+
+        header_top = " & "
+        for et in et_labels:
+            header_top += f" & \\multicolumn{{3}}{{c|}}{{{et}}}"
+        header_top += " \\\\"
+        lines.append(header_top)
+
+        header_sub = " & Method"
+        for _ in range(n_ets):
+            header_sub += " & $P_D[\\%]$ & $SP[\\%]$ & $P_F[\\%]$"
+        header_sub += " \\\\"
+        lines.append(header_sub)
+        lines.append("\\hline")
+
+        eta_groups = list(dict.fromkeys(df.index.get_level_values(0)))
+        for eta_val in eta_groups:
+            sub_df = df.loc[eta_val]
+            n_methods = len(sub_df)
+
+            for i, (method_name, row) in enumerate(sub_df.iterrows()):
+                eta_cell = f"\\multirow{{{n_methods}}}{{*}}{{{eta_val}}}" if i == 0 else ""
+                cells = [eta_cell, str(method_name)] + [str(c) for c in row.values]
+                line_str = " & ".join(cells) + " \\\\"
+                lines.append(line_str)
+            lines.append("\\hline")
+
+        lines.append("\\end{tabular}")
+        return LatexTableFormatter.wrap_booktabs_environment(
+            tabular_body="\n".join(lines),
+            caption=caption,
+            label=label,
+            resize_to_textwidth=resize_box,
         )
 
     def to_latex_snippet(
@@ -851,44 +923,11 @@ class RegionalOperatingPointsConsolidator:
             math_delimiters=True,
             bold_best_sp=True,
         )
-
-        et_labels = list(dict.fromkeys(col[0] for col in df.columns))
-        n_ets = len(et_labels)
-        col_align = "|c|l|" + "|".join(["ccc"] * n_ets) + "|"
-
-        lines: List[str] = [f"\\begin{{tabular}}{{{col_align}}}", "\\hline"]
-
-        header_top = " & "
-        for et in et_labels:
-            header_top += f" & \\multicolumn{{3}}{{c|}}{{{et}}}"
-        header_top += " \\\\"
-        lines.append(header_top)
-
-        header_sub = " & Method"
-        for _ in range(n_ets):
-            header_sub += " & $P_D[\\%]$ & $SP[\\%]$ & $P_F[\\%]$"
-        header_sub += " \\\\"
-        lines.append(header_sub)
-        lines.append("\\hline")
-
-        eta_groups = df.index.levels[0]
-        for eta_val in eta_groups:
-            sub_df = df.loc[eta_val]
-            n_methods = len(sub_df)
-
-            for i, (method_name, row) in enumerate(sub_df.iterrows()):
-                eta_cell = f"\\multirow{{{n_methods}}}{{*}}{{{eta_val}}}" if i == 0 else ""
-                cells = [eta_cell, str(method_name)] + [str(c) for c in row.values]
-                line_str = " & ".join(cells) + " \\\\"
-                lines.append(line_str)
-            lines.append("\\hline")
-
-        lines.append("\\end{tabular}")
-        return LatexTableFormatter.wrap_booktabs_environment(
-            tabular_body="\n".join(lines),
+        return self.render_grid_to_latex(
+            df=df,
             caption=caption,
             label=label,
-            resize_to_textwidth=resize_box,
+            resize_box=resize_box,
         )
 
     def export_parquet(
@@ -935,4 +974,216 @@ class RegionalOperatingPointsConsolidator:
         content = latex_code if latex_code is not None else self.to_latex_snippet()
         path.write_text(content, encoding="utf-8")
         return path
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    """Identifies a trained model configuration and its results directory."""
+
+    label: str
+    config_path: Union[str, Path]
+    results_path: Union[str, Path]
+    manifest_path: Optional[Union[str, Path]] = None
+
+
+class MultiModelAthenaMatchedConsolidator:
+    """Consolidates Athena-matched Hard Cut and Linear Fit y_cut(<mu>) across multiple models."""
+
+    def __init__(
+        self,
+        model_specs: Sequence[Union[ModelSpec, Tuple[str, Union[str, Path], Union[str, Path]]]],
+        manifest_path: Optional[Union[str, Path]] = None,
+        working_point: str = "loose",
+        bins_mu: int = 10,
+        n_bootstraps_pileup: int = 100,
+        efficiencies_csv: Optional[Union[str, Path]] = None,
+        device: Optional[Union[str, torch.device]] = None,
+    ) -> None:
+        """Initializes the multi-model Athena-matched consolidator.
+
+        Args:
+            model_specs: Sequence of ModelSpec or (label, config_path, results_path) tuples.
+            manifest_path: Optional shared split manifest path.
+            working_point: Athena fast photon cut working point ('loose', 'medium', 'tight').
+            bins_mu: Bin count for pileup threshold calibration.
+            n_bootstraps_pileup: Bootstrap sample count for pileup threshold fitting.
+            efficiencies_csv: Optional path to reference efficiencies CSV.
+            device: Computing device ('cpu', 'cuda', or torch.device).
+        """
+        if not model_specs:
+            raise ValueError("At least one model specification must be provided.")
+        self.model_specs: List[ModelSpec] = [
+            spec
+            if isinstance(spec, ModelSpec)
+            else ModelSpec(label=spec[0], config_path=spec[1], results_path=spec[2])
+            for spec in model_specs
+        ]
+        self.manifest_path = manifest_path
+        self.working_point = working_point.lower()
+        self.bins_mu = bins_mu
+        self.n_bootstraps_pileup = n_bootstraps_pileup
+        self.efficiencies_csv = efficiencies_csv
+        self.device = device
+        self._records: List[Dict[str, Any]] = []
+        self._consolidators: List[RegionalOperatingPointsConsolidator] = []
+
+    def _method_keys_and_labels(self) -> Tuple[List[str], Dict[str, str]]:
+        wp_label = self.working_point.capitalize()
+        keys: List[str] = ["athena_cut"]
+        labels: Dict[str, str] = {"athena_cut": f"Athena {wp_label} Cut"}
+        for idx, spec in enumerate(self.model_specs):
+            hard_key = f"model_{idx}_hard_cut"
+            pileup_key = f"model_{idx}_pileup_cut"
+            keys.extend([hard_key, pileup_key])
+            labels[hard_key] = f"{spec.label} [Hard Cut]"
+            labels[pileup_key] = f"{spec.label} [$y_\\mathrm{{cut}}(\\langle\\mu\\rangle)$]"
+        return keys, labels
+
+    def scan_and_evaluate(self) -> List[Dict[str, Any]]:
+        """Evaluates Hard Cut and Pileup-Corrected Cut at Athena PD for all configured models."""
+        self._records = []
+        self._consolidators = []
+        seen_athena_regions: set[Tuple[int, int]] = set()
+        _, labels = self._method_keys_and_labels()
+
+        for idx, spec in enumerate(self.model_specs):
+            consolidator = RegionalOperatingPointsConsolidator(
+                config_path=spec.config_path,
+                results_path=spec.results_path,
+                manifest_path=spec.manifest_path or self.manifest_path,
+                working_point=self.working_point,
+                bins_mu=self.bins_mu,
+                n_bootstraps_pileup=self.n_bootstraps_pileup,
+                efficiencies_csv=self.efficiencies_csv,
+                device=self.device,
+            )
+            self._consolidators.append(consolidator)
+            model_records = consolidator.scan_athena_matched_and_training(
+                include_training_best_sp=False
+            )
+
+            for rec in model_records:
+                region = (int(rec["iet"]), int(rec["ieta"]))
+                src_key = rec["method_key"]
+                if src_key == "athena_cut":
+                    if region in seen_athena_regions:
+                        continue
+                    seen_athena_regions.add(region)
+                    mapped_key = "athena_cut"
+                    model_label = "Athena"
+                elif src_key == "calibrated_hard_cut":
+                    mapped_key = f"model_{idx}_hard_cut"
+                    model_label = spec.label
+                elif src_key == "pileup_corrected_cut":
+                    mapped_key = f"model_{idx}_pileup_cut"
+                    model_label = spec.label
+                else:
+                    continue
+
+                self._records.append(
+                    {
+                        **rec,
+                        "method_key": mapped_key,
+                        "method": labels[mapped_key],
+                        "model_label": model_label,
+                    }
+                )
+
+        log.info(
+            f"Multi-model Athena-matched evaluation complete. Extracted {len(self._records)} records."
+        )
+        return self._records
+
+    def build_tidy_dataframe(self) -> pd.DataFrame:
+        """Returns the consolidated multi-model metrics as a tidy DataFrame."""
+        if not self._records:
+            self.scan_and_evaluate()
+        return pd.DataFrame(self._records)
+
+    def build_grid_table(
+        self,
+        as_percentage: bool = True,
+        precision: int = 2,
+        decimal_comma: bool = False,
+        math_delimiters: bool = True,
+        bold_best_sp: bool = True,
+    ) -> pd.DataFrame:
+        """Builds a 2D MultiIndex grid comparing Athena Cut and each model's Hard/Pileup cuts."""
+        tidy_df = self.build_tidy_dataframe()
+        method_keys, method_labels = self._method_keys_and_labels()
+        helper = self._consolidators[0] if self._consolidators else RegionalOperatingPointsConsolidator.__new__(
+            RegionalOperatingPointsConsolidator
+        )
+        if not hasattr(helper, "method_aliases"):
+            helper.method_aliases = method_labels
+        return helper._build_grid_from_dataframe(
+            tidy_df=tidy_df,
+            method_keys=method_keys,
+            as_percentage=as_percentage,
+            precision=precision,
+            decimal_comma=decimal_comma,
+            math_delimiters=math_delimiters,
+            bold_best_sp=bold_best_sp,
+            allow_missing_err=False,
+            method_label_overrides=method_labels,
+        )
+
+    def to_latex_snippet(
+        self,
+        grid_table: Optional[pd.DataFrame] = None,
+        caption: Optional[str] = None,
+        label: Optional[str] = None,
+        resize_box: bool = True,
+        as_percentage: bool = True,
+        precision: int = 2,
+        decimal_comma: bool = False,
+    ) -> str:
+        """Converts the multi-model grid table into a publication-ready LaTeX snippet."""
+        df = (
+            grid_table
+            if grid_table is not None
+            else self.build_grid_table(
+                as_percentage=as_percentage,
+                precision=precision,
+                decimal_comma=decimal_comma,
+                math_delimiters=True,
+                bold_best_sp=True,
+            )
+        )
+        return RegionalOperatingPointsConsolidator.render_grid_to_latex(
+            df=df,
+            caption=caption,
+            label=label,
+            resize_box=resize_box,
+        )
+
+    def export_parquet(
+        self,
+        output_path: Union[str, Path],
+        df: Optional[pd.DataFrame] = None,
+    ) -> Path:
+        """Serializes tidy or grid DataFrame to Parquet format."""
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        export_df = df if df is not None else self.build_tidy_dataframe()
+        if isinstance(export_df.columns, pd.MultiIndex):
+            flat_df = export_df.copy()
+            flat_df.columns = [f"{c[0]}_{c[1]}" for c in export_df.columns]
+            flat_df.to_parquet(path)
+        else:
+            export_df.to_parquet(path)
+        return path
+
+    def export_latex(
+        self,
+        output_path: Union[str, Path],
+        latex_code: Optional[str] = None,
+    ) -> Path:
+        """Saves generated LaTeX table string to a .tex file."""
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = latex_code if latex_code is not None else self.to_latex_snippet()
+        path.write_text(content, encoding="utf-8")
+        return path
+
 

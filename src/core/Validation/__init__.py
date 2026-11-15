@@ -14,7 +14,11 @@ from .PileupThresholdCalibrator import (
     OperatingPointCalibration,
     Pileup2DDistribution,
 )
-from .RegionalOperatingPointsConsolidator import RegionalOperatingPointsConsolidator
+from .RegionalOperatingPointsConsolidator import (
+    ModelSpec,
+    MultiModelAthenaMatchedConsolidator,
+    RegionalOperatingPointsConsolidator,
+)
 from .LatexTableFormatter import LatexTableFormatter
 from .RingPeakEnergyAnalyzer import (
     RingPeakEnergyAnalyzer,
@@ -36,6 +40,8 @@ __all__ = [
     "PileupThresholdCalibrator",
     "OperatingPointCalibration",
     "Pileup2DDistribution",
+    "ModelSpec",
+    "MultiModelAthenaMatchedConsolidator",
     "RegionalOperatingPointsConsolidator",
     "LatexTableFormatter",
     "RingPeakEnergyAnalyzer",
