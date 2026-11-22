@@ -360,6 +360,26 @@ class TestMetricPlotter(unittest.TestCase):
         self.assertTrue(any((both_dir / "en").rglob("*.pdf")))
         self.assertTrue(any((both_dir / "pt").rglob("*.pdf")))
 
+    def test_model_metrics_plotter_separate(self) -> None:
+        from src.core.Plotting.MetricPlotter import ModelMetricsPlotter
+
+        history = {
+            "train_loss": [0.5, 0.3],
+            "val_loss": [0.6, 0.4],
+            "train_acc": [0.75, 0.88],
+            "val_acc": [0.72, 0.85],
+            "callbackMetrics": {
+                "max_sp_val": [0.80, 0.90],
+                "max_sp_pd_val": [0.85, 0.94],
+                "max_sp_fa_val": [0.20, 0.08],
+            },
+        }
+        plotter = ModelMetricsPlotter(language="en")
+        paths = plotter.plot_separate(self.context, history_data=history)
+        self.assertEqual(set(paths.keys()), {"loss", "accuracy", "performance"})
+        for p in paths.values():
+            self.assertTrue(os.path.exists(p))
+
 
 if __name__ == "__main__":
     unittest.main()

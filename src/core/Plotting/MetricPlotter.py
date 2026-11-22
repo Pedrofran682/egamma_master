@@ -86,63 +86,101 @@ class ModelMetricsPlotter(BaseMetricPlotter):
             return None
         return self._render_plot(context, history_data)
 
-    def _render_plot(self, context: RegionPlotContext, history_data: Dict[str, Any]) -> str:
-        lang = self._resolve_language(context)
+    def _draw_loss_axis(self, ax: plt.Axes, history_data: Dict[str, Any], lang: str) -> None:
         epochs = range(1, len(history_data["train_loss"]) + 1)
-        train_loss = history_data["train_loss"]
-        val_loss = history_data["val_loss"]
-        train_acc = history_data["train_acc"]
-        val_acc = history_data["val_acc"]
+        ax.plot(epochs, history_data["train_loss"], "o-", label=self.tr(PlotTextKey.METRIC_TRAIN_LOSS, language=lang))
+        ax.plot(epochs, history_data["val_loss"], "o-", label=self.tr(PlotTextKey.METRIC_VAL_LOSS, language=lang))
+        ax.set_title(self.tr(PlotTextKey.METRIC_LOSS_TITLE, language=lang))
+        ax.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
+        ax.set_ylabel(self.tr(PlotTextKey.METRIC_LOSS, language=lang))
+        ax.grid(True)
+        ax.legend()
 
+    def _draw_accuracy_axis(self, ax: plt.Axes, history_data: Dict[str, Any], lang: str) -> None:
+        epochs = range(1, len(history_data["train_loss"]) + 1)
+        ax.plot(epochs, history_data["train_acc"], "o-", label=self.tr(PlotTextKey.METRIC_TRAIN_ACC, language=lang))
+        ax.plot(epochs, history_data["val_acc"], "o-", label=self.tr(PlotTextKey.METRIC_VAL_ACC, language=lang))
+        ax.set_title(self.tr(PlotTextKey.METRIC_ACC_TITLE, language=lang))
+        ax.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
+        ax.set_ylabel(self.tr(PlotTextKey.METRIC_ACC, language=lang))
+        ax.grid(True)
+        ax.legend()
+
+    def _draw_performance_axis(self, ax: plt.Axes, history_data: Dict[str, Any], lang: str) -> None:
+        epochs = range(1, len(history_data["train_loss"]) + 1)
         callback_metrics = history_data.get("callbackMetrics", {})
         val_sp = callback_metrics.get("max_sp_val")
         val_fa = callback_metrics.get("max_sp_fa_val")
         val_pd = callback_metrics.get("max_sp_pd_val")
 
-        fig, (ax_loss, ax_acc, ax_perf) = plt.subplots(1, 3, figsize=(18, 6))
-
-        ax_loss.plot(epochs, train_loss, "o-", label=self.tr(PlotTextKey.METRIC_TRAIN_LOSS, language=lang))
-        ax_loss.plot(epochs, val_loss, "o-", label=self.tr(PlotTextKey.METRIC_VAL_LOSS, language=lang))
-        ax_loss.set_title(self.tr(PlotTextKey.METRIC_LOSS_TITLE, language=lang))
-        ax_loss.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
-        ax_loss.set_ylabel(self.tr(PlotTextKey.METRIC_LOSS, language=lang))
-        ax_loss.grid(True)
-        ax_loss.legend()
-
-        ax_acc.plot(epochs, train_acc, "o-", label=self.tr(PlotTextKey.METRIC_TRAIN_ACC, language=lang))
-        ax_acc.plot(epochs, val_acc, "o-", label=self.tr(PlotTextKey.METRIC_VAL_ACC, language=lang))
-        ax_acc.set_title(self.tr(PlotTextKey.METRIC_ACC_TITLE, language=lang))
-        ax_acc.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
-        ax_acc.set_ylabel(self.tr(PlotTextKey.METRIC_ACC, language=lang))
-        ax_acc.grid(True)
-        ax_acc.legend()
-
         has_val_curve = False
         if val_sp is not None:
-            ax_perf.plot(epochs, val_sp, "o-", label=self.tr(PlotTextKey.METRIC_SP_LABEL, language=lang), color="purple")
+            ax.plot(epochs, val_sp, "o-", label=self.tr(PlotTextKey.METRIC_SP_LABEL, language=lang), color="purple")
             has_val_curve = True
         if val_pd is not None:
-            ax_perf.plot(epochs, val_pd, "o-", label=self.tr(PlotTextKey.METRIC_TPR_LABEL, language=lang), color="darkgreen")
+            ax.plot(epochs, val_pd, "o-", label=self.tr(PlotTextKey.METRIC_TPR_LABEL, language=lang), color="darkgreen")
             has_val_curve = True
         if val_fa is not None:
-            ax_perf.plot(epochs, val_fa, "o-", label=self.tr(PlotTextKey.METRIC_FPR_LABEL, language=lang), color="darkred")
+            ax.plot(epochs, val_fa, "o-", label=self.tr(PlotTextKey.METRIC_FPR_LABEL, language=lang), color="darkred")
             has_val_curve = True
 
         if val_sp is not None:
             best_sp_epoch_idx = np.argmax(val_sp)
-            ax_perf.axvline(
+            ax.axvline(
                 x=epochs[best_sp_epoch_idx],
                 color="blue",
                 linestyle="--",
                 label=self.tr(PlotTextKey.METRIC_BEST_SP_EPOCH, language=lang, epoch=epochs[best_sp_epoch_idx]),
             )
 
-        ax_perf.set_title(self.tr(PlotTextKey.METRIC_PERF_TITLE, language=lang))
-        ax_perf.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
-        ax_perf.set_ylabel(self.tr(PlotTextKey.METRIC_VALUE, language=lang))
-        ax_perf.grid(True)
+        ax.set_title(self.tr(PlotTextKey.METRIC_PERF_TITLE, language=lang))
+        ax.set_xlabel(self.tr(PlotTextKey.METRIC_EPOCH, language=lang))
+        ax.set_ylabel(self.tr(PlotTextKey.METRIC_VALUE, language=lang))
+        ax.grid(True)
         if has_val_curve:
-            ax_perf.legend()
+            ax.legend()
+
+    def plot_separate(
+        self,
+        context: RegionPlotContext,
+        history_data: Dict[str, Any] | None = None,
+        metrics: tuple[str, ...] = ("loss", "accuracy", "performance"),
+    ) -> Dict[str, str]:
+        """Plots loss, accuracy, and SP/PD/PF curves as separate image files.
+
+        Args:
+            context: RegionPlotContext with output directory and region indices.
+            history_data: History dictionary containing loss, acc, and callback metrics.
+            metrics: Subset of ('loss', 'accuracy', 'performance') to render.
+
+        Returns:
+            Dictionary mapping each metric name to its saved PDF file path.
+        """
+        if not history_data:
+            return {}
+        lang = self._resolve_language(context)
+        drawers = {
+            "loss": (self._draw_loss_axis, f"iet{context.iet}.ieta{context.ieta}_loss.pdf"),
+            "accuracy": (self._draw_accuracy_axis, f"iet{context.iet}.ieta{context.ieta}_accuracy.pdf"),
+            "performance": (self._draw_performance_axis, f"iet{context.iet}.ieta{context.ieta}_performance_sp_pd_pf.pdf"),
+        }
+        saved_paths: Dict[str, str] = {}
+        for key in metrics:
+            if key not in drawers:
+                raise ValueError(f"Unknown metric '{key}'. Expected one of {tuple(drawers)}.")
+            drawer, filename = drawers[key]
+            fig, ax = plt.subplots(figsize=(7, 5))
+            drawer(ax, history_data, lang)
+            fig.tight_layout()
+            saved_paths[key] = self.save_figure(fig, context.output_dir, "model_metrics", filename)
+        return saved_paths
+
+    def _render_plot(self, context: RegionPlotContext, history_data: Dict[str, Any]) -> str:
+        lang = self._resolve_language(context)
+        fig, (ax_loss, ax_acc, ax_perf) = plt.subplots(1, 3, figsize=(18, 6))
+        self._draw_loss_axis(ax_loss, history_data, lang)
+        self._draw_accuracy_axis(ax_acc, history_data, lang)
+        self._draw_performance_axis(ax_perf, history_data, lang)
         fig.tight_layout()
 
         filename = f"iet{context.iet}.ieta{context.ieta}_model_metrics.pdf"
