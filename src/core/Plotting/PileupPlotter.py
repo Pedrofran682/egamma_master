@@ -385,7 +385,7 @@ class PileupPlotter(BasePlotter):
             ("darkblue", "d", ":"),
         ]
 
-        mu_fit = np.linspace(0, 100, 150)
+        mu_fit = np.linspace(xedges[0]-10, xedges[-1]+10, 150)
 
         for idx, cal in enumerate(calibrations):
             color, marker, style = palette[idx % len(palette)]
