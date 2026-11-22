@@ -404,3 +404,35 @@ def test_model_spec_from_results_dir_and_config_name(tmp_path: Path) -> None:
         ModelSpec.from_results_dir(tmp_path / "invalid_folder_name", config_dir=cfg_dir)
 
 
+def test_result_aggregator_skips_corrupted_pkl_keeps_other_repetitions(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from src.core.Validation.ResultAggregator import ResultAggregator
+
+    corrupted_file = tmp_path / "iet0.ieta0_rep0.pkl"
+    corrupted_file.write_bytes(b"")
+
+    valid_file = tmp_path / "iet0.ieta0_rep1.pkl"
+    pd.DataFrame(
+        [
+            {
+                "repeat": 1,
+                "fold": 0,
+                "best_sp_value": 0.91,
+                "best_pd_value": 0.94,
+                "best_fa_value": 0.05,
+                "best_weights": {},
+            }
+        ]
+    ).to_pickle(valid_file)
+
+    aggregator = ResultAggregator(tmp_path)
+    best_model, best_rep, mean_sp, _ = aggregator.get_best_model_for_region(0, 0, cache=False)
+
+    assert best_rep == 1
+    assert np.isclose(mean_sp, 0.91)
+    assert best_model["fold"] == 0
+    assert "Skipping unreadable result file" in caplog.text
+
+
+

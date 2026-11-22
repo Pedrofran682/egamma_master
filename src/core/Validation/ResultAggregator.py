@@ -206,9 +206,12 @@ class ResultAggregator(BaseResultAggregator):
                 - Mean SP value across folds for that repetition.
                 - Standard deviation of the SP values across folds.
         """
-        repeat_series = ResultAggregator._resolve_repeat_series(df)
+        df_valid = df.dropna(subset=["best_sp_value"])
+        if df_valid.empty:
+            raise ValueError("No valid 'best_sp_value' records found in results DataFrame.")
+        repeat_series = ResultAggregator._resolve_repeat_series(df_valid)
         df_stats = (
-            df.groupby(repeat_series)["best_sp_value"]
+            df_valid.groupby(repeat_series)["best_sp_value"]
             .agg(["mean", "std"])
             .reset_index()
         )
@@ -217,9 +220,9 @@ class ResultAggregator(BaseResultAggregator):
         best_mean_sp = float(df_stats.loc[best_init_idx, "mean"])
         best_std_sp = float(df_stats.loc[best_init_idx, "std"])
 
-        df_best_rep = df[repeat_series == best_repetition]
+        df_best_rep = df_valid[repeat_series == best_repetition]
         best_model_idx = df_best_rep["best_sp_value"].idxmax()
-        best_model = df.loc[best_model_idx].to_dict()
+        best_model = df_valid.loc[best_model_idx].to_dict()
         if "repeat" not in best_model or pd.isna(best_model.get("repeat")):
             if "reapet" in best_model:
                 best_model["repeat"] = best_model["reapet"]

@@ -1125,20 +1125,26 @@ class MultiModelAthenaMatchedConsolidator:
         _, labels = self._method_keys_and_labels()
 
         for idx, spec in enumerate(self.model_specs):
-            consolidator = RegionalOperatingPointsConsolidator(
-                config_path=spec.config_path,
-                results_path=spec.results_path,
-                manifest_path=spec.manifest_path or self.manifest_path,
-                working_point=self.working_point,
-                bins_mu=self.bins_mu,
-                n_bootstraps_pileup=self.n_bootstraps_pileup,
-                efficiencies_csv=self.efficiencies_csv,
-                device=self.device,
-            )
-            self._consolidators.append(consolidator)
-            model_records = consolidator.scan_athena_matched_and_training(
-                include_training_best_sp=self.include_training_best_sp
-            )
+            try:
+                consolidator = RegionalOperatingPointsConsolidator(
+                    config_path=spec.config_path,
+                    results_path=spec.results_path,
+                    manifest_path=spec.manifest_path or self.manifest_path,
+                    working_point=self.working_point,
+                    bins_mu=self.bins_mu,
+                    n_bootstraps_pileup=self.n_bootstraps_pileup,
+                    efficiencies_csv=self.efficiencies_csv,
+                    device=self.device,
+                )
+                self._consolidators.append(consolidator)
+                model_records = consolidator.scan_athena_matched_and_training(
+                    include_training_best_sp=self.include_training_best_sp
+                )
+            except Exception as exc:
+                log.warning(
+                    f"Skipping model '{spec.label}' ({spec.results_path}) due to evaluation error: {exc}"
+                )
+                continue
 
             for rec in model_records:
                 region = (int(rec["iet"]), int(rec["ieta"]))
@@ -1182,6 +1188,20 @@ class MultiModelAthenaMatchedConsolidator:
         """Returns the consolidated multi-model metrics as a tidy DataFrame."""
         if not self._records:
             self.scan_and_evaluate()
+        if not self._records:
+            return pd.DataFrame(
+                columns=[
+                    "iet",
+                    "ieta",
+                    "method_key",
+                    "method",
+                    "model_label",
+                    "config_name",
+                    "pd",
+                    "sp",
+                    "pf",
+                ]
+            )
         return pd.DataFrame(self._records)
 
     def build_grid_table(
