@@ -223,7 +223,7 @@ class ProfileMeanEnergyPlotter(BasePlotter):
         ax.set_xlim(-1, n_rings + 1)
         ax.set_ylim(-0.02, upper_ylim)
         ax.grid(True, linestyle="--", alpha=0.6)
-        ax.legend(fontsize=10, loc="upper right")
+        ax.legend(fontsize=10)
         ax.set_title(resolved_title, fontsize=14)
         fig.tight_layout()
 
