@@ -373,3 +373,34 @@ def test_multi_model_athena_matched_consolidator(
     assert len(grid_no_sp.index) == 2 * 5
     assert "Model V9 (100 Rings) [Best SP]" not in list(grid_no_sp.index.get_level_values(1))
 
+
+def test_model_spec_from_results_dir_and_config_name(tmp_path: Path) -> None:
+    from src.core.Validation.RegionalOperatingPointsConsolidator import (
+        ModelSpec,
+        MultiModelAthenaMatchedConsolidator,
+    )
+
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    cfg_file = cfg_dir / "ModelV9_HighBatch_100Rings.yaml"
+    cfg_file.write_text("config_name: ModelV9_HighBatch_100Rings\n")
+
+    res_dir = tmp_path / "results" / "config_nameModelV9_HighBatch_100Rings_id20261105222012"
+    res_dir.mkdir(parents=True)
+
+    spec = ModelSpec.from_results_dir(res_dir, config_dir=cfg_dir)
+    assert spec.label == "ModelV9_HighBatch_100Rings"
+    assert spec.config_path == cfg_file
+    assert spec.results_path == res_dir
+
+    consolidator = MultiModelAthenaMatchedConsolidator.from_results_dirs(
+        results_dirs=[res_dir],
+        config_dir=cfg_dir,
+    )
+    assert len(consolidator.model_specs) == 1
+    assert consolidator.model_specs[0].label == "ModelV9_HighBatch_100Rings"
+
+    with pytest.raises(ValueError, match="Cannot parse config name"):
+        ModelSpec.from_results_dir(tmp_path / "invalid_folder_name", config_dir=cfg_dir)
+
+

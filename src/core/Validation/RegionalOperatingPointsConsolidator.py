@@ -1,5 +1,6 @@
 import gc
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -985,6 +986,45 @@ class ModelSpec:
     results_path: Union[str, Path]
     manifest_path: Optional[Union[str, Path]] = None
 
+    @classmethod
+    def from_results_dir(
+        cls,
+        results_path: Union[str, Path],
+        config_dir: Union[str, Path] = Path("config/NeuralRinger"),
+        label: Optional[str] = None,
+        manifest_path: Optional[Union[str, Path]] = None,
+    ) -> "ModelSpec":
+        """Resolves a ModelSpec by parsing the config name from a results directory.
+
+        Args:
+            results_path: Path to a results folder named `config_name<Name>_id<Timestamp>`.
+            config_dir: Directory containing model YAML configurations.
+            label: Optional display label; defaults to the parsed config name.
+            manifest_path: Optional split manifest path for this model.
+
+        Returns:
+            ModelSpec populated with the resolved config and results paths.
+        """
+        results_dir = Path(results_path)
+        match = re.match(r"^config_name(.+)_id\d+$", results_dir.name)
+        if not match:
+            raise ValueError(
+                f"Cannot parse config name from results folder '{results_dir.name}'. "
+                "Expected pattern 'config_name<Name>_id<Timestamp>'."
+            )
+        config_name = match.group(1)
+        resolved_config = Path(config_dir) / f"{config_name}.yaml"
+        if not resolved_config.exists():
+            raise FileNotFoundError(
+                f"Resolved config file not found at '{resolved_config}' for results '{results_dir}'."
+            )
+        return cls(
+            label=label or config_name,
+            config_path=resolved_config,
+            results_path=results_dir,
+            manifest_path=manifest_path,
+        )
+
 
 class MultiModelAthenaMatchedConsolidator:
     """Consolidates Athena-matched Hard Cut and Linear Fit y_cut(<mu>) across multiple models."""
@@ -1029,6 +1069,37 @@ class MultiModelAthenaMatchedConsolidator:
         self.include_training_best_sp = include_training_best_sp
         self._records: List[Dict[str, Any]] = []
         self._consolidators: List[RegionalOperatingPointsConsolidator] = []
+
+    @classmethod
+    def from_results_dirs(
+        cls,
+        results_dirs: Sequence[Union[str, Path]],
+        config_dir: Union[str, Path] = Path("config/NeuralRinger"),
+        labels: Optional[Sequence[str]] = None,
+        **kwargs: Any,
+    ) -> "MultiModelAthenaMatchedConsolidator":
+        """Instantiates the consolidator directly from a list of results directories.
+
+        Args:
+            results_dirs: Sequence of results folders named `config_name<Name>_id<Timestamp>`.
+            config_dir: Directory containing model YAML configurations.
+            labels: Optional display labels aligned with `results_dirs`.
+            **kwargs: Additional keyword arguments forwarded to `__init__`.
+
+        Returns:
+            Configured MultiModelAthenaMatchedConsolidator instance.
+        """
+        if labels is not None and len(labels) != len(results_dirs):
+            raise ValueError("Length of `labels` must match length of `results_dirs`.")
+        specs = [
+            ModelSpec.from_results_dir(
+                results_path=folder,
+                config_dir=config_dir,
+                label=labels[idx] if labels is not None else None,
+            )
+            for idx, folder in enumerate(results_dirs)
+        ]
+        return cls(model_specs=specs, **kwargs)
 
     def _method_keys_and_labels(self) -> Tuple[List[str], Dict[str, str]]:
         wp_label = self.working_point.capitalize()
@@ -1090,12 +1161,15 @@ class MultiModelAthenaMatchedConsolidator:
                 else:
                     continue
 
+                cfg_obj = getattr(consolidator, "config", None)
+                config_name = "Athena" if mapped_key == "athena_cut" else getattr(cfg_obj, "config_name", spec.label)
                 self._records.append(
                     {
                         **rec,
                         "method_key": mapped_key,
                         "method": labels[mapped_key],
                         "model_label": model_label,
+                        "config_name": config_name,
                     }
                 )
 
