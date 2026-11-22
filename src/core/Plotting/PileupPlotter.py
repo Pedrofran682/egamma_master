@@ -353,9 +353,9 @@ class PileupPlotter(BasePlotter):
         fig, ax = plt.subplots(figsize=(9, 6.5))
 
         hist = (
-            distribution.hist2d_counts.T
+            distribution.hist2d_counts
             if hasattr(distribution, "hist2d_counts")
-            else distribution["hist2d_counts"].T
+            else distribution["hist2d_counts"]
         )
         xedges = (
             distribution.hist2d_xedges
@@ -369,8 +369,8 @@ class PileupPlotter(BasePlotter):
         )
 
         mesh = ax.pcolormesh(
-            xedges,
             yedges,
+            xedges,
             np.ma.masked_where(hist == 0, hist),
             cmap=cmap,
             shading="auto",
@@ -385,7 +385,7 @@ class PileupPlotter(BasePlotter):
             ("darkblue", "d", ":"),
         ]
 
-        x_fit = np.linspace(xedges[0], xedges[-1], 150)
+        mu_fit = np.linspace(xedges[0], xedges[-1], 150)
 
         for idx, cal in enumerate(calibrations):
             color, marker, style = palette[idx % len(palette)]
@@ -400,9 +400,9 @@ class PileupPlotter(BasePlotter):
             errors = getattr(cal, "slice_threshold_errors", np.array([]))
 
             ax.errorbar(
-                centers,
                 thresholds,
-                yerr=errors,
+                centers,
+                xerr=errors,
                 fmt=marker,
                 color=color,
                 markerfacecolor=color,
@@ -415,7 +415,7 @@ class PileupPlotter(BasePlotter):
                 zorder=4,
             )
 
-            y_fit = slope * x_fit + intercept
+            x_fit = slope * mu_fit + intercept
             sign = "+" if intercept >= 0 else "-"
             fit_text = self.tr(
                 PlotTextKey.PILEUP_FIT_THRESHOLD_LABEL,
@@ -427,7 +427,7 @@ class PileupPlotter(BasePlotter):
             )
             ax.plot(
                 x_fit,
-                y_fit,
+                mu_fit,
                 color=color,
                 linestyle=style,
                 linewidth=1.8,
@@ -442,8 +442,8 @@ class PileupPlotter(BasePlotter):
             full_title = f"{title} - {full_title}"
 
         ax.set_title(full_title, pad=12)
-        ax.set_xlabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL), loc="center")
-        ax.set_ylabel(self.tr(PlotTextKey.PILEUP_DISCRIMINANT_YLABEL))
+        ax.set_xlabel(self.tr(PlotTextKey.PILEUP_DISCRIMINANT_YLABEL), loc="center")
+        ax.set_ylabel(self.tr(PlotTextKey.PILEUP_AVGMU_XLABEL))
         ax.grid(True, linestyle=":", alpha=0.5)
         ax.legend(frameon=True, fontsize=8, loc="upper right")
         fig.tight_layout()
