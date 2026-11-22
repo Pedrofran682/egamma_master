@@ -637,16 +637,16 @@ class PlotTranslator:
             "pt": "Eventos de Sinal / Bin",
         },
         PlotTextKey.PILEUP_FIT_THRESHOLD_LABEL: {
-            "en": "{name} Fit: $T(\\langle\\mu\\rangle) = {slope:.3f}\\langle\\mu\\rangle {sign} {abs_intercept:.3f}$ ($R^2 = {r2:.2f}$)",
-            "pt": "Ajuste {name}: $T(\\langle\\mu\\rangle) = {slope:.3f}\\langle\\mu\\rangle {sign} {abs_intercept:.3f}$ ($R^2 = {r2:.2f}$)",
+            "en": "{name} Fit: $T(\\langle\\mu\\rangle) = {slope:.3f}\\langle\\mu\\rangle {sign} {abs_intercept:.3f}$",
+            "pt": "Ajuste {name}: $T(\\langle\\mu\\rangle) = {slope:.3f}\\langle\\mu\\rangle {sign} {abs_intercept:.3f}$",
         },
         PlotTextKey.PILEUP_THRESHOLD_CALIB_TITLE: {
-            "en": r"Discriminant $y_{\text{NN}}$ vs. $\langle\mu\rangle$ Threshold Calibration",
-            "pt": r"Calibração de Limiar do Discriminante $y_{\text{NN}}$ vs. $\langle\mu\rangle$",
+            "en": r"Pileup Threshold Calibration $T(\mu)$",
+            "pt": r"Calibração de Limiar $T(\mu)$",
         },
         PlotTextKey.PILEUP_DISCRIMINANT_YLABEL: {
-            "en": r"Neural Discriminant $y_{\text{NN}}$ (Logit)",
-            "pt": r"Discriminante Neural $y_{\text{NN}}$ (Logit)",
+            "en": r"Neural Discriminant (Logit)",
+            "pt": r"Discriminante Neural (Logit)",
         },
         PlotTextKey.EFFICIENCY_DEFAULT_FEATURE: {
             "en": "Feature",
