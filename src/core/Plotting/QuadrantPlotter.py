@@ -156,24 +156,15 @@ class QuadrantPlotter(BasePlotter):
             squeeze=False,
             gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08, "wspace": 0.18},
         )
-        region_str = self._get_region_label(result.iet, result.ieta)
         var_display = self._get_variable_display(var_name)
 
-        fig.suptitle(
-            self.tr(
-                PlotTextKey.QUADRANT_HIST_SUPTITLE,
-                var_display=var_display,
-                region_str=region_str,
-                s1=result.strategy1_name,
-                s2=result.strategy2_name,
-            ),
-            fontsize=13,
-            weight="bold",
-        )
+        if n_cols > 1:
+            fig.suptitle(var_display, fontsize=13, weight="bold")
 
         for col_idx, (_, sample_title, s_mask, true_label) in enumerate(sample_defs):
             ax_main, ax_res = axes[0, col_idx], axes[1, col_idx]
-            ax_main.set_title(sample_title, fontsize=12, weight="bold")
+            title_text = f"{var_display} — {sample_title}" if n_cols == 1 else sample_title
+            ax_main.set_title(title_text, fontsize=12, weight="bold")
             val_true = values[s_mask & finite_mask]
             n_true = len(val_true)
             counts_true, _ = np.histogram(val_true, bins=bins)
@@ -252,7 +243,7 @@ class QuadrantPlotter(BasePlotter):
             ax_res.grid(True, linestyle=":", alpha=0.5)
             fig.align_ylabels([ax_main, ax_res])
 
-        fig.subplots_adjust(top=0.90, bottom=0.09, left=0.10 if n_cols == 1 else 0.07, right=0.98)
+        fig.subplots_adjust(top=0.93 if n_cols == 1 else 0.90, bottom=0.09, left=0.10 if n_cols == 1 else 0.07, right=0.98)
 
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_{var_name}_quadrant_hist.{file_format}"
