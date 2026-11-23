@@ -63,7 +63,13 @@ class ComparisonPayload:
 class SingleRegionComparisonRunner:
     """Runs single-region quadrant and feature-distribution comparisons between two strategies."""
 
-    VALID_MODES = ("best_sp_vs_hard_cut", "best_sp_vs_pileup", "hard_cut_vs_pileup")
+    VALID_MODES = (
+        "best_sp_vs_hard_cut",
+        "best_sp_vs_pileup",
+        "hard_cut_vs_pileup",
+        "best_sp_vs_best_sp",
+        "pileup_vs_pileup",
+    )
 
     def __init__(
         self,
@@ -275,13 +281,33 @@ class SingleRegionComparisonRunner:
             )
             s1_name = f"{self.model1.alias} [Best SP]"
             s2_name = f"{self.model2.alias} [T(mu), {pd_tag}]"
-        else:
+        elif mode == "hard_cut_vs_pileup":
             preds_s1, thresh_s1 = eval_1.predictions_calibrated_cut, float(eval_1.threshold)
             preds_s2, thresh_s2 = self._compute_pileup_predictions(
                 model_2, raw_features, raw_labels, feature_names, train_folds[best_fold_2],
                 test_indices_arr, ring_cols_2, eval_2, target_pd,
             )
             s1_name = f"{self.model1.alias} [Hard Cut, {pd_tag}]"
+            s2_name = f"{self.model2.alias} [T(mu), {pd_tag}]"
+        elif mode == "best_sp_vs_best_sp":
+            preds_s1, thresh_s1 = self._compute_best_sp_predictions(
+                model_1, raw_features, raw_labels, train_folds[best_fold_1][1], ring_cols_1, eval_1
+            )
+            preds_s2, thresh_s2 = self._compute_best_sp_predictions(
+                model_2, raw_features, raw_labels, train_folds[best_fold_2][1], ring_cols_2, eval_2
+            )
+            s1_name = f"{self.model1.alias} [Best SP]"
+            s2_name = f"{self.model2.alias} [Best SP]"
+        else:
+            preds_s1, thresh_s1 = self._compute_pileup_predictions(
+                model_1, raw_features, raw_labels, feature_names, train_folds[best_fold_1],
+                test_indices_arr, ring_cols_1, eval_1, target_pd,
+            )
+            preds_s2, thresh_s2 = self._compute_pileup_predictions(
+                model_2, raw_features, raw_labels, feature_names, train_folds[best_fold_2],
+                test_indices_arr, ring_cols_2, eval_2, target_pd,
+            )
+            s1_name = f"{self.model1.alias} [T(mu), {pd_tag}]"
             s2_name = f"{self.model2.alias} [T(mu), {pd_tag}]"
 
         valid_features: List[str] = []

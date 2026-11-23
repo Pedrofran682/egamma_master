@@ -35,6 +35,8 @@ def test_runner_validation_and_target_pd(tmp_path: Path) -> None:
     )
     assert np.isclose(pd_val, 0.9)
     assert "90.00%" in pd_tag
+    assert "best_sp_vs_best_sp" in SingleRegionComparisonRunner.VALID_MODES
+    assert "pileup_vs_pileup" in SingleRegionComparisonRunner.VALID_MODES
 
 
 def test_runner_quadrant_and_variable_analysis(tmp_path: Path) -> None:
