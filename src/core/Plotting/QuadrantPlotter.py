@@ -19,6 +19,9 @@ VARIABLE_LABELS: Dict[str, str] = {
     "Rcore": r"L2 $R_{\text{core}}$ ($E_{237} / E_{277}$)",
     "Rhad": r"L2 $R_{\text{had}}$ ($E_{\text{had1}} / E_T$)",
     "Eratio": r"L2 $E_{\text{ratio}}$ ($(E_{\text{max1}} - E_{\text{max2}}) / (E_{\text{max1}} + E_{\text{max2}})$)",
+    "trig_L2_calo_et": r"L2 $E_T$ [MeV]",
+    "trig_L2_calo_eta": r"L2 $\eta$",
+    "trig_L2_calo_phi": r"L2 $\phi$",
     "trig_L2_calo_weta2": r"L2 $w_{\eta 2}$ (Lateral width in EM2)",
     "trig_L2_calo_wstot": r"L2 $w_{\text{stot}}$ (Total width in strips)",
     "trig_L2_calo_fracs1": r"L2 $f_{1}$ (Energy fraction in EM1)",
@@ -27,6 +30,7 @@ VARIABLE_LABELS: Dict[str, str] = {
     "trig_L2_calo_e2tsts1": r"L2 $E_{\text{max2}}$ [MeV]",
     "trig_L2_calo_e237": r"L2 $E_{237}$ [MeV]",
     "trig_L2_calo_e277": r"L2 $E_{277}$ [MeV]",
+    "avgmu": r"$\langle\mu\rangle$",
 }
 
 
@@ -77,6 +81,7 @@ class QuadrantPlotter(BasePlotter):
         file_format: str = "pdf",
         nbins: int = 40,
         log_y: bool = False,
+        class_filter: Optional[str] = None,
     ) -> Optional[str]:
         """Renders 1D histogram of a shower shape variable partitioned by the 4 quadrant categories.
 
@@ -132,12 +137,23 @@ class QuadrantPlotter(BasePlotter):
         bins = np.linspace(q_low, q_high, nbins + 1)
         bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
+        sample_defs = [
+            ("signal", self.tr(PlotTextKey.QUADRANT_SIGNAL_TITLE), labels == 1, self.tr(PlotTextKey.QUADRANT_TRUE_SIGNAL)),
+            ("background", self.tr(PlotTextKey.QUADRANT_BACKGROUND_TITLE), labels == 0, self.tr(PlotTextKey.QUADRANT_TRUE_BACKGROUND)),
+        ]
+        if class_filter is not None:
+            if class_filter not in ("signal", "background"):
+                raise ValueError(f"Invalid class_filter '{class_filter}'. Expected 'signal', 'background', or None.")
+            sample_defs = [s for s in sample_defs if s[0] == class_filter]
+
+        n_cols = len(sample_defs)
         mh.style.use("ATLAS")
         fig, axes = plt.subplots(
             2,
-            2,
-            figsize=(16, 7.5),
+            n_cols,
+            figsize=(8 * n_cols, 7.5),
             sharex="col",
+            squeeze=False,
             gridspec_kw={"height_ratios": [3.2, 1.0], "hspace": 0.08, "wspace": 0.18},
         )
         region_str = self._get_region_label(result.iet, result.ieta)
@@ -155,12 +171,8 @@ class QuadrantPlotter(BasePlotter):
             weight="bold",
         )
 
-        sample_configs = [
-            (self.tr(PlotTextKey.QUADRANT_SIGNAL_TITLE), labels == 1, axes[0, 0], axes[1, 0], self.tr(PlotTextKey.QUADRANT_TRUE_SIGNAL)),
-            (self.tr(PlotTextKey.QUADRANT_BACKGROUND_TITLE), labels == 0, axes[0, 1], axes[1, 1], self.tr(PlotTextKey.QUADRANT_TRUE_BACKGROUND)),
-        ]
-
-        for sample_title, s_mask, ax_main, ax_res, true_label in sample_configs:
+        for col_idx, (_, sample_title, s_mask, true_label) in enumerate(sample_defs):
+            ax_main, ax_res = axes[0, col_idx], axes[1, col_idx]
             ax_main.set_title(sample_title, fontsize=12, weight="bold")
             val_true = values[s_mask & finite_mask]
             n_true = len(val_true)
@@ -174,7 +186,7 @@ class QuadrantPlotter(BasePlotter):
                     color="black",
                     markersize=4,
                     zorder=5,
-                    label=f"{true_label} (N={n_true:,})",
+                    label=true_label,
                 )
 
             for cat_name, color in palette.items():
@@ -190,7 +202,7 @@ class QuadrantPlotter(BasePlotter):
                         histtype="step",
                         linewidth=1.8,
                         color=color,
-                        label=f"{cat_name} (N={count:,})",
+                        label=cat_name,
                     )
                     ax_main.hist(
                         cat_vals,
@@ -201,7 +213,7 @@ class QuadrantPlotter(BasePlotter):
                     )
                 else:
                     counts_cat = np.zeros_like(counts_true)
-                    ax_main.plot([], [], color=color, label=f"{cat_name} (N=0)")
+                    ax_main.plot([], [], color=color, label=cat_name)
 
                 with np.errstate(divide="ignore", invalid="ignore"):
                     ratio = np.where(counts_true > 0, counts_cat / counts_true, np.nan)
@@ -238,16 +250,16 @@ class QuadrantPlotter(BasePlotter):
             ax_res.set_xlabel(var_display, fontsize=11)
             ax_res.set_ylim(-0.05, 1.15)
             ax_res.grid(True, linestyle=":", alpha=0.5)
+            fig.align_ylabels([ax_main, ax_res])
 
-        fig.align_ylabels([axes[0, 0], axes[1, 0]])
-        fig.align_ylabels([axes[0, 1], axes[1, 1]])
-        fig.subplots_adjust(top=0.90, bottom=0.09, left=0.07, right=0.98)
+        fig.subplots_adjust(top=0.90, bottom=0.09, left=0.10 if n_cols == 1 else 0.07, right=0.98)
 
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_{var_name}_quadrant_hist.{file_format}"
+        target_dir = pathlib.Path(output_dir) / class_filter if class_filter else output_dir
         return self.save_figure(
             fig,
-            output_dir,
+            target_dir,
             "ShowershapeHistograms",
             filename,
             file_format=file_format,
@@ -318,6 +330,7 @@ class QuadrantPlotter(BasePlotter):
         output_dir: str | pathlib.Path,
         file_format: str = "pdf",
         bins: int = 10,
+        class_filter: Optional[str] = None,
     ) -> Optional[str]:
         """Renders 2-panel scatter plot with error bars of classification efficiency vs a variable.
 
@@ -371,73 +384,47 @@ class QuadrantPlotter(BasePlotter):
         if len(s1_sig_x) == 0 and len(s2_sig_x) == 0:
             return None
 
-        mh.style.use("ATLAS")
-        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         region_str = self._get_region_label(result.iet, result.ieta)
         var_label = self.tr(PlotTextKey.QUADRANT_VAR_ET) if var_name == "et" else self.tr(PlotTextKey.QUADRANT_VAR_ETA)
 
         s1_name = result.strategy1_name
         s2_name = result.strategy2_name
 
-        if len(s1_sig_x) > 0:
-            axes[0].errorbar(
-                s1_sig_x,
-                s1_sig_eff,
-                yerr=s1_sig_err,
-                fmt="o",
-                capsize=4,
-                markersize=6,
-                color="#1f77b4",
-                label=s1_name,
-            )
-        if len(s2_sig_x) > 0:
-            axes[0].errorbar(
-                s2_sig_x,
-                s2_sig_eff,
-                yerr=s2_sig_err,
-                fmt="s",
-                capsize=4,
-                markersize=6,
-                color="#ff7f0e",
-                label=s2_name,
-            )
+        panels = [
+            (
+                "signal",
+                s1_sig_x, s1_sig_eff, s1_sig_err,
+                s2_sig_x, s2_sig_eff, s2_sig_err,
+                self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_YLABEL),
+                self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_VS_TITLE, var_label=var_label),
+            ),
+            (
+                "background",
+                s1_bg_x, s1_bg_eff, s1_bg_err,
+                s2_bg_x, s2_bg_eff, s2_bg_err,
+                self.tr(PlotTextKey.QUADRANT_BG_EFF_YLABEL),
+                self.tr(PlotTextKey.QUADRANT_BG_EFF_VS_TITLE, var_label=var_label),
+            ),
+        ]
+        if class_filter is not None:
+            if class_filter not in ("signal", "background"):
+                raise ValueError(f"Invalid class_filter '{class_filter}'. Expected 'signal', 'background', or None.")
+            panels = [p for p in panels if p[0] == class_filter]
 
-        axes[0].set_xlabel(var_label, fontsize=11)
-        axes[0].set_ylabel(self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_YLABEL), fontsize=11)
-        axes[0].set_title(self.tr(PlotTextKey.QUADRANT_SIGNAL_EFF_VS_TITLE, var_label=var_label), fontsize=12, weight="bold")
-        axes[0].set_ylim(-0.02, 1.05)
-        axes[0].grid(True, linestyle=":", alpha=0.6)
-        axes[0].legend(loc="lower right", framealpha=0.9)
-
-        if len(s1_bg_x) > 0:
-            axes[1].errorbar(
-                s1_bg_x,
-                s1_bg_eff,
-                yerr=s1_bg_err,
-                fmt="o",
-                capsize=4,
-                markersize=6,
-                color="#1f77b4",
-                label=s1_name,
-            )
-        if len(s2_bg_x) > 0:
-            axes[1].errorbar(
-                s2_bg_x,
-                s2_bg_eff,
-                yerr=s2_bg_err,
-                fmt="s",
-                capsize=4,
-                markersize=6,
-                color="#ff7f0e",
-                label=s2_name,
-            )
-
-        axes[1].set_xlabel(var_label, fontsize=11)
-        axes[1].set_ylabel(self.tr(PlotTextKey.QUADRANT_BG_EFF_YLABEL), fontsize=11)
-        axes[1].set_title(self.tr(PlotTextKey.QUADRANT_BG_EFF_VS_TITLE, var_label=var_label), fontsize=12, weight="bold")
-        axes[1].set_ylim(-0.02, 1.05)
-        axes[1].grid(True, linestyle=":", alpha=0.6)
-        axes[1].legend(loc="lower right", framealpha=0.9)
+        mh.style.use("ATLAS")
+        fig, axes = plt.subplots(1, len(panels), figsize=(8 * len(panels), 6), squeeze=False)
+        for col_idx, (_, x1, eff1, err1, x2, eff2, err2, ylabel, panel_title) in enumerate(panels):
+            ax = axes[0, col_idx]
+            if len(x1) > 0:
+                ax.errorbar(x1, eff1, yerr=err1, fmt="o", capsize=4, markersize=6, color="#1f77b4", label=s1_name)
+            if len(x2) > 0:
+                ax.errorbar(x2, eff2, yerr=err2, fmt="s", capsize=4, markersize=6, color="#ff7f0e", label=s2_name)
+            ax.set_xlabel(var_label, fontsize=11)
+            ax.set_ylabel(ylabel, fontsize=11)
+            ax.set_title(panel_title, fontsize=12, weight="bold")
+            ax.set_ylim(-0.02, 1.05)
+            ax.grid(True, linestyle=":", alpha=0.6)
+            ax.legend(loc="lower right", framealpha=0.9)
 
         fig.suptitle(
             self.tr(
@@ -454,9 +441,10 @@ class QuadrantPlotter(BasePlotter):
 
         prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_efficiency_vs_{var_name}.{file_format}"
+        target_dir = pathlib.Path(output_dir) / class_filter if class_filter else output_dir
         return self.save_figure(
             fig,
-            output_dir,
+            target_dir,
             "EfficiencyCurves",
             filename,
             file_format=file_format,
@@ -678,61 +666,50 @@ class QuadrantPlotter(BasePlotter):
             region_hist_dir = hist_base_dir / f"iet{res.iet}_ieta{res.ieta}"
             region_eff_dir = eff_base_dir / f"iet{res.iet}_ieta{res.ieta}"
 
+            class_filters = ("signal", "background") if kwargs.get("separate_classes", True) else (None,)
             for var_name in res.showershapes.keys():
-                path = self.plot_showershape_histogram(
-                    result=res,
-                    var_name=var_name,
-                    output_dir=region_hist_dir,
-                    file_format=file_format,
-                    log_y=log_y,
-                )
-                if path:
-                    saved_paths["histograms"].append(path)
+                for c_filter in class_filters:
+                    path = self.plot_showershape_histogram(
+                        result=res,
+                        var_name=var_name,
+                        output_dir=region_hist_dir,
+                        file_format=file_format,
+                        log_y=log_y,
+                        class_filter=c_filter,
+                    )
+                    if path:
+                        saved_paths["histograms"].append(path)
 
-            et_eff_path = self.plot_efficiency_vs_variable(
-                result=res,
-                var_name="et",
-                output_dir=region_eff_dir,
-                file_format=file_format,
-            )
-            if et_eff_path:
-                saved_paths["efficiency_curves"].append(et_eff_path)
-
-            eta_eff_path = self.plot_efficiency_vs_variable(
-                result=res,
-                var_name="eta",
-                output_dir=region_eff_dir,
-                file_format=file_format,
-            )
-            if eta_eff_path:
-                saved_paths["efficiency_curves"].append(eta_eff_path)
+            for eff_var in ("et", "eta"):
+                for c_filter in class_filters:
+                    eff_path = self.plot_efficiency_vs_variable(
+                        result=res,
+                        var_name=eff_var,
+                        output_dir=region_eff_dir,
+                        file_format=file_format,
+                        class_filter=c_filter,
+                    )
+                    if eff_path:
+                        saved_paths["efficiency_curves"].append(eff_path)
 
             log.info(f"[{region_tag}] Generated figures in {region_hist_dir} and {region_eff_dir}")
 
         global_res = next((r for r in results if r.iet < 0), None)
         if global_res is not None:
             global_eff_dir = eff_base_dir / "global"
-            global_et_path = self.plot_efficiency_vs_variable(
-                result=global_res,
-                var_name="et",
-                output_dir=global_eff_dir,
-                file_format=file_format,
-                bins=20,
-            )
-            if global_et_path:
-                saved_paths["efficiency_curves"].append(global_et_path)
-                log.info(f"[Global] Generated full efficiency vs ET: {global_et_path}")
-
-            global_eta_path = self.plot_efficiency_vs_variable(
-                result=global_res,
-                var_name="eta",
-                output_dir=global_eff_dir,
-                file_format=file_format,
-                bins=20,
-            )
-            if global_eta_path:
-                saved_paths["efficiency_curves"].append(global_eta_path)
-                log.info(f"[Global] Generated full efficiency vs eta: {global_eta_path}")
+            for eff_var in ("et", "eta"):
+                for c_filter in class_filters:
+                    global_eff_path = self.plot_efficiency_vs_variable(
+                        result=global_res,
+                        var_name=eff_var,
+                        output_dir=global_eff_dir,
+                        file_format=file_format,
+                        bins=20,
+                        class_filter=c_filter,
+                    )
+                    if global_eff_path:
+                        saved_paths["efficiency_curves"].append(global_eff_path)
+                        log.info(f"[Global] Generated full efficiency vs {eff_var}: {global_eff_path}")
 
         summary_path = self.plot_regional_summary(results, summary_dir, file_format=file_format)
         if summary_path:

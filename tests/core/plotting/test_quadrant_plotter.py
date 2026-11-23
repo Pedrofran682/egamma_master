@@ -100,6 +100,8 @@ def test_plot_workflow_with_log_y(tmp_path: pathlib.Path, mock_regional_result: 
         log_y=True,
     )
 
-    assert len(saved["histograms"]) == 2
+    assert len(saved["histograms"]) == 4
+    assert any("/signal/" in p or "\\signal\\" in p for p in saved["histograms"])
+    assert any("/background/" in p or "\\background\\" in p for p in saved["histograms"])
     for p in saved["histograms"]:
         assert pathlib.Path(p).exists()

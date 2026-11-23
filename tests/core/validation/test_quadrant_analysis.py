@@ -148,8 +148,8 @@ class TestQuadrantAnalysis(unittest.TestCase):
         saved = plotter.plot([res1, res2, global_res], self.output_dir, file_format="png")
         self.assertEqual(len(saved["summary"]), 1)
         self.assertEqual(len(saved["class_efficiencies"]), 1)
-        self.assertEqual(len(saved["histograms"]), 8)
-        self.assertEqual(len(saved["efficiency_curves"]), 6)
+        self.assertEqual(len(saved["histograms"]), 16)
+        self.assertEqual(len(saved["efficiency_curves"]), 12)
 
         for p in saved["histograms"]:
             self.assertTrue(os.path.exists(p))

@@ -8,6 +8,7 @@ mh.style.use("ATLAS")
 
 from src.core.Interfaces.BasePlotter import BasePlotter
 from src.core.Plotting.Localization import PlotTextKey
+from src.core.Plotting.QuadrantPlotter import VARIABLE_LABELS
 
 
 class FeatureDistributionPlotter(BasePlotter):
@@ -39,7 +40,8 @@ class FeatureDistributionPlotter(BasePlotter):
         bin_centers = feature_data["bin_centers"]
         true_counts = feature_data["true_counts"]
         true_err = np.sqrt(true_counts)
-        display_title = feature_data.get("display_title", feature_name)
+        raw_title = feature_data.get("display_title", feature_name)
+        display_title = VARIABLE_LABELS.get(feature_name, raw_title) if raw_title == feature_name else raw_title
         class_label = (
             self.tr(PlotTextKey.FEATURE_DIST_TRUE_SIGNAL)
             if is_signal
