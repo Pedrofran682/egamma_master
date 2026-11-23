@@ -558,7 +558,7 @@ class PlotTranslator:
         },
         PlotTextKey.FEATURE_DIST_PREFIX_BACKGROUND: {
             "en": "Jet Leak in Signal",
-            "pt": "Vazamento de Jatos no Sinal",
+            "pt": "Vazamento de Jatos",
         },
         PlotTextKey.FEATURE_DIST_SUBPLOT_TITLE: {
             "en": "{prefix}: {display_title}{title_suffix}",
@@ -578,7 +578,7 @@ class PlotTranslator:
         },
         PlotTextKey.FEATURE_DIST_OVERVIEW_HEADLINE_BACKGROUND: {
             "en": "Jet Leakage in Signal",
-            "pt": "Vazamento de Jatos no Sinal",
+            "pt": "Vazamento de Jatos",
         },
         PlotTextKey.FEATURE_DIST_OVERVIEW_SUPTITLE: {
             "en": "Holdout {headline} Selection{suffix}",
