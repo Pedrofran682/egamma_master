@@ -18,7 +18,7 @@ log = logging.getLogger()
 VARIABLE_LABELS: Dict[str, str] = {
     "Rcore": r"L2 $R_{\text{core}}$ ($E_{237} / E_{277}$)",
     "Rhad": r"L2 $R_{\text{had}}$ ($E_{\text{had1}} / E_T$)",
-    "Eratio": r"L2 $E_{\text{ratio}}$)",
+    "Eratio": r"L2 $E_{\text{ratio}}$",
     "trig_L2_calo_et": r"L2 $E_T$ [MeV]",
     "trig_L2_calo_eta": r"L2 $\eta$",
     "trig_L2_calo_phi": r"L2 $\phi$",
