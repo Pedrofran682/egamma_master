@@ -130,7 +130,7 @@ class FeatureDistributionPlotter(BasePlotter):
             )
 
         ax_res.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, alpha=0.8)
-        ax_res.set_ylabel(self.tr(PlotTextKey.FEATURE_DIST_RATIO_YLABEL), fontsize=ratio_ylabel_fontsize)
+        # ax_res.set_ylabel(self.tr(PlotTextKey.FEATURE_DIST_RATIO_YLABEL), fontsize=ratio_ylabel_fontsize)
         ax_res.set_xlabel(display_title, loc="center")
         ax_res.grid(True, linestyle=":", alpha=0.5)
 
@@ -154,7 +154,7 @@ class FeatureDistributionPlotter(BasePlotter):
             ),
             pad=12,
         )
-        ax_main.set_ylabel(self.tr(PlotTextKey.FEATURE_DIST_EVENTS_YLABEL, prefix=prefix))
+        # ax_main.set_ylabel(self.tr(PlotTextKey.FEATURE_DIST_EVENTS_YLABEL, prefix=prefix))
         plt.setp(ax_main.get_xticklabels(), visible=False)
 
         if log_y:
@@ -361,4 +361,3 @@ class FeatureDistributionPlotter(BasePlotter):
             **kwargs: Extra parameters.
         """
         return None
-
