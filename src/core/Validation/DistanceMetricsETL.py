@@ -303,7 +303,7 @@ class DistanceMetricsETL:
             ("KS Distance ($D$)", "KS Distance (D)", "KS Uncertainty"),
             ("Wasserstein ($W_1$)", "Wasserstein Distance", "Wasserstein Uncertainty"),
             ("KL Divergence", "KL Divergence", "KL Uncertainty"),
-            ("JS Divergence", "JS Divergence", "JS Uncertainty"),
+            ("JS Distance ($\\sqrt{D_{\\text{JS}}}$)", "JS Divergence", "JS Uncertainty"),
         ]
 
         return DistanceMetricsETL.format_table_with_uncertainties(

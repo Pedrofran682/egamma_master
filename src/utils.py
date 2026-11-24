@@ -643,7 +643,7 @@ def compute_js_divergence_with_uncertainty(
     random_seed: int = 42,
     epsilon: float = 1e-7,
 ) -> Tuple[float, float]:
-    """Computes symmetric Jensen-Shannon divergence in [0, 1] and bootstrap uncertainty.
+    """Computes symmetric Jensen-Shannon distance sqrt(D_JS) in [0, 1] and bootstrap uncertainty.
 
     Args:
         sample_ref: Reference distribution sample P.
@@ -654,7 +654,7 @@ def compute_js_divergence_with_uncertainty(
         epsilon: Regularization smoothing constant.
 
     Returns:
-        Tuple of (js_divergence, js_uncertainty).
+        Tuple of (js_distance, js_uncertainty).
     """
     sample_ref = sample_ref[np.isfinite(sample_ref)]
     sample_eval = sample_eval[np.isfinite(sample_eval)]
@@ -670,7 +670,8 @@ def compute_js_divergence_with_uncertainty(
 
     p, q = _estimate_empirical_pmf(sample_ref, sample_eval, bins=fixed_bin_edges, epsilon=epsilon)
     m = 0.5 * (p + q)
-    js_stat = float((0.5 * np.sum(special.rel_entr(p, m)) + 0.5 * np.sum(special.rel_entr(q, m))) / np.log(2))
+    js_div = float((0.5 * np.sum(special.rel_entr(p, m)) + 0.5 * np.sum(special.rel_entr(q, m))) / np.log(2))
+    js_stat = float(np.sqrt(max(0.0, js_div)))
 
     rng = np.random.default_rng(random_seed)
     n_ref = len(sample_ref)
@@ -683,7 +684,7 @@ def compute_js_divergence_with_uncertainty(
         bp, bq = _estimate_empirical_pmf(b_ref, b_eval, bins=fixed_bin_edges, epsilon=epsilon)
         bm = 0.5 * (bp + bq)
         js_val = (0.5 * np.sum(special.rel_entr(bp, bm)) + 0.5 * np.sum(special.rel_entr(bq, bm))) / np.log(2)
-        js_boot[b] = float(js_val)
+        js_boot[b] = float(np.sqrt(max(0.0, js_val)))
 
     js_unc = float(np.std(js_boot, ddof=1))
     return js_stat, js_unc

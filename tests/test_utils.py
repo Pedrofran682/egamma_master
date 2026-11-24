@@ -92,4 +92,12 @@ def test_compute_js_divergence_with_uncertainty():
     assert 0.0 <= js_stat <= 1.0
     assert js_unc >= 0.0
 
+    # Verify sqrt(D_JS) is returned rather than raw D_JS (for well-separated samples, sqrt(D_JS) > D_JS)
+    far_eval = rng.normal(5.0, 1.0, size=200)
+    js_far, js_far_unc = compute_js_divergence_with_uncertainty(
+        sample_ref, far_eval, bins=20, n_bootstraps=15, random_seed=42
+    )
+    assert 0.8 < js_far <= 1.0
+    assert js_far_unc >= 0.0
+
 
