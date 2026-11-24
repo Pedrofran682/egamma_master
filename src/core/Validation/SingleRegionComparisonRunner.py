@@ -10,6 +10,7 @@ from sklearn.metrics import roc_curve
 from src.Parser.NeuralRingerTrainerConfiguration import NeuralRingerTrainerConfiguration
 from src.core.Datasets.SplitManifest import SplitManifest
 from src.core.Plotting.FeatureDistributionPlotter import FeatureDistributionPlotter
+from src.core.Plotting.PileupPlotter import PileupPlotter
 from src.core.Plotting.QuadrantPlotter import QuadrantPlotter
 from src.core.Trainers.NeuralRingerTrainer import NeuralRingerTrainer
 from src.core.Validation.DistributionComparator import DistributionComparator
@@ -84,6 +85,8 @@ class ComparisonPayload:
     athena_name: str = ""
     is_s1_ml: bool = True
     is_s2_ml: bool = True
+    mu_test: Optional[np.ndarray] = None
+    pileup_calibrations: Optional[List[Dict[str, Any]]] = None
 
 
 class SingleRegionComparisonRunner:
@@ -258,7 +261,7 @@ class SingleRegionComparisonRunner:
         ring_cols: np.ndarray,
         eval_res: HoldoutEvaluationResult,
         target_pd: float,
-    ) -> Tuple[np.ndarray, float]:
+    ) -> Tuple[np.ndarray, float, Any, np.ndarray, np.ndarray]:
         tr_idx, va_idx = train_fold
         calib_idx = np.concatenate([tr_idx, va_idx])
         logits_cal = HoldoutEvaluator.predict_logits(
@@ -266,18 +269,20 @@ class SingleRegionComparisonRunner:
         )
         mu_all = PileupAnalyzer.extract_feature(raw_features, [str(f) for f in feature_names], "avgmu")
         sig_mask = raw_labels[calib_idx] == 1
+        mu_sig_cal = mu_all[calib_idx][sig_mask]
+        logits_sig_cal = logits_cal[sig_mask]
         cal = PileupThresholdCalibrator(
             bins_mu=self.bins_mu, n_bootstraps=self.n_bootstraps_pileup, random_seed=42
         ).calibrate_working_point(
-            mu_values=mu_all[calib_idx][sig_mask],
-            discriminant_values=logits_cal[sig_mask],
+            mu_values=mu_sig_cal,
+            discriminant_values=logits_sig_cal,
             target_pd=target_pd,
             working_point_name="Target",
         )
         preds = PileupThresholdCalibrator.apply_threshold(
             eval_res.predicted_logits, mu_all[test_indices], cal.slope, cal.intercept
         )
-        return preds, float(cal.intercept)
+        return preds, float(cal.intercept), cal, mu_sig_cal, logits_sig_cal
 
     def _resolve_strategy_predictions(
         self,
@@ -295,16 +300,16 @@ class SingleRegionComparisonRunner:
         target_pd: float,
         pd_tag: str,
         preds_athena: np.ndarray,
-    ) -> Tuple[np.ndarray, float, str, Optional[np.ndarray], bool]:
+    ) -> Tuple[np.ndarray, float, str, Optional[np.ndarray], bool, Optional[Dict[str, Any]]]:
         if method == "athena_cut":
             name = spec.alias or f"Athena Cut ({self.working_point.capitalize()})"
-            return preds_athena, 0.0, name, None, False
+            return preds_athena, 0.0, name, None, False, None
         assert model is not None and ring_cols is not None and eval_res is not None
         if method == "best_sp":
             preds, thresh = self._compute_best_sp_predictions(
                 model, raw_features, raw_labels, train_folds[best_fold][1], ring_cols, eval_res
             )
-            return preds, thresh, f"{spec.alias} [Best SP]", eval_res.predicted_probabilities, True
+            return preds, thresh, f"{spec.alias} [Best SP]", eval_res.predicted_probabilities, True, None
         if method == "hard_cut":
             return (
                 eval_res.predictions_calibrated_cut,
@@ -312,12 +317,20 @@ class SingleRegionComparisonRunner:
                 f"{spec.alias} [Hard Cut, {pd_tag}]",
                 eval_res.predicted_probabilities,
                 True,
+                None,
             )
-        preds, thresh = self._compute_pileup_predictions(
+        preds, thresh, cal, mu_sig_cal, logits_sig_cal = self._compute_pileup_predictions(
             model, raw_features, raw_labels, feature_names, train_folds[best_fold],
             test_indices, ring_cols, eval_res, target_pd,
         )
-        return preds, thresh, f"{spec.alias} [T(mu), {pd_tag}]", eval_res.predicted_probabilities, True
+        s_name = f"{spec.alias} [T(mu), {pd_tag}]"
+        cal_info = {
+            "strategy_name": s_name,
+            "calibration": cal,
+            "mu_signal_calib": mu_sig_cal,
+            "logits_signal_calib": logits_sig_cal,
+        }
+        return preds, thresh, s_name, eval_res.predicted_probabilities, True, cal_info
 
     def prepare(self, mode: str, features_to_plot: List[str]) -> ComparisonPayload:
         """Loads models/data and computes predictions for the requested comparison mode.
@@ -393,16 +406,31 @@ class SingleRegionComparisonRunner:
         else:
             ring_cols_2 = eval_2 = None
 
-        preds_s1, thresh_s1, s1_name, probs_s1, is_s1_ml = self._resolve_strategy_predictions(
+        preds_s1, thresh_s1, s1_name, probs_s1, is_s1_ml, cal_1 = self._resolve_strategy_predictions(
             method_1, self.model1, model_1, best_fold_1 or 0, ring_cols_1, eval_1,
             raw_features, raw_labels, feature_names, train_folds, test_indices_arr,
             target_pd, pd_tag, preds_athena,
         )
-        preds_s2, thresh_s2, s2_name, probs_s2, is_s2_ml = self._resolve_strategy_predictions(
+        preds_s2, thresh_s2, s2_name, probs_s2, is_s2_ml, cal_2 = self._resolve_strategy_predictions(
             method_2, self.model2, model_2, best_fold_2 or 0, ring_cols_2, eval_2,
             raw_features, raw_labels, feature_names, train_folds, test_indices_arr,
             target_pd, pd_tag, preds_athena,
         )
+
+        pileup_cals: List[Dict[str, Any]] = []
+        if cal_1 is not None:
+            cal_1["tag"] = "s1"
+            pileup_cals.append(cal_1)
+        if cal_2 is not None:
+            cal_2["tag"] = "s2"
+            pileup_cals.append(cal_2)
+
+        try:
+            mu_test: Optional[np.ndarray] = PileupAnalyzer.extract_feature(
+                test_features, [str(f) for f in feature_names], "avgmu"
+            )
+        except KeyError:
+            mu_test = None
 
         valid_features: List[str] = []
         for feat in features_to_plot:
@@ -444,6 +472,8 @@ class SingleRegionComparisonRunner:
             athena_name=f"Athena Cut ({self.working_point.capitalize()})",
             is_s1_ml=is_s1_ml,
             is_s2_ml=is_s2_ml,
+            mu_test=mu_test,
+            pileup_calibrations=pileup_cals,
         )
 
     def run_quadrant_analysis(
@@ -626,3 +656,132 @@ class SingleRegionComparisonRunner:
             save_overview_grid=True,
         )
         return js_df, fig
+
+    def run_pileup_analysis(
+        self,
+        payload: ComparisonPayload,
+        output_dir: Path,
+        tables_dir: Path,
+        include_athena_reference: bool = True,
+    ) -> Tuple[pd.DataFrame, Dict[str, List[Any]]]:
+        """Exports 2D pileup threshold calibration plots and efficiency-vs-mu plots."""
+        pileup_dir = output_dir / "Pileup"
+        pileup_dir.mkdir(parents=True, exist_ok=True)
+        tables_dir.mkdir(parents=True, exist_ok=True)
+
+        plotter = PileupPlotter(language=self.language)
+        calibrator = PileupThresholdCalibrator(
+            bins_mu=self.bins_mu, n_bootstraps=self.n_bootstraps_pileup, random_seed=42
+        )
+
+        fit_rows: List[Dict[str, Any]] = []
+        calibration_figs: List[Any] = []
+        for cal_info in payload.pileup_calibrations or []:
+            cal = cal_info["calibration"]
+            tag = cal_info.get("tag", "s")
+            dist_2d = calibrator.compute_2d_distribution(
+                cal_info["mu_signal_calib"], cal_info["logits_signal_calib"], bins=35
+            )
+            fig_calib = plotter.plot_2d_threshold_calibration(
+                distribution=dist_2d,
+                calibrations=[cal],
+                title="",
+                region_label=f"iet{payload.iet}.ieta{payload.ieta}",
+                output_path=(
+                    pileup_dir
+                    / f"{payload.region_key}_{payload.mode}_pileup_2d_threshold_calibration_{tag}_plot.{self.plot_format}"
+                ),
+                file_format=self.plot_format,
+            )
+            calibration_figs.append(fig_calib)
+            sign = "+" if cal.intercept >= 0 else "-"
+            fit_rows.append({
+                "Strategy": cal_info["strategy_name"],
+                "Target PD (%)": f"{cal.target_pd * 100:.2f}%",
+                "Slope (a)": f"{cal.slope:.4f}",
+                "Intercept (b)": f"{cal.intercept:.4f}",
+                "R^2": f"{cal.r_squared:.4f}",
+                "Fit Formula": f"T(mu) = {cal.slope:.4f}*mu {sign} {abs(cal.intercept):.4f}",
+            })
+
+        fit_df = pd.DataFrame(fit_rows)
+        if not fit_df.empty:
+            save_table(fit_df, tables_dir, payload.region_key, f"{payload.mode}_pileup_fit_parameters")
+
+        efficiency_figs: List[Any] = []
+        if payload.mu_test is not None:
+            strategies = [
+                {
+                    "name": payload.strategy1_name,
+                    "preds": payload.preds_s1,
+                    "is_ml": payload.is_s1_ml,
+                    "color": "#005A9C",
+                    "marker": "s",
+                    "is_reference": not payload.is_s1_ml,
+                },
+                {
+                    "name": payload.strategy2_name,
+                    "preds": payload.preds_s2,
+                    "is_ml": payload.is_s2_ml,
+                    "color": "#E65100",
+                    "marker": "^",
+                    "is_reference": not payload.is_s2_ml,
+                },
+            ]
+            if (
+                include_athena_reference
+                and payload.preds_athena is not None
+                and payload.is_s1_ml
+                and payload.is_s2_ml
+            ):
+                strategies.append({
+                    "name": payload.athena_name or f"Athena Cut ({self.working_point.capitalize()})",
+                    "preds": payload.preds_athena,
+                    "is_ml": False,
+                    "color": "#2E7D32",
+                    "marker": "o",
+                    "is_reference": True,
+                })
+
+            for is_sig, cls_tag in [(True, "signal"), (False, "background")]:
+                models_data: List[Dict[str, Any]] = []
+                table_cols: Dict[str, Any] = {}
+                for idx_s, s in enumerate(strategies):
+                    eff = PileupAnalyzer.compute_efficiency_vs_mu(
+                        payload.mu_test, payload.test_labels, s["preds"], bins=self.bins_mu, is_signal=is_sig
+                    )
+                    if idx_s == 0:
+                        table_cols["mu_bin_center"] = eff["bin_centers"]
+                    table_cols[f"{s['name']}_eff"] = eff["efficiencies"]
+                    table_cols[f"{s['name']}_unc"] = eff["uncertainties"]
+                    models_data.append({
+                        "label": s["name"],
+                        "bin_centers": eff["bin_centers"],
+                        "efficiencies": eff["efficiencies"],
+                        "uncertainties": eff["uncertainties"],
+                        "color": s["color"],
+                        "marker": s["marker"],
+                        "is_ml": s["is_ml"],
+                        "is_reference": s["is_reference"],
+                    })
+
+                save_table(
+                    pd.DataFrame(table_cols),
+                    tables_dir,
+                    payload.region_key,
+                    f"{payload.mode}_pileup_efficiency_vs_mu_{cls_tag}",
+                )
+                fig_eff = plotter.plot_efficiency_vs_mu(
+                    models_data=models_data,
+                    title="",
+                    region_label=f"iet{payload.iet}.ieta{payload.ieta}",
+                    is_signal=is_sig,
+                    output_path=(
+                        pileup_dir
+                        / f"{payload.region_key}_{payload.mode}_pileup_efficiency_vs_mu_{cls_tag}_plot.{self.plot_format}"
+                    ),
+                    file_format=self.plot_format,
+                )
+                efficiency_figs.append(fig_eff)
+
+        return fit_df, {"calibration_figs": calibration_figs, "efficiency_figs": efficiency_figs}
