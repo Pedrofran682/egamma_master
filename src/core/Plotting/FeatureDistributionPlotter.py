@@ -301,6 +301,8 @@ class FeatureDistributionPlotter(BasePlotter):
         log_y: bool = False,
         plot_format: str = "pdf",
         cols: int = 2,
+        file_prefix: str = "",
+        save_overview_grid: bool = False,
     ) -> plt.Figure:
         """Exports individual feature figures and returns overview grid.
 
@@ -313,15 +315,18 @@ class FeatureDistributionPlotter(BasePlotter):
             log_y: Whether to use logarithmic scale.
             plot_format: Export graphic format.
             cols: Grid column count.
+            file_prefix: Optional prefix prepended to exported plot filenames.
+            save_overview_grid: Whether to also export the overview grid figure.
 
         Returns:
             Overview grid Matplotlib Figure.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         suffix = "signal_selection" if is_signal else "background_selection"
+        prefix_part = f"{file_prefix}_" if file_prefix else ""
 
         for feat_name in features_to_plot:
-            single_path = output_dir / f"{feat_name}_{suffix}.{plot_format}"
+            single_path = output_dir / f"{prefix_part}{feat_name}_{suffix}.{plot_format}"
             fig_single = self.plot_single_feature(
                 feature_data=plot_data[feat_name],
                 feature_name=feat_name,
@@ -341,6 +346,9 @@ class FeatureDistributionPlotter(BasePlotter):
             log_y=log_y,
             cols=cols,
         )
+        if save_overview_grid:
+            grid_path = output_dir / f"{prefix_part}overview_grid_{suffix}.{plot_format}"
+            grid_fig.savefig(grid_path, format=plot_format, bbox_inches="tight")
         return grid_fig
 
     def plot(self, context: Any, **kwargs: Any) -> Any:

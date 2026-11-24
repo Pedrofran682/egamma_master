@@ -92,12 +92,23 @@ def test_runner_quadrant_and_variable_analysis(tmp_path: Path) -> None:
     strategy_df, counts_df, saved_quad = runner.run_quadrant_analysis(payload, out_dir, tables_dir)
     assert len(strategy_df) == 2
     assert len(counts_df) == 4
-    assert (tables_dir / "et_1_eta_1_best_sp_vs_hard_cut_strategy_metrics.csv").exists()
+    assert (tables_dir / "et_1_eta_1_best_sp_vs_hard_cut_quadrant_strategy_metrics.csv").exists()
+    assert (tables_dir / "et_1_eta_1_best_sp_vs_hard_cut_quadrant_counts.csv").exists()
     assert len(saved_quad["histograms"]) == 2
+    assert all(
+        "et_1_eta_1_best_sp_vs_hard_cut_quadrant_plot_" in Path(p).name
+        for p in saved_quad["histograms"] + saved_quad["efficiency_curves"] + saved_quad["summary"]
+    )
 
     sig_js_df, fig_sig = runner.run_variable_analysis(payload, out_dir, tables_dir, is_signal=True)
     assert not sig_js_df.empty
-    assert (out_dir / "Variables_Signal" / "trig_L2_calo_weta2_signal_selection.png").exists()
+    assert (tables_dir / "et_1_eta_1_best_sp_vs_hard_cut_variable_js_divergence_signal.csv").exists()
+    assert (
+        out_dir / "Variables_Signal" / "et_1_eta_1_best_sp_vs_hard_cut_variable_plot_trig_L2_calo_weta2_signal_selection.png"
+    ).exists()
+    assert (
+        out_dir / "Variables_Signal" / "et_1_eta_1_best_sp_vs_hard_cut_variable_plot_overview_grid_signal_selection.png"
+    ).exists()
     assert fig_sig is not None
 
 
@@ -143,6 +154,21 @@ def test_runner_athena_reference_and_athena_model2(tmp_path: Path) -> None:
     )
     js_with_ref, _ = runner.run_variable_analysis(payload_ml, tmp_path / "out_ref", tmp_path / "tab_ref", is_signal=True)
     assert "Athena Cut (Loose)" in set(js_with_ref["Strategy"])
+    assert (
+        tmp_path
+        / "out_ref"
+        / "Variables_Signal"
+        / "et_1_eta_1_best_sp_vs_hard_cut_with_athena_cut_loose_ref_variable_plot_trig_L2_calo_weta2_signal_selection.png"
+    ).exists()
+
+    m2_ath = ComparisonModelConfig.athena_cut(working_point="loose")
+    runner_ath = SingleRegionComparisonRunner(
+        iet=1, ieta=1, model1=m1, model2=m2_ath, compare_same_model=False, working_point="loose"
+    )
+    assert runner_ath.build_comparison_tag("best_sp_vs_best_sp") == "best_sp_vs_athena_cut_loose"
+    assert runner_ath.build_output_dir(tmp_path, "best_sp_vs_best_sp") == (
+        tmp_path / "Comparison_best_sp_vs_athena_cut_loose_cross_et_1_eta_1"
+    )
 
     payload_athena_s2 = ComparisonPayload(
         mode="best_sp_vs_hard_cut",

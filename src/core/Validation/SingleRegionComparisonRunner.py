@@ -167,6 +167,25 @@ class SingleRegionComparisonRunner:
         self.log_y = log_y
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    def _format_method_tag(self, method: str) -> str:
+        if method == "athena_cut":
+            return f"athena_cut_{self.working_point}"
+        return method
+
+    def build_comparison_tag(self, mode: str) -> str:
+        """Builds a descriptive comparison tag reflecting any per-model method overrides."""
+        if mode not in self.VALID_MODES:
+            raise ValueError(f"Invalid mode '{mode}'. Expected one of {self.VALID_MODES}.")
+        default_m1, default_m2 = self.MODE_TO_METHODS[mode]
+        m1 = self._format_method_tag(self.model1.method or default_m1)
+        m2 = self._format_method_tag(self.model2.method or default_m2)
+        return f"{m1}_vs_{m2}"
+
+    def build_output_dir(self, base_dir: Path, mode: str) -> Path:
+        """Builds a descriptive output directory path for the active comparison configuration."""
+        scope = "same" if self.compare_same_model else "cross"
+        return base_dir / f"Comparison_{self.build_comparison_tag(mode)}_{scope}_{self.region_key}"
+
     def _load_model_and_fold(
         self, spec: ComparisonModelConfig
     ) -> Tuple[NeuralRingerTrainer, torch.nn.Module, int]:
@@ -402,7 +421,7 @@ class SingleRegionComparisonRunner:
         eta_vals = extract_feature_values(test_features, feature_names, "trig_L2_calo_eta")
 
         return ComparisonPayload(
-            mode=mode,
+            mode=self.build_comparison_tag(mode),
             region_key=self.region_key,
             iet=self.iet,
             ieta=self.ieta,
@@ -494,11 +513,18 @@ class SingleRegionComparisonRunner:
                 f"{qm.both_wrong_ratio:.2%}",
             ],
         })
-        save_table(strategy_df, tables_dir, payload.region_key, f"{payload.mode}_strategy_metrics")
+        save_table(strategy_df, tables_dir, payload.region_key, f"{payload.mode}_quadrant_strategy_metrics")
         save_table(counts_df, tables_dir, payload.region_key, f"{payload.mode}_quadrant_counts")
 
         plotter = QuadrantPlotter(language=self.language)
-        saved_plots = plotter.plot([quad_res], output_dir / "Quadrant", file_format=self.plot_format, log_y=self.log_y)
+        quad_prefix = f"{payload.region_key}_{payload.mode}_quadrant_plot"
+        saved_plots = plotter.plot(
+            [quad_res],
+            output_dir / "Quadrant",
+            file_format=self.plot_format,
+            log_y=self.log_y,
+            file_prefix=quad_prefix,
+        )
         return strategy_df, counts_df, saved_plots
 
     def run_variable_analysis(
@@ -576,7 +602,16 @@ class SingleRegionComparisonRunner:
             is_signal=is_signal,
         )
         suffix = "signal" if is_signal else "background"
-        save_table(js_df, tables_dir, payload.region_key, f"{payload.mode}_js_{suffix}")
+        save_table(js_df, tables_dir, payload.region_key, f"{payload.mode}_variable_js_divergence_{suffix}")
+
+        has_athena_ref = (
+            include_athena_reference
+            and payload.preds_athena is not None
+            and payload.is_s1_ml
+            and payload.is_s2_ml
+        )
+        ref_tag = f"_with_athena_cut_{self.working_point}_ref" if has_athena_ref else ""
+        file_prefix = f"{payload.region_key}_{payload.mode}{ref_tag}_variable_plot"
 
         plotter = FeatureDistributionPlotter(language=self.language)
         fig = plotter.plot_and_export_all(
@@ -587,5 +622,7 @@ class SingleRegionComparisonRunner:
             is_signal=is_signal,
             log_y=self.log_y,
             plot_format=self.plot_format,
+            file_prefix=file_prefix,
+            save_overview_grid=True,
         )
         return js_df, fig

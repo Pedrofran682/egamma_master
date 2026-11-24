@@ -82,6 +82,7 @@ class QuadrantPlotter(BasePlotter):
         nbins: int = 40,
         log_y: bool = False,
         class_filter: Optional[str] = None,
+        file_prefix: str = "",
     ) -> Optional[str]:
         """Renders 1D histogram of a shower shape variable partitioned by the 4 quadrant categories.
 
@@ -245,7 +246,7 @@ class QuadrantPlotter(BasePlotter):
 
         fig.subplots_adjust(top=0.93 if n_cols == 1 else 0.90, bottom=0.09, left=0.10 if n_cols == 1 else 0.07, right=0.98)
 
-        prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
+        prefix = file_prefix if file_prefix else (f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global")
         filename = f"{prefix}_{var_name}_quadrant_hist.{file_format}"
         target_dir = pathlib.Path(output_dir) / class_filter if class_filter else output_dir
         return self.save_figure(
@@ -322,6 +323,7 @@ class QuadrantPlotter(BasePlotter):
         file_format: str = "pdf",
         bins: int = 10,
         class_filter: Optional[str] = None,
+        file_prefix: str = "",
     ) -> Optional[str]:
         """Renders 2-panel scatter plot with error bars of classification efficiency vs a variable.
 
@@ -430,7 +432,10 @@ class QuadrantPlotter(BasePlotter):
         )
         plt.tight_layout()
 
-        prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
+        if file_prefix:
+            prefix = f"{file_prefix}_global" if result.iet < 0 else file_prefix
+        else:
+            prefix = f"iet{result.iet}_ieta{result.ieta}" if result.iet >= 0 else "global"
         filename = f"{prefix}_efficiency_vs_{var_name}.{file_format}"
         target_dir = pathlib.Path(output_dir) / class_filter if class_filter else output_dir
         return self.save_figure(
@@ -447,6 +452,7 @@ class QuadrantPlotter(BasePlotter):
         results: List[RegionalQuadrantResult],
         output_dir: str | pathlib.Path,
         file_format: str = "pdf",
+        file_prefix: str = "",
     ) -> Optional[str]:
         """Renders grouped bar plot comparing quadrant breakdown across all evaluated regions.
 
@@ -495,7 +501,8 @@ class QuadrantPlotter(BasePlotter):
         ax.grid(axis="y", linestyle=":", alpha=0.6)
 
         plt.tight_layout()
-        filename = f"regional_quadrant_summary.{file_format}"
+        prefix_part = f"{file_prefix}_" if file_prefix else ""
+        filename = f"{prefix_part}regional_quadrant_summary.{file_format}"
         return self.save_figure(
             fig,
             output_dir,
@@ -510,6 +517,7 @@ class QuadrantPlotter(BasePlotter):
         results: List[RegionalQuadrantResult],
         output_dir: str | pathlib.Path,
         file_format: str = "pdf",
+        file_prefix: str = "",
     ) -> Optional[str]:
         """Renders grouped bar plot comparing classification efficiency per class across regions.
 
@@ -603,7 +611,8 @@ class QuadrantPlotter(BasePlotter):
             weight="bold",
         )
         plt.tight_layout()
-        filename = f"regional_class_efficiencies.{file_format}"
+        prefix_part = f"{file_prefix}_" if file_prefix else ""
+        filename = f"{prefix_part}regional_class_efficiencies.{file_format}"
         return self.save_figure(
             fig,
             output_dir,
@@ -619,6 +628,7 @@ class QuadrantPlotter(BasePlotter):
         output_dir: str | pathlib.Path,
         file_format: str = "pdf",
         log_y: bool = False,
+        file_prefix: str = "",
         **kwargs: object,
     ) -> Dict[str, List[str]]:
         """Coordinates rendering of shower shape histograms, efficiency curves, and regional summaries.
@@ -667,6 +677,7 @@ class QuadrantPlotter(BasePlotter):
                         file_format=file_format,
                         log_y=log_y,
                         class_filter=c_filter,
+                        file_prefix=file_prefix,
                     )
                     if path:
                         saved_paths["histograms"].append(path)
@@ -679,6 +690,7 @@ class QuadrantPlotter(BasePlotter):
                         output_dir=region_eff_dir,
                         file_format=file_format,
                         class_filter=c_filter,
+                        file_prefix=file_prefix,
                     )
                     if eff_path:
                         saved_paths["efficiency_curves"].append(eff_path)
@@ -697,17 +709,22 @@ class QuadrantPlotter(BasePlotter):
                         file_format=file_format,
                         bins=20,
                         class_filter=c_filter,
+                        file_prefix=file_prefix,
                     )
                     if global_eff_path:
                         saved_paths["efficiency_curves"].append(global_eff_path)
                         log.info(f"[Global] Generated full efficiency vs {eff_var}: {global_eff_path}")
 
-        summary_path = self.plot_regional_summary(results, summary_dir, file_format=file_format)
+        summary_path = self.plot_regional_summary(
+            results, summary_dir, file_format=file_format, file_prefix=file_prefix
+        )
         if summary_path:
             saved_paths["summary"].append(summary_path)
             log.info(f"[Summary] Generated regional grouped summary: {summary_path}")
 
-        eff_path = self.plot_regional_class_efficiencies(results, summary_dir, file_format=file_format)
+        eff_path = self.plot_regional_class_efficiencies(
+            results, summary_dir, file_format=file_format, file_prefix=file_prefix
+        )
         if eff_path:
             saved_paths["class_efficiencies"].append(eff_path)
             log.info(f"[Summary] Generated regional class efficiencies: {eff_path}")
