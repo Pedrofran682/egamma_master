@@ -1,4 +1,5 @@
 import pathlib
+import re
 from typing import Any, Dict, List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
@@ -42,6 +43,7 @@ class FeatureDistributionPlotter(BasePlotter):
         true_err = np.sqrt(true_counts)
         raw_title = feature_data.get("display_title", feature_name)
         display_title = VARIABLE_LABELS.get(feature_name, raw_title) if raw_title == feature_name else raw_title
+        title_name = re.sub(r"\s*\[[^\]]+\]", "", display_title).strip()
         class_label = (
             self.tr(PlotTextKey.FEATURE_DIST_TRUE_SIGNAL)
             if is_signal
@@ -147,7 +149,7 @@ class FeatureDistributionPlotter(BasePlotter):
             self.tr(
                 PlotTextKey.FEATURE_DIST_SUBPLOT_TITLE,
                 prefix=prefix,
-                display_title=display_title,
+                display_title=title_name,
                 title_suffix=title_suffix,
             ),
             pad=12,

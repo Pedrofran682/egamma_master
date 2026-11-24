@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
@@ -184,10 +185,29 @@ class SingleRegionComparisonRunner:
         m2 = self._format_method_tag(self.model2.method or default_m2)
         return f"{m1}_vs_{m2}"
 
+    @staticmethod
+    def _sanitize_folder_token(name: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", name.strip()).strip("_")
+        return cleaned or "model"
+
+    def _resolve_model_folder_name(self, spec: Optional[ComparisonModelConfig]) -> str:
+        if spec is None:
+            return "model"
+        if spec.alias:
+            return self._sanitize_folder_token(spec.alias)
+        if spec.method == "athena_cut":
+            return f"Athena_Cut_{self.working_point.capitalize()}"
+        if spec.config_path is not None:
+            return self._sanitize_folder_token(spec.config_path.stem)
+        return "model"
+
     def build_output_dir(self, base_dir: Path, mode: str) -> Path:
         """Builds a descriptive output directory path for the active comparison configuration."""
         scope = "same" if self.compare_same_model else "cross"
-        return base_dir / f"Comparison_{self.build_comparison_tag(mode)}_{scope}_{self.region_key}"
+        m1_folder = self._resolve_model_folder_name(self.model1)
+        m2_folder = self._resolve_model_folder_name(self.model2)
+        models_dir = f"{m1_folder}_vs_{m2_folder}"
+        return base_dir / models_dir / f"Comparison_{self.build_comparison_tag(mode)}_{scope}_{self.region_key}"
 
     def _load_model_and_fold(
         self, spec: ComparisonModelConfig

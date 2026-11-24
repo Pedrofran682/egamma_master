@@ -101,3 +101,31 @@ def test_plot_and_export_all(tmp_path, sample_feature_plot_data):
     assert (export_dir / "Reta_background_selection.png").exists()
     assert (export_dir / "Rhad_background_selection.png").exists()
 
+
+def test_unit_only_on_xaxis_not_in_title():
+    plotter = FeatureDistributionPlotter()
+    feature_data = {
+        "display_title": "trig_L2_calo_et",
+        "bin_centers": np.array([15000.0, 25000.0, 35000.0]),
+        "true_counts": np.array([100, 200, 150]),
+        "models": [
+            {
+                "name": "ML",
+                "counts": np.array([90, 180, 140]),
+                "errors": np.sqrt([90, 180, 140]),
+                "is_ml": True,
+                "color": "#1f77b4",
+                "marker": "s",
+            }
+        ],
+    }
+    fig = plotter.plot_single_feature(
+        feature_data=feature_data,
+        feature_name="trig_L2_calo_et",
+        region_key="et_1_eta_1",
+        is_signal=True,
+    )
+    ax_main, ax_res = fig.axes[0], fig.axes[1]
+    assert "[MeV]" in ax_res.get_xlabel()
+    assert "[MeV]" not in ax_main.get_title()
+

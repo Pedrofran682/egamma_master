@@ -167,7 +167,9 @@ def test_runner_athena_reference_and_athena_model2(tmp_path: Path) -> None:
     )
     assert runner_ath.build_comparison_tag("best_sp_vs_best_sp") == "best_sp_vs_athena_cut_loose"
     assert runner_ath.build_output_dir(tmp_path, "best_sp_vs_best_sp") == (
-        tmp_path / "Comparison_best_sp_vs_athena_cut_loose_cross_et_1_eta_1"
+        tmp_path
+        / "M1_vs_Athena_Cut_Loose"
+        / "Comparison_best_sp_vs_athena_cut_loose_cross_et_1_eta_1"
     )
 
     payload_athena_s2 = ComparisonPayload(

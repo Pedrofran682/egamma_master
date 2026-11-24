@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import re
 from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
@@ -160,7 +161,7 @@ class QuadrantPlotter(BasePlotter):
         var_display = self._get_variable_display(var_name)
 
         if n_cols > 1:
-            fig.suptitle(var_display, fontsize=13, weight="bold")
+            fig.suptitle(re.sub(r"\s*\[[^\]]+\]", "", var_display).strip(), fontsize=13, weight="bold")
 
         for col_idx, (_, sample_title, s_mask, true_label) in enumerate(sample_defs):
             ax_main, ax_res = axes[0, col_idx], axes[1, col_idx]
