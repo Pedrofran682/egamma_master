@@ -211,9 +211,15 @@ class DistanceMetricsETL:
             kl_unc = enriched["KL Uncertainty"]
             enriched["KL_Equivalent"] = (kl_div <= sigma_factor * kl_unc) | (kl_div < kl_threshold)
 
-        if "JS Divergence" in enriched.columns and "JS Uncertainty" in enriched.columns:
-            js_div = enriched["JS Divergence"]
-            js_unc = enriched["JS Uncertainty"]
+        js_col = "JS Distance (sqrt(D_JS))" if "JS Distance (sqrt(D_JS))" in enriched.columns else "JS Divergence"
+        js_unc_col = (
+            "JS Distance (sqrt(D_JS)) Uncertainty"
+            if "JS Distance (sqrt(D_JS)) Uncertainty" in enriched.columns
+            else "JS Uncertainty"
+        )
+        if js_col in enriched.columns and js_unc_col in enriched.columns:
+            js_div = enriched[js_col]
+            js_unc = enriched[js_unc_col]
             enriched["JS_Equivalent"] = (js_div <= sigma_factor * js_unc) | (js_div < js_threshold)
 
         return enriched
@@ -299,11 +305,17 @@ class DistanceMetricsETL:
         if comparisons is not None:
             filtered = filtered[filtered["Comparison"].isin(comparisons)]
 
+        js_col = "JS Distance (sqrt(D_JS))" if "JS Distance (sqrt(D_JS))" in filtered.columns else "JS Divergence"
+        js_unc_col = (
+            "JS Distance (sqrt(D_JS)) Uncertainty"
+            if "JS Distance (sqrt(D_JS)) Uncertainty" in filtered.columns
+            else "JS Uncertainty"
+        )
         metric_specs = [
             ("KS Distance ($D$)", "KS Distance (D)", "KS Uncertainty"),
             ("Wasserstein ($W_1$)", "Wasserstein Distance", "Wasserstein Uncertainty"),
             ("KL Divergence", "KL Divergence", "KL Uncertainty"),
-            ("JS Distance ($\\sqrt{D_{\\text{JS}}}$)", "JS Divergence", "JS Uncertainty"),
+            ("JS Distance ($\\sqrt{D_{\\text{JS}}}$)", js_col, js_unc_col),
         ]
 
         return DistanceMetricsETL.format_table_with_uncertainties(

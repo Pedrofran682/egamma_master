@@ -60,8 +60,8 @@ def test_distribution_comparator_compare_strategies():
     assert "Wasserstein Uncertainty" in df_true.columns
     assert "KL Divergence" in df_true.columns
     assert "KL Uncertainty" in df_true.columns
-    assert "JS Divergence" in df_true.columns
-    assert "JS Uncertainty" in df_true.columns
+    assert "JS Distance (sqrt(D_JS))" in df_true.columns
+    assert "JS Distance (sqrt(D_JS)) Uncertainty" in df_true.columns
     assert isinstance(df_true.iloc[0]["KS Distance (D)"], float)
     assert isinstance(df_true.iloc[0]["KS Uncertainty"], float)
 

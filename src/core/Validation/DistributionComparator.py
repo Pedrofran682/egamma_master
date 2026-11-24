@@ -173,8 +173,8 @@ class DistributionComparator:
                     record["KL Uncertainty"] = metrics.get("kl_unc", np.nan)
 
                 if self.compute_js:
-                    record["JS Divergence"] = metrics.get("js_div", np.nan)
-                    record["JS Uncertainty"] = metrics.get("js_unc", np.nan)
+                    record["JS Distance (sqrt(D_JS))"] = metrics.get("js_div", np.nan)
+                    record["JS Distance (sqrt(D_JS)) Uncertainty"] = metrics.get("js_unc", np.nan)
 
                 if self.compute_ks and "p_value" in metrics:
                     record["p-value"] = metrics["p_value"]
