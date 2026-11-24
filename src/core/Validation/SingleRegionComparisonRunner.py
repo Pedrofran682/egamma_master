@@ -26,13 +26,35 @@ from src.core.Validation.ResultAggregator import ResultAggregator
 from src.utils import compute_sp_metric, extract_feature_values, get_et_eta, save_table
 
 
+VALID_STRATEGY_METHODS = ("best_sp", "hard_cut", "pileup", "athena_cut")
+
+
 @dataclass(frozen=True)
 class ComparisonModelConfig:
-    """Identifies a model configuration, results directory, and display alias."""
+    """Identifies a model configuration, results directory, display alias, and optional method."""
 
-    config_path: Path
-    results_path: Path
-    alias: str
+    config_path: Optional[Path] = None
+    results_path: Optional[Path] = None
+    alias: str = ""
+    method: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.method is not None and self.method not in VALID_STRATEGY_METHODS:
+            raise ValueError(
+                f"Invalid method '{self.method}'. Expected one of {VALID_STRATEGY_METHODS}."
+            )
+        if self.method != "athena_cut" and (self.config_path is None or self.results_path is None):
+            raise ValueError("`config_path` and `results_path` are required unless method == 'athena_cut'.")
+
+    @classmethod
+    def athena_cut(
+        cls, alias: Optional[str] = None, working_point: Optional[str] = None
+    ) -> "ComparisonModelConfig":
+        """Creates a configuration representing the Athena fast photon cut strategy."""
+        if alias is None:
+            wp_label = f" ({working_point.capitalize()})" if working_point else ""
+            alias = f"Athena Cut{wp_label}"
+        return cls(config_path=None, results_path=None, alias=alias, method="athena_cut")
 
 
 @dataclass
@@ -49,8 +71,8 @@ class ComparisonPayload:
     preds_s2: np.ndarray
     thresh_s1: float
     thresh_s2: float
-    probs_s1: np.ndarray
-    probs_s2: np.ndarray
+    probs_s1: Optional[np.ndarray]
+    probs_s2: Optional[np.ndarray]
     test_features: np.ndarray
     test_labels: np.ndarray
     feature_names: np.ndarray
@@ -58,6 +80,10 @@ class ComparisonPayload:
     showershapes: Dict[str, np.ndarray]
     et_vals: np.ndarray
     eta_vals: np.ndarray
+    preds_athena: Optional[np.ndarray] = None
+    athena_name: str = ""
+    is_s1_ml: bool = True
+    is_s2_ml: bool = True
 
 
 class SingleRegionComparisonRunner:
@@ -70,6 +96,13 @@ class SingleRegionComparisonRunner:
         "best_sp_vs_best_sp",
         "pileup_vs_pileup",
     )
+    MODE_TO_METHODS: Dict[str, Tuple[str, str]] = {
+        "best_sp_vs_hard_cut": ("best_sp", "hard_cut"),
+        "best_sp_vs_pileup": ("best_sp", "pileup"),
+        "hard_cut_vs_pileup": ("hard_cut", "pileup"),
+        "best_sp_vs_best_sp": ("best_sp", "best_sp"),
+        "pileup_vs_pileup": ("pileup", "pileup"),
+    }
 
     def __init__(
         self,
@@ -123,7 +156,10 @@ class SingleRegionComparisonRunner:
         self.custom_target_pd = float(custom_target_pd)
         self.working_point = working_point.lower()
         self.data_path = data_path
-        self.manifest_path = manifest_path or (model1.results_path.parent / "split_manifest.json")
+        default_results = model1.results_path or (self.model2.results_path if self.model2 is not None else None)
+        if manifest_path is None and default_results is None:
+            raise ValueError("`manifest_path` must be provided when neither model specifies `results_path`.")
+        self.manifest_path = manifest_path or (default_results.parent / "split_manifest.json")
         self.language = language
         self.bins_mu = bins_mu
         self.n_bootstraps_pileup = n_bootstraps_pileup
@@ -147,18 +183,28 @@ class SingleRegionComparisonRunner:
         model.to(self.device).eval()
         return trainer, model, int(best_dict.get("fold", 0))
 
+    def _evaluate_athena_cut(
+        self, raw_features: np.ndarray, feature_names: np.ndarray
+    ) -> np.ndarray:
+        grid = UserKinematicGrid()
+        cut_eval = FastPhotonCutEvaluator(grid=grid)
+        return cut_eval.evaluate_events_for_threshold(
+            data=raw_features,
+            feature_names=[str(f) for f in feature_names],
+            threshold=grid.get_athena_threshold_for_et_bin(self.iet),
+            working_point=self.working_point,
+        )
+
     def _resolve_target_pd(
-        self, raw_features: np.ndarray, raw_labels: np.ndarray, feature_names: np.ndarray
+        self,
+        raw_features: np.ndarray,
+        raw_labels: np.ndarray,
+        feature_names: np.ndarray,
+        pass_athena: Optional[np.ndarray] = None,
     ) -> Tuple[float, str]:
         if self.target_pd_mode == "athena":
-            grid = UserKinematicGrid()
-            cut_eval = FastPhotonCutEvaluator(grid=grid)
-            pass_athena = cut_eval.evaluate_events_for_threshold(
-                data=raw_features,
-                feature_names=[str(f) for f in feature_names],
-                threshold=grid.get_athena_threshold_for_et_bin(self.iet),
-                working_point=self.working_point,
-            )
+            if pass_athena is None:
+                pass_athena = self._evaluate_athena_cut(raw_features, feature_names)
             target_pd = float(np.clip(np.mean(pass_athena[raw_labels == 1]), 1e-6, 1.0 - 1e-6))
             return target_pd, f"Athena {self.working_point.capitalize()} PD={target_pd * 100:.2f}%"
         return self.custom_target_pd, f"PD={self.custom_target_pd * 100:.2f}%"
@@ -214,11 +260,52 @@ class SingleRegionComparisonRunner:
         )
         return preds, float(cal.intercept)
 
+    def _resolve_strategy_predictions(
+        self,
+        method: str,
+        spec: ComparisonModelConfig,
+        model: Optional[torch.nn.Module],
+        best_fold: int,
+        ring_cols: Optional[np.ndarray],
+        eval_res: Optional[HoldoutEvaluationResult],
+        raw_features: np.ndarray,
+        raw_labels: np.ndarray,
+        feature_names: np.ndarray,
+        train_folds: List[Tuple[np.ndarray, np.ndarray]],
+        test_indices: np.ndarray,
+        target_pd: float,
+        pd_tag: str,
+        preds_athena: np.ndarray,
+    ) -> Tuple[np.ndarray, float, str, Optional[np.ndarray], bool]:
+        if method == "athena_cut":
+            name = spec.alias or f"Athena Cut ({self.working_point.capitalize()})"
+            return preds_athena, 0.0, name, None, False
+        assert model is not None and ring_cols is not None and eval_res is not None
+        if method == "best_sp":
+            preds, thresh = self._compute_best_sp_predictions(
+                model, raw_features, raw_labels, train_folds[best_fold][1], ring_cols, eval_res
+            )
+            return preds, thresh, f"{spec.alias} [Best SP]", eval_res.predicted_probabilities, True
+        if method == "hard_cut":
+            return (
+                eval_res.predictions_calibrated_cut,
+                float(eval_res.threshold),
+                f"{spec.alias} [Hard Cut, {pd_tag}]",
+                eval_res.predicted_probabilities,
+                True,
+            )
+        preds, thresh = self._compute_pileup_predictions(
+            model, raw_features, raw_labels, feature_names, train_folds[best_fold],
+            test_indices, ring_cols, eval_res, target_pd,
+        )
+        return preds, thresh, f"{spec.alias} [T(mu), {pd_tag}]", eval_res.predicted_probabilities, True
+
     def prepare(self, mode: str, features_to_plot: List[str]) -> ComparisonPayload:
         """Loads models/data and computes predictions for the requested comparison mode.
 
         Args:
-            mode: One of 'best_sp_vs_hard_cut', 'best_sp_vs_pileup', or 'hard_cut_vs_pileup'.
+            mode: One of 'best_sp_vs_hard_cut', 'best_sp_vs_pileup', 'hard_cut_vs_pileup',
+                'best_sp_vs_best_sp', or 'pileup_vs_pileup'.
             features_to_plot: Candidate feature names to extract for distribution plotting.
 
         Returns:
@@ -227,8 +314,23 @@ class SingleRegionComparisonRunner:
         if mode not in self.VALID_MODES:
             raise ValueError(f"Invalid mode '{mode}'. Expected one of {self.VALID_MODES}.")
 
-        trainer_1, model_1, best_fold_1 = self._load_model_and_fold(self.model1)
-        full_dataset = trainer_1.full_dataset
+        default_m1, default_m2 = self.MODE_TO_METHODS[mode]
+        method_1 = self.model1.method or default_m1
+        method_2 = self.model2.method or default_m2
+        if method_1 == "athena_cut" and method_2 == "athena_cut":
+            raise ValueError("At least one strategy must be a trained model.")
+
+        trainer_1 = model_1 = best_fold_1 = None
+        if method_1 != "athena_cut":
+            trainer_1, model_1, best_fold_1 = self._load_model_and_fold(self.model1)
+
+        trainer_2 = model_2 = best_fold_2 = None
+        if not self.compare_same_model and method_2 != "athena_cut":
+            trainer_2, model_2, best_fold_2 = self._load_model_and_fold(self.model2)
+
+        ref_trainer = trainer_1 if trainer_1 is not None else trainer_2
+        assert ref_trainer is not None
+        full_dataset = ref_trainer.full_dataset
         feature_names = full_dataset.feature_names
 
         region_idx = next(
@@ -246,69 +348,42 @@ class SingleRegionComparisonRunner:
         test_features = raw_features[test_indices_arr]
         test_labels = raw_labels[test_indices_arr]
 
-        target_pd, pd_tag = self._resolve_target_pd(raw_features, raw_labels, feature_names)
-        evaluator = HoldoutEvaluator(default_target_pd=target_pd)
-        ring_cols_1 = full_dataset.ring_column_indices
-        eval_1 = evaluator.evaluate(
-            model_1, raw_features, raw_labels, test_indices_arr, ring_cols_1, self.device, target_pd=target_pd
+        pass_athena = self._evaluate_athena_cut(raw_features, feature_names)
+        preds_athena = pass_athena[test_indices_arr].astype(int)
+        target_pd, pd_tag = self._resolve_target_pd(
+            raw_features, raw_labels, feature_names, pass_athena=pass_athena
         )
+        evaluator = HoldoutEvaluator(default_target_pd=target_pd)
+
+        ring_cols_1 = eval_1 = None
+        if trainer_1 is not None and model_1 is not None:
+            trainer_1.full_dataset._set_ring_column_indices(feature_names)
+            ring_cols_1 = trainer_1.full_dataset.ring_column_indices
+            eval_1 = evaluator.evaluate(
+                model_1, raw_features, raw_labels, test_indices_arr, ring_cols_1, self.device, target_pd=target_pd
+            )
 
         if self.compare_same_model:
-            trainer_2, model_2, best_fold_2, eval_2 = trainer_1, model_1, best_fold_1, eval_1
-            ring_cols_2 = ring_cols_1
-        else:
-            trainer_2, model_2, best_fold_2 = self._load_model_and_fold(self.model2)
+            model_2, best_fold_2, ring_cols_2, eval_2 = model_1, best_fold_1, ring_cols_1, eval_1
+        elif trainer_2 is not None and model_2 is not None:
             trainer_2.full_dataset._set_ring_column_indices(feature_names)
             ring_cols_2 = trainer_2.full_dataset.ring_column_indices
             eval_2 = evaluator.evaluate(
                 model_2, raw_features, raw_labels, test_indices_arr, ring_cols_2, self.device, target_pd=target_pd
             )
-
-        if mode == "best_sp_vs_hard_cut":
-            preds_s1, thresh_s1 = self._compute_best_sp_predictions(
-                model_1, raw_features, raw_labels, train_folds[best_fold_1][1], ring_cols_1, eval_1
-            )
-            preds_s2, thresh_s2 = eval_2.predictions_calibrated_cut, float(eval_2.threshold)
-            s1_name = f"{self.model1.alias} [Best SP]"
-            s2_name = f"{self.model2.alias} [Hard Cut, {pd_tag}]"
-        elif mode == "best_sp_vs_pileup":
-            preds_s1, thresh_s1 = self._compute_best_sp_predictions(
-                model_1, raw_features, raw_labels, train_folds[best_fold_1][1], ring_cols_1, eval_1
-            )
-            preds_s2, thresh_s2 = self._compute_pileup_predictions(
-                model_2, raw_features, raw_labels, feature_names, train_folds[best_fold_2],
-                test_indices_arr, ring_cols_2, eval_2, target_pd,
-            )
-            s1_name = f"{self.model1.alias} [Best SP]"
-            s2_name = f"{self.model2.alias} [T(mu), {pd_tag}]"
-        elif mode == "hard_cut_vs_pileup":
-            preds_s1, thresh_s1 = eval_1.predictions_calibrated_cut, float(eval_1.threshold)
-            preds_s2, thresh_s2 = self._compute_pileup_predictions(
-                model_2, raw_features, raw_labels, feature_names, train_folds[best_fold_2],
-                test_indices_arr, ring_cols_2, eval_2, target_pd,
-            )
-            s1_name = f"{self.model1.alias} [Hard Cut, {pd_tag}]"
-            s2_name = f"{self.model2.alias} [T(mu), {pd_tag}]"
-        elif mode == "best_sp_vs_best_sp":
-            preds_s1, thresh_s1 = self._compute_best_sp_predictions(
-                model_1, raw_features, raw_labels, train_folds[best_fold_1][1], ring_cols_1, eval_1
-            )
-            preds_s2, thresh_s2 = self._compute_best_sp_predictions(
-                model_2, raw_features, raw_labels, train_folds[best_fold_2][1], ring_cols_2, eval_2
-            )
-            s1_name = f"{self.model1.alias} [Best SP]"
-            s2_name = f"{self.model2.alias} [Best SP]"
         else:
-            preds_s1, thresh_s1 = self._compute_pileup_predictions(
-                model_1, raw_features, raw_labels, feature_names, train_folds[best_fold_1],
-                test_indices_arr, ring_cols_1, eval_1, target_pd,
-            )
-            preds_s2, thresh_s2 = self._compute_pileup_predictions(
-                model_2, raw_features, raw_labels, feature_names, train_folds[best_fold_2],
-                test_indices_arr, ring_cols_2, eval_2, target_pd,
-            )
-            s1_name = f"{self.model1.alias} [T(mu), {pd_tag}]"
-            s2_name = f"{self.model2.alias} [T(mu), {pd_tag}]"
+            ring_cols_2 = eval_2 = None
+
+        preds_s1, thresh_s1, s1_name, probs_s1, is_s1_ml = self._resolve_strategy_predictions(
+            method_1, self.model1, model_1, best_fold_1 or 0, ring_cols_1, eval_1,
+            raw_features, raw_labels, feature_names, train_folds, test_indices_arr,
+            target_pd, pd_tag, preds_athena,
+        )
+        preds_s2, thresh_s2, s2_name, probs_s2, is_s2_ml = self._resolve_strategy_predictions(
+            method_2, self.model2, model_2, best_fold_2 or 0, ring_cols_2, eval_2,
+            raw_features, raw_labels, feature_names, train_folds, test_indices_arr,
+            target_pd, pd_tag, preds_athena,
+        )
 
         valid_features: List[str] = []
         for feat in features_to_plot:
@@ -337,8 +412,8 @@ class SingleRegionComparisonRunner:
             preds_s2=preds_s2,
             thresh_s1=thresh_s1,
             thresh_s2=thresh_s2,
-            probs_s1=eval_1.predicted_probabilities,
-            probs_s2=eval_2.predicted_probabilities,
+            probs_s1=probs_s1,
+            probs_s2=probs_s2,
             test_features=test_features,
             test_labels=test_labels,
             feature_names=feature_names,
@@ -346,6 +421,10 @@ class SingleRegionComparisonRunner:
             showershapes=showershapes,
             et_vals=et_vals,
             eta_vals=eta_vals,
+            preds_athena=preds_athena,
+            athena_name=f"Athena Cut ({self.working_point.capitalize()})",
+            is_s1_ml=is_s1_ml,
+            is_s2_ml=is_s2_ml,
         )
 
     def run_quadrant_analysis(
@@ -423,14 +502,44 @@ class SingleRegionComparisonRunner:
         return strategy_df, counts_df, saved_plots
 
     def run_variable_analysis(
-        self, payload: ComparisonPayload, output_dir: Path, tables_dir: Path, is_signal: bool
+        self,
+        payload: ComparisonPayload,
+        output_dir: Path,
+        tables_dir: Path,
+        is_signal: bool,
+        include_athena_reference: bool = True,
     ) -> Tuple[pd.DataFrame, Any]:
         """Computes JS divergence table and exports feature distribution plots for one class."""
         cls_val = 1 if is_signal else 0
         strategies = [
-            {"name": payload.strategy1_name, "preds": payload.preds_s1, "is_ml": True, "color": "#005A9C", "marker": "s"},
-            {"name": payload.strategy2_name, "preds": payload.preds_s2, "is_ml": True, "color": "#E65100", "marker": "^"},
+            {
+                "name": payload.strategy1_name,
+                "preds": payload.preds_s1,
+                "is_ml": payload.is_s1_ml,
+                "color": "#005A9C",
+                "marker": "s",
+            },
+            {
+                "name": payload.strategy2_name,
+                "preds": payload.preds_s2,
+                "is_ml": payload.is_s2_ml,
+                "color": "#E65100",
+                "marker": "^",
+            },
         ]
+        if (
+            include_athena_reference
+            and payload.preds_athena is not None
+            and payload.is_s1_ml
+            and payload.is_s2_ml
+        ):
+            strategies.append({
+                "name": payload.athena_name or f"Athena Cut ({self.working_point.capitalize()})",
+                "preds": payload.preds_athena,
+                "is_ml": False,
+                "color": "#2E7D32",
+                "marker": "o",
+            })
         plot_data: Dict[str, Any] = {}
         for feat_name in payload.valid_features:
             vals = extract_feature_values(payload.test_features, payload.feature_names, feat_name)

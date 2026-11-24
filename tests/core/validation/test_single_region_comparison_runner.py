@@ -38,6 +38,18 @@ def test_runner_validation_and_target_pd(tmp_path: Path) -> None:
     assert "best_sp_vs_best_sp" in SingleRegionComparisonRunner.VALID_MODES
     assert "pileup_vs_pileup" in SingleRegionComparisonRunner.VALID_MODES
 
+    athena_cfg = ComparisonModelConfig.athena_cut(working_point="loose")
+    assert athena_cfg.method == "athena_cut"
+    assert athena_cfg.alias == "Athena Cut (Loose)"
+    assert athena_cfg.config_path is None
+    assert athena_cfg.results_path is None
+
+    with pytest.raises(ValueError, match="Invalid method"):
+        ComparisonModelConfig(config_path=tmp_path / "m1.yaml", results_path=tmp_path / "res1", method="unknown")
+
+    with pytest.raises(ValueError, match="required unless method == 'athena_cut'"):
+        ComparisonModelConfig(alias="Missing paths", method="best_sp")
+
 
 def test_runner_quadrant_and_variable_analysis(tmp_path: Path) -> None:
     rng = np.random.default_rng(7)
@@ -87,3 +99,82 @@ def test_runner_quadrant_and_variable_analysis(tmp_path: Path) -> None:
     assert not sig_js_df.empty
     assert (out_dir / "Variables_Signal" / "trig_L2_calo_weta2_signal_selection.png").exists()
     assert fig_sig is not None
+
+
+def test_runner_athena_reference_and_athena_model2(tmp_path: Path) -> None:
+    rng = np.random.default_rng(11)
+    n = 60
+    labels = np.array([1] * 30 + [0] * 30)
+    feats = np.column_stack([
+        rng.normal(25.0, 3.0, n),
+        rng.uniform(-1.0, 1.0, n),
+        rng.normal(0.95, 0.02, n),
+    ])
+    feat_names = np.array(["trig_L2_calo_et", "trig_L2_calo_eta", "trig_L2_calo_weta2"])
+    preds_athena = np.array([1] * 25 + [0] * 5 + [1] * 4 + [0] * 26)
+
+    m1 = ComparisonModelConfig(config_path=tmp_path / "m1.yaml", results_path=tmp_path / "res1", alias="M1")
+    runner = SingleRegionComparisonRunner(iet=1, ieta=1, model1=m1, language="pt", plot_format="png")
+
+    payload_ml = ComparisonPayload(
+        mode="best_sp_vs_hard_cut",
+        region_key="et_1_eta_1",
+        iet=1,
+        ieta=1,
+        strategy1_name="M1 [Best SP]",
+        strategy2_name="M1 [Hard Cut]",
+        preds_s1=np.array([1] * 27 + [0] * 3 + [1] * 2 + [0] * 28),
+        preds_s2=np.array([1] * 26 + [0] * 4 + [1] * 3 + [0] * 27),
+        thresh_s1=0.5,
+        thresh_s2=0.6,
+        probs_s1=rng.uniform(0, 1, n),
+        probs_s2=rng.uniform(0, 1, n),
+        test_features=feats,
+        test_labels=labels,
+        feature_names=feat_names,
+        valid_features=["trig_L2_calo_weta2"],
+        showershapes={"trig_L2_calo_weta2": feats[:, 2]},
+        et_vals=feats[:, 0],
+        eta_vals=feats[:, 1],
+        preds_athena=preds_athena,
+        athena_name="Athena Cut (Loose)",
+        is_s1_ml=True,
+        is_s2_ml=True,
+    )
+    js_with_ref, _ = runner.run_variable_analysis(payload_ml, tmp_path / "out_ref", tmp_path / "tab_ref", is_signal=True)
+    assert "Athena Cut (Loose)" in set(js_with_ref["Strategy"])
+
+    payload_athena_s2 = ComparisonPayload(
+        mode="best_sp_vs_hard_cut",
+        region_key="et_1_eta_1",
+        iet=1,
+        ieta=1,
+        strategy1_name="M1 [Best SP]",
+        strategy2_name="Athena Cut (Loose)",
+        preds_s1=np.array([1] * 27 + [0] * 3 + [1] * 2 + [0] * 28),
+        preds_s2=preds_athena,
+        thresh_s1=0.5,
+        thresh_s2=0.0,
+        probs_s1=rng.uniform(0, 1, n),
+        probs_s2=None,
+        test_features=feats,
+        test_labels=labels,
+        feature_names=feat_names,
+        valid_features=["trig_L2_calo_weta2"],
+        showershapes={"trig_L2_calo_weta2": feats[:, 2]},
+        et_vals=feats[:, 0],
+        eta_vals=feats[:, 1],
+        preds_athena=preds_athena,
+        athena_name="Athena Cut (Loose)",
+        is_s1_ml=True,
+        is_s2_ml=False,
+    )
+    strategy_df, counts_df, _ = runner.run_quadrant_analysis(
+        payload_athena_s2, tmp_path / "out_ath", tmp_path / "tab_ath"
+    )
+    assert list(strategy_df["Strategy"]) == ["M1 [Best SP]", "Athena Cut (Loose)"]
+    assert len(counts_df) == 4
+    js_no_dup, _ = runner.run_variable_analysis(
+        payload_athena_s2, tmp_path / "out_ath", tmp_path / "tab_ath", is_signal=True
+    )
+    assert list(js_no_dup["Strategy"]).count("Athena Cut (Loose)") == 1
