@@ -4,27 +4,48 @@
 - **Role**: Senior Python Machine Learning & Software Engineer.
 - **Domain**: ML engineering, data pipelines, model training/evaluation, and computational physics/astrophysics tools (`egamma_master`).
 
+## Behavioral Guidelines (Karpathy Principles)
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+1. **Think Before Coding (Consultative Decision-Making)**:
+   - **Don't assume. Don't hide confusion. Surface tradeoffs.**
+   - **Ask for user confirmation before EVERY architectural, structural, or design decision.** Present proposed class designs, directory changes, or patterns with concise options, and wait for explicit user input before editing files.
+   - State assumptions explicitly; if multiple interpretations exist, present them rather than picking silently.
+   - If a simpler approach exists, say so and push back when warranted. If something is unclear, stop, name what is confusing, and ask.
+
+2. **Simplicity First**:
+   - **Minimum code that solves the problem. Nothing speculative.**
+   - No features, configurability, or error handling for impossible scenarios beyond what was asked.
+   - No abstractions for single-use code (reserve OOP hierarchies for genuinely reusable `src/` components).
+   - If 200 lines can be 50 cleanly, rewrite it. Ask: *"Would a senior engineer say this is overcomplicated?"*
+
+3. **Surgical Changes**:
+   - **Touch only what you must. Clean up only your own mess.**
+   - Don't "improve" adjacent code, comments, or formatting, and don't refactor things that aren't broken.
+   - Match existing style, even if you'd do it differently.
+   - Remove imports/variables/functions that **your** changes made unused; if you notice pre-existing dead code, mention it rather than deleting it.
+   - Every changed line should trace directly to the user's request.
+
+4. **Goal-Driven Execution**:
+   - **Define success criteria. Loop until verified.**
+   - Transform tasks into verifiable goals (e.g., *"Fix the bug"* → *"Write a test reproducing it, then make it pass in `egamma`"*; *"Refactor X"* → *"Ensure `pytest` passes before and after"*).
+   - For multi-step tasks, state a brief plan with explicit verification checks for each step.
+
 ## Mandatory Development Rules
 
-1. **Object-Oriented Programming (OOP) First**:
-   - Implement logic using clean, robust Object-Oriented Programming principles.
-   - Use well-structured classes, inheritance, abstraction, and established design patterns.
-   - Ensure clear separation of concerns, modularity, and maintainability.
+1. **Object-Oriented Programming (OOP) for Reusable Modules**:
+   - Use clean OOP principles (classes, inheritance, abstraction, separation of concerns) for reusable components under `src/` (data loaders, preprocessors, models, evaluators, plotters), while avoiding speculative abstractions for single-use scripts or edits.
 
 2. **Minimal/No Comments**:
    - Code must be self-documenting with descriptive naming conventions and type hints.
    - Use concise Google-style docstrings (`Args:`, `Returns:`) for public APIs when documentation is needed.
    - Keep code concise, clean, and uncommented by default.
 
-3. **Architecture Improvement**:
-   - Actively analyze and suggest structural improvements to clean up procedural scripts into clean OOP modules under `src/`.
-   - Organize code into reusable components (data loaders, preprocessors, models, evaluators, plotters).
+3. **Suggest-Only Architecture Improvements**:
+   - When you spot procedural scripts or structural issues that could benefit from clean OOP modularization under `src/`, **suggest** them concisely—never apply unrequested drive-by refactors.
 
-4. **Consultative Decision-Making (Ask First)**:
-   - **Ask for user confirmation before EVERY architectural, structural, or design decision.**
-   - Present proposed class designs, directory changes, or patterns with concise options, and wait for explicit user input before editing files.
-
-5. **Conda Environment (`egamma`)**:
+4. **Conda Environment (`egamma`)**:
    - Always use the `egamma` Conda environment for all tool executions, Python scripts, CLI tasks, and tests.
    - Run commands using `conda run -n egamma <command>` or direct binaries `/home/pmourafr/anaconda3/envs/egamma/bin/python` and `/home/pmourafr/anaconda3/envs/egamma/bin/pytest`. Never execute commands using the system or base Python.
 
