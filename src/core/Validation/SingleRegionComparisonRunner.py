@@ -186,6 +186,17 @@ class SingleRegionComparisonRunner:
         return f"{m1}_vs_{m2}"
 
     @staticmethod
+    def discover_regions(manifest_path: Path) -> List[Tuple[int, int]]:
+        """Discovers sorted (iet, ieta) region pairs from `split_manifest.json`."""
+        data = SplitManifest(str(manifest_path)).load()
+        regions: List[Tuple[int, int]] = []
+        for key in data.keys():
+            match = re.match(r"^et_(\d+)_eta_(\d+)$", str(key))
+            if match:
+                regions.append((int(match.group(1)), int(match.group(2))))
+        return sorted(regions)
+
+    @staticmethod
     def _sanitize_folder_token(name: str) -> str:
         cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", name.strip()).strip("_")
         return cleaned or "model"

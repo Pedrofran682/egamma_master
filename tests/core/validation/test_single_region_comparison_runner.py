@@ -172,6 +172,10 @@ def test_runner_athena_reference_and_athena_model2(tmp_path: Path) -> None:
         / "Comparison_best_sp_vs_athena_cut_loose_cross_et_1_eta_1"
     )
 
+    manifest_file = tmp_path / "split_manifest.json"
+    manifest_file.write_text('{"et_2_eta_1": {}, "et_0_eta_3": {}, "et_0_eta_0": {}}', encoding="utf-8")
+    assert SingleRegionComparisonRunner.discover_regions(manifest_file) == [(0, 0), (0, 3), (2, 1)]
+
     payload_athena_s2 = ComparisonPayload(
         mode="best_sp_vs_hard_cut",
         region_key="et_1_eta_1",
