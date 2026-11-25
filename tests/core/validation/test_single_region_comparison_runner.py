@@ -169,7 +169,15 @@ def test_runner_athena_reference_and_athena_model2(tmp_path: Path) -> None:
     assert runner_ath.build_output_dir(tmp_path, "best_sp_vs_best_sp") == (
         tmp_path
         / "M1_vs_Athena_Cut_Loose"
-        / "Comparison_best_sp_vs_athena_cut_loose_cross_et_1_eta_1"
+        / "Comparison_best_sp_vs_athena_cut_loose_athena_loose_cross_et_1_eta_1"
+    )
+    runner_custom = SingleRegionComparisonRunner(
+        iet=1, ieta=1, model1=m1, compare_same_model=True, target_pd_mode="custom", custom_target_pd=0.9424
+    )
+    assert runner_custom.build_output_dir(tmp_path, "best_sp_vs_hard_cut") == (
+        tmp_path
+        / "M1_vs_M1"
+        / "Comparison_best_sp_vs_hard_cut_custom_pd94p24_same_et_1_eta_1"
     )
 
     manifest_file = tmp_path / "split_manifest.json"

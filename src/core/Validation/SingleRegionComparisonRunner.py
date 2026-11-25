@@ -212,13 +212,20 @@ class SingleRegionComparisonRunner:
             return self._sanitize_folder_token(spec.config_path.stem)
         return "model"
 
+    def _format_target_pd_tag(self) -> str:
+        if self.target_pd_mode == "athena":
+            return f"athena_{self.working_point}"
+        pd_pct = f"{self.custom_target_pd * 100:.2f}".replace(".", "p")
+        return f"custom_pd{pd_pct}"
+
     def build_output_dir(self, base_dir: Path, mode: str) -> Path:
         """Builds a descriptive output directory path for the active comparison configuration."""
         scope = "same" if self.compare_same_model else "cross"
         m1_folder = self._resolve_model_folder_name(self.model1)
         m2_folder = self._resolve_model_folder_name(self.model2)
         models_dir = f"{m1_folder}_vs_{m2_folder}"
-        return base_dir / models_dir / f"Comparison_{self.build_comparison_tag(mode)}_{scope}_{self.region_key}"
+        pd_tag = self._format_target_pd_tag()
+        return base_dir / models_dir / f"Comparison_{self.build_comparison_tag(mode)}_{pd_tag}_{scope}_{self.region_key}"
 
     def _load_model_and_fold(
         self, spec: ComparisonModelConfig
