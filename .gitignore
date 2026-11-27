@@ -15,6 +15,7 @@ notebooks/plots/feature_distributions
 notebooks/plots/
 notebooks/PileupCalibration_*/
 **/Tables/**
+**/Old/
 # C extensions
 *.so
 
